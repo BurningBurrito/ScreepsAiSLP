@@ -2,7 +2,6 @@
 /yarn.lock
 
 # npm lock file (v5.0.0+)
-/package-lock.json
 
 # Ignore basic folders
 /dist
