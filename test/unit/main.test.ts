@@ -23,11 +23,11 @@ describe("main", () => {
     assert.isUndefined(loop());
   });
 
-  it("Automatically delete memory of missing creeps", () => {
-    Memory.creeps.persistValue = "any value";
-    Memory.creeps.notPersistValue = "any value";
+  it("should delete memory of missing creeps", () => {
+    Memory.creeps.persistValue = { role: "harvester" };
+    Memory.creeps.notPersistValue = { role: "upgrader" };
 
-    Game.creeps.persistValue = "any value";
+    Game.creeps.persistValue = { memory: { role: "harvester" } };
 
     loop();
 

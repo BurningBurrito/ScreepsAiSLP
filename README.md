@@ -1,55 +1,61 @@
-# Screeps Typescript Starter
+# ScreepsAiSLP
 
-Screeps Typescript Starter is a starting point for a Screeps AI written in Typescript. It provides everything you need to start writing your AI whilst leaving `main.ts` as empty as possible.
+A Screeps AI bot written in TypeScript, built and maintained by an autonomous AI coding agent running on a local model, with human review.
 
-## Basic Usage
+## Status
 
-You will need:
+**M1 Complete**: Colony core economy with harvester, upgrader, and builder roles.
 
-- [Node.JS](https://nodejs.org/en/download) (10.x || 12.x)
-- A Package Manager ([Yarn](https://yarnpkg.com/en/docs/getting-started) or [npm](https://docs.npmjs.com/getting-started/installing-node))
-- Rollup CLI (Optional, install via `npm install -g rollup`)
+The bot maintains a minimum population of creeps (2 harvesters, 2 upgraders, 1 builder) and scales their body sizes based on available room energy.
 
-Download the latest source [here](https://github.com/screepers/screeps-typescript-starter/archive/master.zip) and extract it to a folder.
+## Features
 
-Open the folder in your terminal and run your package manager to install the required packages and TypeScript declaration files:
+- ✅ M1: Colony core economy
+  - Harvester: Harvests energy from sources and transfers to controller
+  - Upgrader: Upgrades room controller
+  - Builder: Builds construction sites and repairs structures
+- ⬜ M2: Extensions and roads
+- ⬜ M3: Containers and static mining
+- ⬜ M4: Towers and defense
+- ⬜ M5: CPU profiling and path caching
+- ⬜ M6: Expansion to a second room
 
-```bash
-# npm
-npm install
+## How it works
 
-# yarn
-yarn
+```
+src/
+├── main.ts              # Entry point - calls managers and roles in ErrorMapper.wrapLoop
+├── config.ts            # Configuration constants (minimum creeps, CPU summary interval)
+├── types/
+│   └── memory.ts        # TypeScript type definitions for Memory structures
+├── managers/
+│   ├── cpuReporter.ts   # Reports CPU usage every N ticks
+│   ├── memoryManager.ts # Cleans up memory of dead creeps
+│   └── spawnManager.ts  # Spawns creeps to maintain minimum population
+├── roles/
+│   ├── harvester.ts     # Harvester creep behavior
+│   ├── upgrader.ts      # Upgrader creep behavior
+│   └── builder.ts       # Builder creep behavior
+└── utils/
+    └── ErrorMapper.ts   # Source-mapped error handling
 ```
 
-Fire up your preferred editor with typescript installed and you are good to go!
+## Development
 
-### Rollup and code upload
+```bash
+# Install dependencies
+npm install
 
-Screeps Typescript Starter uses rollup to compile your typescript and upload it to a screeps server.
+# Build the project
+npm run build
 
-Move or copy `screeps.sample.json` to `screeps.json` and edit it, changing the credentials and optionally adding or removing some of the destinations.
+# Run linting
+npm run lint
 
-Running `rollup -c` will compile your code and do a "dry run", preparing the code for upload but not actually pushing it. Running `rollup -c --environment DEST:main` will compile your code, and then upload it to a screeps server using the `main` config from `screeps.json`.
+# Run tests (unit and integration)
+npm test
+```
 
-You can use `-cw` instead of `-c` to automatically re-run when your source code changes - for example, `rollup -cw --environment DEST:main` will automatically upload your code to the `main` configuration every time your code is changed.
+## Blog
 
-Finally, there are also NPM scripts that serve as aliases for these commands in `package.json` for IDE integration. Running `npm run push-main` is equivalent to `rollup -c --environment DEST:main`, and `npm run watch-sim` is equivalent to `rollup -cw --dest sim`.
-
-#### Important! To upload code to a private server, you must have [screepsmod-auth](https://github.com/ScreepsMods/screepsmod-auth) installed and configured!
-
-## Typings
-
-The type definitions for Screeps come from [typed-screeps](https://github.com/screepers/typed-screeps). If you find a problem or have a suggestion, please open an issue there.
-
-## Documentation
-
-We've also spent some time reworking the documentation from the ground-up, which is now generated through [Gitbooks](https://www.gitbook.com/). Includes all the essentials to get you up and running with Screeps AI development in TypeScript, as well as various other tips and tricks to further improve your development workflow.
-
-Maintaining the docs will also become a more community-focused effort, which means you too, can take part in improving the docs for this starter kit.
-
-To visit the docs, [click here](https://screepers.gitbook.io/screeps-typescript-starter/).
-
-## Contributing
-
-Issues, Pull Requests, and contribution to the docs are welcome! See our [Contributing Guidelines](CONTRIBUTING.md) for more details.
+See [blog/](blog/) for detailed posts about each milestone.

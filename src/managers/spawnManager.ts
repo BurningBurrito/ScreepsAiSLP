@@ -1,0 +1,164 @@
+/**
+ * Spawn Manager
+ * Responsible for spawning creeps to maintain minimum population per role.
+ * Harvesters are prioritized, and body size scales with room energy.
+ */
+
+import { BASE_CREEP_COST, MIN_BODY_PARTS, MIN_CREEPS_PER_ROLE } from "config";
+
+/**
+ * Gets the number of creeps with a specific role
+ * @param role The role to count
+ * @returns Number of creeps with that role
+ */
+function getCreepCount(role: string): number
+{
+    return Object.values(Game.creeps).filter((creep) => creep.memory.role === role).length;
+}
+
+/**
+ * Gets the total energy available for spawning (from all spawns in the room)
+ * @param room The room to check
+ * @returns Total energy available
+ */
+function getTotalEnergyAvailable(room: Room): number
+{
+    let total = 0;
+    const spawns = room.find(FIND_MY_SPAWNS);
+    for (const spawn of spawns)
+    {
+        total += spawn.energy;
+    }
+    return total;
+}
+
+/**
+ * Creates a creep body based on available energy
+ * @param energyAvailable Available energy for the body
+ * @returns Array of body parts
+ */
+function createCreepBody(energyAvailable: number): BodyPartConstant[]
+{
+    const body: BodyPartConstant[] = [];
+
+    // Calculate how many full sets of body parts we can afford
+    const maxSets = Math.floor(energyAvailable / BASE_CREEP_COST);
+
+    if (maxSets < 1)
+    {
+        // If we can't afford even one set, try to make a minimal creep
+        const workParts = Math.min(MIN_BODY_PARTS.work, Math.floor(energyAvailable / 100));
+        const carryParts = Math.min(MIN_BODY_PARTS.carry, Math.floor((energyAvailable - workParts * 100) / 50));
+        const moveParts = Math.min(MIN_BODY_PARTS.move, Math.floor((energyAvailable - workParts * 100 - carryParts * 50) / 50));
+
+        for (let i = 0; i < workParts; i++) body.push(WORK);
+        for (let i = 0; i < carryParts; i++) body.push(CARRY);
+        for (let i = 0; i < moveParts; i++) body.push(MOVE);
+
+        return body;
+    }
+
+    // Add full sets of body parts
+    for (let i = 0; i < maxSets; i++)
+    {
+        body.push(WORK);
+        body.push(CARRY);
+        body.push(MOVE);
+    }
+
+    // Use remaining energy to add parts
+    let remainingEnergy = energyAvailable - maxSets * BASE_CREEP_COST;
+
+    // Add extra WORK parts first
+    while (remainingEnergy >= 100 && body.filter((part) => part === WORK).length < body.filter((part) => part === CARRY).length + 2)
+    {
+        body.push(WORK);
+        remainingEnergy -= 100;
+    }
+
+    // Add extra CARRY parts
+    while (remainingEnergy >= 50)
+    {
+        body.push(CARRY);
+        remainingEnergy -= 50;
+    }
+
+    // Add extra MOVE parts
+    while (remainingEnergy >= 50)
+    {
+        body.push(MOVE);
+        remainingEnergy -= 50;
+    }
+
+    return body;
+}
+
+/**
+ * Spawns a creep of the specified role
+ * @param role The role of the creep to spawn
+ * @param room The room to spawn in
+ * @returns The name of the spawned creep, or null if spawning failed
+ */
+function spawnCreep(role: string, room: Room): string | null
+{
+    const energyAvailable = getTotalEnergyAvailable(room);
+
+    if (energyAvailable < BASE_CREEP_COST / 2)
+    {
+        return null; // Not enough energy for a useful creep
+    }
+
+    const body = createCreepBody(energyAvailable);
+
+    if (body.length === 0)
+    {
+        return null; // Could not create any body parts
+    }
+
+    const creepName = `${role}_${Game.time}_${Memory.creepCounter}`;
+    Memory.creepCounter++;
+
+    const spawns = room.find(FIND_MY_SPAWNS);
+    if (spawns.length === 0)
+    {
+        return null; // No spawns available
+    }
+
+    const result = spawns[0].spawnCreep(body, creepName, { memory: { role, working: false } as CreepMemory });
+
+    if (result === OK)
+    {
+        console.log(`Spawned new ${role}: ${creepName}`);
+        return creepName;
+    }
+
+    console.log(`Failed to spawn ${creepName}: ${result}`);
+    return null;
+}
+
+/**
+ * Checks if a creep needs to be spawned to maintain minimum population
+ * @param room The room to check
+ * @returns True if a creep should be spawned
+ */
+export function checkAndSpawn(room: Room): void
+{
+    // Check each role and spawn if below minimum
+    const roles: string[] = ["harvester", "upgrader", "builder"];
+
+    for (const role of roles)
+    {
+        const count = getCreepCount(role);
+        const minimum = MIN_CREEPS_PER_ROLE[role as keyof typeof MIN_CREEPS_PER_ROLE];
+
+        if (count < minimum)
+        {
+            const spawnedName = spawnCreep(role, room);
+
+            if (spawnedName !== null)
+            {
+                return; // Spawned one, stop checking
+            }
+        }
+    }
+}

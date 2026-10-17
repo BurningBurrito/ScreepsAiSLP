@@ -1,44 +1,63 @@
+import "types/memory";
 import { ErrorMapper } from "utils/ErrorMapper";
+import { checkAndSpawn } from "managers/spawnManager";
+import { cleanMemory } from "managers/memoryManager";
+import { reportCPU } from "managers/cpuReporter";
+import { runBuilder } from "roles/builder";
+import { runHarvester } from "roles/harvester";
+import { runUpgrader } from "roles/upgrader";
 
-declare global {
-  /*
-    Example types, expand on these or remove them and add your own.
-    Note: Values, properties defined here do no fully *exist* by this type definition alone.
-          You must also give them an implementation if you would like to use them. (ex. actually setting a `role` property in a Creeps memory)
-
-    Types added in this `global` block are in an ambient, global context. This is needed because `main.ts` is a module file (uses import or export).
-    Interfaces matching on name from @types/screeps will be merged. This is how you can extend the 'built-in' interfaces from @types/screeps.
-  */
-  // Memory extension samples
-  interface Memory {
-    uuid: number;
-    log: any;
-  }
-
-  interface CreepMemory {
-    role: string;
-    room: string;
-    working: boolean;
-  }
-
-}
-// Syntax for adding properties to `global` (ex "global.log")
-declare const global: {
-  log: any;
-}
-
-// When compiling TS to JS and bundling with rollup, the line numbers and file names in error messages change
-// This utility uses source maps to get the line numbers and file names of the original, TS source code
-export const loop = ErrorMapper.wrapLoop(() => 
+/**
+ * Runs the main game loop logic.
+ * This function is wrapped by ErrorMapper to provide source-mapped error traces.
+ */
+function mainLoop(): void
 {
-  console.log(`Current game tick is ${Game.time}`);
+    // Clean up memory of dead creeps first
+    cleanMemory();
 
-  // Automatically delete memory of missing creeps
-  for (const name in Memory.creeps) 
-{
-    if (!(name in Game.creeps)) 
-{
-      delete Memory.creeps[name];
+    // Report CPU usage periodically
+    reportCPU();
+
+    // Run creeps based on their roles
+    // Iterate over creeps directly, and for each creep, get its room
+    const creepNames = Object.keys(Game.creeps);
+
+    for (const creepName of creepNames)
+    {
+        const creep = Game.creeps[creepName];
+
+        if (creep !== undefined)
+        {
+            // Run the creep based on its role
+            switch (creep.memory.role)
+            {
+                case "harvester":
+                    runHarvester(creep);
+                    break;
+                case "upgrader":
+                    runUpgrader(creep);
+                    break;
+                case "builder":
+                    runBuilder(creep);
+                    break;
+            }
+        }
     }
-  }
-});
+
+    // Spawn new creeps in each room we have access to
+    const roomNames = Object.keys(Game.rooms);
+
+    for (const roomName of roomNames)
+    {
+        const room = Game.rooms[roomName];
+
+        if (room !== undefined)
+        {
+            checkAndSpawn(room);
+        }
+    }
+}
+
+// Export the wrapped loop function
+export const loop = ErrorMapper.wrapLoop(mainLoop);
