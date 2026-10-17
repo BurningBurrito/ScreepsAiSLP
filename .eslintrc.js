@@ -28,6 +28,7 @@ module.exports = {
     }
   },
   rules: {
+    "brace-style": ["error", "allman", { allowSingleLine: false }],
     "@typescript-eslint/array-type": "error",
     "@typescript-eslint/consistent-type-assertions": "error",
     "@typescript-eslint/consistent-type-definitions": "error",
