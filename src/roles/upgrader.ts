@@ -1,11 +1,12 @@
 /**
  * Upgrader Role
  * Upgrades the controller to increase colony level.
+ * In M1, upgraders harvest energy from sources themselves.
  */
 
 /**
  * Runs the upgrader creep behavior.
- * Upgrades the room controller continuously.
+ * Harvests from sources when empty, then upgrades the controller.
  * @param creep The upgrader creep to run
  */
 export function runUpgrader(creep: Creep): void
@@ -17,45 +18,19 @@ export function runUpgrader(creep: Creep): void
         return; // No controller in room
     }
 
-    // If not carrying energy, try to get it from the controller or spawns
-    if (creep.carry.energy === 0)
+    // If not carrying energy, harvest from sources
+    if (creep.store[RESOURCE_ENERGY] === 0)
     {
-        // Try to withdraw from spawns first
-        const spawns = creep.room.find(FIND_MY_SPAWNS);
-        for (const spawn of spawns)
+        const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
+
+        if (source === null)
         {
-            if (spawn.energy > 0)
-            {
-                if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-                {
-                    creep.moveTo(spawn);
-                }
-                return;
-            }
+            return; // No sources found
         }
 
-        // If no energy in spawns, try to get from storage/terminal if they exist
-        const storage = creep.room.storage;
-        if (storage !== undefined && storage !== null && storage.store[RESOURCE_ENERGY] > 0)
+        if (creep.harvest(source) === ERR_NOT_IN_RANGE)
         {
-            if (creep.withdraw(storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-            {
-                creep.moveTo(storage);
-            }
-            return;
-        }
-
-        // As a last resort, try to pick up dropped energy
-        const droppedEnergy = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
-            filter: (resource) => resource.resourceType === RESOURCE_ENERGY,
-        });
-
-        if (droppedEnergy !== null)
-        {
-            if (creep.pickup(droppedEnergy) === ERR_NOT_IN_RANGE)
-            {
-                creep.moveTo(droppedEnergy);
-            }
+            creep.moveTo(source);
             return;
         }
     }

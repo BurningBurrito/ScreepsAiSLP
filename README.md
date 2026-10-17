@@ -11,7 +11,7 @@ The bot maintains a minimum population of creeps (2 harvesters, 2 upgraders, 1 b
 ## Features
 
 - ✅ M1: Colony core economy
-  - Harvester: Harvests energy from sources and transfers to controller
+  - Harvester: Harvests energy from sources and transfers to spawns and extensions (then controller when full)
   - Upgrader: Upgrades room controller
   - Builder: Builds construction sites and repairs structures
 - ⬜ M2: Extensions and roads

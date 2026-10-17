@@ -7,6 +7,17 @@
 import { BASE_CREEP_COST, MIN_BODY_PARTS, MIN_CREEPS_PER_ROLE } from "config";
 
 /**
+ * Ensures creepCounter is initialized in Memory
+ */
+function ensureCreepCounter(): void
+{
+    if (Memory.creepCounter === undefined)
+    {
+        Memory.creepCounter = 0;
+    }
+}
+
+/**
  * Gets the number of creeps with a specific role
  * @param role The role to count
  * @returns Number of creeps with that role
@@ -17,19 +28,13 @@ function getCreepCount(role: string): number
 }
 
 /**
- * Gets the total energy available for spawning (from all spawns in the room)
+ * Gets the total energy available for spawning (from room energy)
  * @param room The room to check
  * @returns Total energy available
  */
 function getTotalEnergyAvailable(room: Room): number
 {
-    let total = 0;
-    const spawns = room.find(FIND_MY_SPAWNS);
-    for (const spawn of spawns)
-    {
-        total += spawn.energy;
-    }
-    return total;
+    return room.energyAvailable;
 }
 
 /**
@@ -101,9 +106,28 @@ function createCreepBody(energyAvailable: number): BodyPartConstant[]
  */
 function spawnCreep(role: string, room: Room): string | null
 {
+    // Ensure creepCounter is initialized
+    ensureCreepCounter();
+
     const energyAvailable = getTotalEnergyAvailable(room);
 
-    if (energyAvailable < BASE_CREEP_COST / 2)
+    // Check if we have at least one MOVE part required for every creep
+    const isHarvester = role === "harvester";
+    const harvesterCount = getCreepCount("harvester");
+
+    // For harvester, we can spawn with less energy if none exist (emergency)
+    // Otherwise, need enough energy for a useful creep
+    let minEnergyForCreep: number;
+    if (isHarvester && harvesterCount === 0)
+    {
+        minEnergyForCreep = 200; // 1 WORK (100) + 1 CARRY (50) + 1 MOVE (50)
+    }
+    else
+    {
+        minEnergyForCreep = BASE_CREEP_COST / 2;
+    }
+
+    if (energyAvailable < minEnergyForCreep)
     {
         return null; // Not enough energy for a useful creep
     }
@@ -113,6 +137,16 @@ function spawnCreep(role: string, room: Room): string | null
     if (body.length === 0)
     {
         return null; // Could not create any body parts
+    }
+
+    // Ensure body has at least one of each: WORK, CARRY, MOVE
+    const hasWork = body.some((part) => part === WORK);
+    const hasCarry = body.some((part) => part === CARRY);
+    const hasMove = body.some((part) => part === MOVE);
+
+    if (!hasWork || !hasCarry || !hasMove)
+    {
+        return null; // Body must have at least one of each type
     }
 
     const creepName = `${role}_${Game.time}_${Memory.creepCounter}`;

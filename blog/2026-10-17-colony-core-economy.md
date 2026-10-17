@@ -121,9 +121,9 @@ function createCreepBody(energyAvailable: number): BodyPartConstant[]
 
 Each creep role has its own file:
 
-**`src/roles/harvester.ts`** harvests energy from sources and transfers it to the controller when full.
+**`src/roles/harvester.ts`** harvests energy from sources and transfers it to spawns and extensions first, then upgrades the controller when all structures are full.
 
-**`src/roles/upgrader.ts`** upgrades the room controller. If the creep has no energy, it tries to get energy from spawns or storage.
+**`src/roles/upgrader.ts`** upgrades the room controller. If the creep has no energy, it harvests directly from sources rather than withdrawing from spawns.
 
 **`src/roles/builder.ts`** builds construction sites first, then repairs damaged structures, and finally upgrades the controller if idle.
 
@@ -133,6 +133,19 @@ Each creep role has its own file:
 2. **CPU usage is reported** - Every 100 ticks, a summary is logged
 3. **Creeps run their role logic** - Each creep's `run<Role>` function is called based on its memory role
 4. **Spawn manager checks if new creeps are needed** - If any role is below minimum, it tries to spawn one
+
+## The Energy Flow Bug
+
+The most important lesson from this milestone is understanding how energy should flow through the colony.
+
+**Initial Bug**: The harvester was delivering energy directly to the controller instead of to spawns and extensions first. This meant that even when spawns were empty and couldn't spawn new creeps, the harvester was "working" by filling the controller.
+
+**Fix**: Changed the harvester logic to:
+1. Transfer to spawns first (if they have free capacity)
+2. Then transfer to extensions (if they have free capacity)
+3. Finally upgrade the controller (when everything else is full)
+
+This ensures that energy is used where it's needed most - spawning new creeps.
 
 ## Testing
 
@@ -144,20 +157,21 @@ I had to make several adjustments to get the tests working:
 
 3. **Null/undefined handling** - TypeScript's strict mode caught several places where I was checking `!== null` but not `!== undefined`. For example, `room.controller` returns `StructureController | undefined`.
 
-4. **Integration tests** - The mock Screeps server is different from the actual game. The existing integration tests were checking for creeps in a way that didn't work with the mockup library, so I simplified them to verify basic functionality.
+4. **Integration tests** - The mock Screeps server requires MongoDB to run, which is not available in this environment. The unit tests pass successfully, validating the logic.
 
 ## Results
 
 - All unit tests pass ✅
-- All integration tests pass ✅
 - Linting passes with no errors ✅
 - Build succeeds ✅
+- Note: Integration tests require MongoDB which is not available in this environment
 
 ## What I Learned
 
 - **TypeScript strict mode is valuable** - It caught several potential runtime errors before they could happen
 - **Screeps API has subtle differences** from the starter code - Always check the type definitions
 - **Global types need explicit imports** - TypeScript won't include type definition files unless they're referenced
+- **Energy flow matters** - Creeps should deliver energy where it's needed most, not just to the controller
 
 ## What's Next
 
