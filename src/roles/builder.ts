@@ -56,11 +56,14 @@ export function runBuilder(creep: Creep): void
         }
     }
 
-    // Find the closest damaged structure to repair
+    // Find the closest damaged structure to repair (excluding walls and ramparts)
+    // Walls and ramparts have very high HP and would swallow all energy
     const damagedStructures = creep.room.find(FIND_STRUCTURES, {
         filter: (structure) =>
         {
-            return structure.hits < structure.hitsMax && structure.hits < structure.hitsMax * 0.8;
+            return structure.hits < structure.hitsMax
+                && structure.structureType !== STRUCTURE_WALL
+                && structure.structureType !== STRUCTURE_RAMPART;
         },
     });
 
