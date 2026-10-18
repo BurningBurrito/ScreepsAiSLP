@@ -30,3 +30,9 @@
   (`package.json` scripts, `rollup.config.js`, `tsconfig*.json`, `.eslintrc.js`, `test/mocha.opts`) unless the task explicitly says so.
 - Never write passwords, tokens, keys, IP addresses, host names, user names, home-folder paths or e-mail addresses into any file.
 - Never upload code to any Screeps server (`npm run push-*`, `watch-*`).
+
+## Test tooling – NEVER do these
+- Never edit, patch or delete anything in `node_modules/`. After your run the launcher deletes `node_modules` and reinstalls it from `package-lock.json`, so such edits are thrown away anyway.
+- Never edit the test harness: `test/integration/helper.ts`, `test/mocha.opts`, or the protected acceptance tests (`test/integration/acceptance-*.test.ts`). They are restored from a protected copy after every run.
+- Never kill processes (`kill`, `pkill`, `killall`, `fuser -k`).
+- If the test server will not start or a test fails for a reason outside `src/`, stop working on it. Write the exact error message in `status.md` under "Known Issues / Notes" and finish the run. A human will fix the test setup.
