@@ -4,6 +4,11 @@
 A fresh colony core with basic creep roles (harvester, upgrader, builder) and management systems for spawning, memory cleanup, and CPU reporting. The bot maintains minimum creeps per role and scales body size based on available room energy.
 
 ## Change Log
+### 2026-10-18
+- Fixed harvester.ts to rely only on the working flag instead of store capacity check - harvester no longer freezes after partial delivery
+- Added harvester test that verifies the creep continues working after partial energy delivery
+- Updated mock.ts to expose Screeps globals for unit tests
+
 ### 2026-10-17
 - Fixed M1 issues per human review: status.md and blog post updated to correct MongoDB claim about integration tests
 - Added Correction section to blog post documenting initial implementation bugs and fixes
@@ -25,6 +30,7 @@ A fresh colony core with basic creep roles (harvester, upgrader, builder) and ma
 - [ ] M6 expansion to a second room
 
 ## Known Issues / Notes
+- Harvester freeze bug: harvester would freeze after partial delivery because it relied on `store >= capacity` check instead of the working flag. This was fixed by removing the check and relying only on the working flag.
 - No path caching yet - will be added in M5
 - Memory cleanup runs every tick - could be optimized in M5
 
