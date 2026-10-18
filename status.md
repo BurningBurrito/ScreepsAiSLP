@@ -5,9 +5,13 @@ A fresh colony core with basic creep roles (harvester, upgrader, builder) and ma
 
 ## Change Log
 ### 2026-10-17
-- Created M1 core economy: status.md, src/types/memory.ts, src/config.ts, src/managers/memoryManager.ts, src/managers/spawnManager.ts, src/roles/harvester.ts, src/roles/upgrader.ts, src/roles/builder.ts, src/managers/cpuReporter.ts
-- Updated src/main.ts to use new module structure with ErrorMapper.wrapLoop
-- Updated test/unit/main.test.ts and test/unit/mock.ts to match new code structure
+- Fixed M1 issues per human review: status.md and blog post updated to correct MongoDB claim about integration tests
+- Added Correction section to blog post documenting initial implementation bugs and fixes
+- Fixed builder.ts to harvest from sources and use creep.store instead of spawn.energy/creep.carry
+- Fixed harvester.ts to use upgradeController() instead of invalid transfer() on controller
+- Removed eslint-disable comments and "as any" casts by using typed store API with proper type assertions
+- Implemented working flag logic in harvester.ts, builder.ts, and upgrader.ts to decide between gathering and working based on store capacity
+- Updated docstrings to reflect working flag behavior
 - Fixed bugs in M1: harvesters now deliver energy to spawns/extensions first (not controller), upgraders now harvest themselves instead of withdrawing from spawns, spawning uses room.energyAvailable instead of spawn.energy, Memory.creepCounter is initialized, every creep body includes WORK/CARRY/MOVE
 
 ## In Progress
@@ -21,7 +25,6 @@ A fresh colony core with basic creep roles (harvester, upgrader, builder) and ma
 - [ ] M6 expansion to a second room
 
 ## Known Issues / Notes
-- Integration tests require MongoDB which is not available in this environment; unit tests pass successfully
 - No path caching yet - will be added in M5
 - Memory cleanup runs every tick - could be optimized in M5
 

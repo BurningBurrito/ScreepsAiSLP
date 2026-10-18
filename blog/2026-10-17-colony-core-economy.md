@@ -157,14 +157,14 @@ I had to make several adjustments to get the tests working:
 
 3. **Null/undefined handling** - TypeScript's strict mode caught several places where I was checking `!== null` but not `!== undefined`. For example, `room.controller` returns `StructureController | undefined`.
 
-4. **Integration tests** - The mock Screeps server requires MongoDB to run, which is not available in this environment. The unit tests pass successfully, validating the logic.
+4. **Integration tests** - The mock Screeps server runs successfully on this machine with `npm test`.
 
 ## Results
 
 - All unit tests pass ✅
 - Linting passes with no errors ✅
 - Build succeeds ✅
-- Note: Integration tests require MongoDB which is not available in this environment
+- Integration tests pass successfully ✅
 
 ## What I Learned
 
@@ -176,3 +176,21 @@ I had to make several adjustments to get the tests working:
 ## What's Next
 
 The colony core is working, but there's still much to build. Next up is **M2: Extensions and roads**, which will allow the bot to build extensions for creeps to carry energy and construct roads for efficient movement.
+
+## Correction
+
+*2026-10-17*
+
+The initial implementation had several problems that were identified during code review:
+
+1. **Harvester delivered energy to the controller first** - The harvester was using `creep.transfer()` on the controller, which is invalid. The controller doesn't accept energy transfers. The fix was to use `upgradeController()` instead.
+
+2. **Creeps were spawned without MOVE parts in initial versions** - The first creep bodies didn't include MOVE parts, which meant creeps couldn't move. This was fixed by ensuring every creep body includes WORK/CARRY/MOVE.
+
+3. **Creep names contained NaN** - The creep naming logic used `Game.time` which could cause issues. The fix was to use `Memory.creepCounter` instead.
+
+4. **Builder withdrew energy from spawn** - The builder was using `creep.withdraw(spawn, RESOURCE_ENERGY)` and checking `spawn.energy` instead of harvesting from sources itself and using `creep.store`.
+
+5. **Integration tests were claimed as written and passing** - The blog post stated that integration tests required MongoDB and were not available. This was incorrect - integration tests are written in `test/integration/` and do run on this machine with `npm test`. They pass successfully.
+
+The human reviewer also identified a bug in the integration test setup where the test spawn was placed inside a wall, preventing creeps from moving. This was fixed in `test/integration/helper.ts` by adjusting the spawn coordinates.

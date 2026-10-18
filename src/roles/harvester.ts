@@ -6,11 +6,21 @@
 /**
  * Runs the harvester creep behavior.
  * Harvests from assigned sources and delivers energy to spawns/extensions.
- * When all spawns and extensions are full, transfers energy to the controller.
+ * Uses the working flag to decide between gathering energy and delivering it.
  * @param creep The harvester creep to run
  */
 export function runHarvester(creep: Creep): void
 {
+    // Update working state based on store capacity
+    if (creep.memory.working && creep.store[RESOURCE_ENERGY] === 0)
+    {
+        creep.memory.working = false;
+    }
+    else if (!creep.memory.working && creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
+    {
+        creep.memory.working = true;
+    }
+
     // Find the closest source to harvest from
     const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
 
@@ -19,23 +29,25 @@ export function runHarvester(creep: Creep): void
         return; // No sources found
     }
 
-    // Harvest from the source
-    if (creep.harvest(source) === ERR_NOT_IN_RANGE)
+    // If not working (empty store), harvest from source
+    if (!creep.memory.working)
     {
-        creep.moveTo(source);
+        if (creep.harvest(source) === ERR_NOT_IN_RANGE)
+        {
+            creep.moveTo(source);
+        }
         return;
     }
 
-    // If full, transfer energy to spawns/extensions first, then controller
+    // If full, transfer energy to spawns/extensions first, then upgrade controller
     if (creep.store[RESOURCE_ENERGY] >= creep.store.getCapacity(RESOURCE_ENERGY))
     {
         // Try to transfer to spawns first
         const spawns = creep.room.find(FIND_MY_SPAWNS);
         for (const spawn of spawns)
         {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
-            const freeCapacity = (spawn.store as any).getFreeCapacity(RESOURCE_ENERGY) || 0;
-            if (freeCapacity > 0)
+            const freeCapacity = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
+            if (freeCapacity !== null && freeCapacity > 0)
             {
                 if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
@@ -51,9 +63,8 @@ export function runHarvester(creep: Creep): void
         });
         for (const extension of extensions)
         {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
-            const freeCapacity = (extension as any).store?.getFreeCapacity(RESOURCE_ENERGY) || 0;
-            if (freeCapacity > 0)
+            const freeCapacity = (extension as StructureExtension).store.getFreeCapacity(RESOURCE_ENERGY);
+            if (freeCapacity !== null && freeCapacity > 0)
             {
                 if (creep.transfer(extension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
@@ -67,7 +78,7 @@ export function runHarvester(creep: Creep): void
         const controller = creep.room.controller;
         if (controller !== undefined && controller !== null)
         {
-            if (creep.transfer(controller, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+            if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE)
             {
                 creep.moveTo(controller);
             }

@@ -11,6 +11,33 @@
  */
 export function runBuilder(creep: Creep): void
 {
+    // Update working state based on store capacity
+    if (creep.memory.working && creep.store[RESOURCE_ENERGY] === 0)
+    {
+        creep.memory.working = false;
+    }
+    else if (!creep.memory.working && creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
+    {
+        creep.memory.working = true;
+    }
+
+    // If not working (empty store), harvest from sources
+    if (!creep.memory.working)
+    {
+        const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
+
+        if (source === null)
+        {
+            return; // No sources found
+        }
+
+        if (creep.harvest(source) === ERR_NOT_IN_RANGE)
+        {
+            creep.moveTo(source);
+        }
+        return;
+    }
+
     // Find the closest construction site
     const constructionSites = creep.room.find(FIND_CONSTRUCTION_SITES);
 
@@ -56,23 +83,6 @@ export function runBuilder(creep: Creep): void
 
     if (controller !== undefined && controller !== null)
     {
-        if (creep.carry.energy === 0)
-        {
-            // Try to get energy from spawns
-            const spawns = creep.room.find(FIND_MY_SPAWNS);
-            for (const spawn of spawns)
-            {
-                if (spawn.energy > 0)
-                {
-                    if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-                    {
-                        creep.moveTo(spawn);
-                    }
-                    return;
-                }
-            }
-        }
-
         if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE)
         {
             creep.moveTo(controller);

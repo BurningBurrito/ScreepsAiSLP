@@ -18,8 +18,18 @@ export function runUpgrader(creep: Creep): void
         return; // No controller in room
     }
 
-    // If not carrying energy, harvest from sources
-    if (creep.store[RESOURCE_ENERGY] === 0)
+    // Update working state based on store capacity
+    if (creep.memory.working && creep.store[RESOURCE_ENERGY] === 0)
+    {
+        creep.memory.working = false;
+    }
+    else if (!creep.memory.working && creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
+    {
+        creep.memory.working = true;
+    }
+
+    // If not working (empty store), harvest from sources
+    if (!creep.memory.working)
     {
         const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
 
