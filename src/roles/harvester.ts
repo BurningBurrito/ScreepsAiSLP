@@ -21,17 +21,17 @@ export function runHarvester(creep: Creep): void
         creep.memory.working = true;
     }
 
-    // Find the closest source to harvest from
-    const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
-
-    if (source === null)
-    {
-        return; // No sources found
-    }
-
     // If not working (empty store), harvest from source
     if (!creep.memory.working)
     {
+        // Find the closest source to harvest from
+        const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
+
+        if (source === null)
+        {
+            return; // No sources found
+        }
+
         if (creep.harvest(source) === ERR_NOT_IN_RANGE)
         {
             creep.moveTo(source);
@@ -40,48 +40,45 @@ export function runHarvester(creep: Creep): void
     }
 
     // If full, transfer energy to spawns/extensions first, then upgrade controller
-    if (creep.store[RESOURCE_ENERGY] >= creep.store.getCapacity(RESOURCE_ENERGY))
+    // Try to transfer to spawns first
+    const spawns = creep.room.find(FIND_MY_SPAWNS);
+    for (const spawn of spawns)
     {
-        // Try to transfer to spawns first
-        const spawns = creep.room.find(FIND_MY_SPAWNS);
-        for (const spawn of spawns)
+        const freeCapacity = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
+        if (freeCapacity !== null && freeCapacity > 0)
         {
-            const freeCapacity = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
-            if (freeCapacity !== null && freeCapacity > 0)
+            if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
             {
-                if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-                {
-                    creep.moveTo(spawn);
-                }
-                return;
+                creep.moveTo(spawn);
             }
+            return;
         }
+    }
 
-        // Try to transfer to extensions
-        const extensions = creep.room.find(FIND_STRUCTURES, {
-            filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
-        });
-        for (const extension of extensions)
+    // Try to transfer to extensions
+    const extensions = creep.room.find(FIND_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
+    });
+    for (const extension of extensions)
+    {
+        const freeCapacity = (extension as StructureExtension).store.getFreeCapacity(RESOURCE_ENERGY);
+        if (freeCapacity !== null && freeCapacity > 0)
         {
-            const freeCapacity = (extension as StructureExtension).store.getFreeCapacity(RESOURCE_ENERGY);
-            if (freeCapacity !== null && freeCapacity > 0)
+            if (creep.transfer(extension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
             {
-                if (creep.transfer(extension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-                {
-                    creep.moveTo(extension);
-                }
-                return;
+                creep.moveTo(extension);
             }
+            return;
         }
+    }
 
-        // If all spawns and extensions are full, upgrade the controller
-        const controller = creep.room.controller;
-        if (controller !== undefined && controller !== null)
+    // If all spawns and extensions are full, upgrade the controller
+    const controller = creep.room.controller;
+    if (controller !== undefined && controller !== null)
+    {
+        if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE)
         {
-            if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE)
-            {
-                creep.moveTo(controller);
-            }
+            creep.moveTo(controller);
         }
     }
 }
