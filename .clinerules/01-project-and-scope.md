@@ -10,8 +10,8 @@
 ## Sources of truth (never guess Screeps API behavior)
 1. Type definitions: `node_modules/@types/screeps/index.d.ts`. Before using ANY game object, method, property or constant,
    search it there, for example: `grep -n "spawnCreep" node_modules/@types/screeps/index.d.ts`
-2. Game docs: https://docs.screeps.com/index.html and API reference https://docs.screeps.com/api/ (if reachable).
-3. If neither confirms it, do not use it. Write the open question in `status.md`.
+2. This machine has no internet access. Do not try to reach websites or download anything; rely on the type definitions above and the code in this repository.
+3. If the type definitions do not confirm it, do not use it. Write the open question in `status.md`.
 
 ## Start checklist (do every step, in order)
 1. `git status --short` – must be empty. If not, commit the leftovers first (see your global rules).
