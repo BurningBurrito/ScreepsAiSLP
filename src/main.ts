@@ -2,6 +2,7 @@ import "types/memory";
 import { ErrorMapper } from "utils/ErrorMapper";
 import { checkAndSpawn } from "managers/spawnManager";
 import { cleanMemory } from "managers/memoryManager";
+import { manageConstruction } from "managers/constructionManager";
 import { reportCPU } from "managers/cpuReporter";
 import { runBuilder } from "roles/builder";
 import { runHarvester } from "roles/harvester";
@@ -55,6 +56,7 @@ function mainLoop(): void
         if (room !== undefined)
         {
             checkAndSpawn(room);
+            manageConstruction(room);
         }
     }
 }

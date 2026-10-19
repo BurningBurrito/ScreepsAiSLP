@@ -25,3 +25,12 @@ export const BASE_CREEP_COST = 200; // 100 + 50 + 50
 
 /** Threshold below which builders switch to upgrading */
 export const CONSTRUCTION_THRESHOLD = 50;
+
+/** Number of extensions to build (5 is max at level 2) */
+export const TARGET_EXTENSIONS = 5;
+
+/** Interval for building roads (every N ticks) */
+export const ROAD_BUILD_INTERVAL = 100;
+
+/** Number of road tiles to build per interval */
+export const ROADS_PER_INTERVAL = 5;
