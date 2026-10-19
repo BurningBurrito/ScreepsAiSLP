@@ -39,12 +39,34 @@ export function runBuilder(creep: Creep): void
     }
 
     // Find the closest construction site
-    const constructionSites = creep.room.find(FIND_CONSTRUCTION_SITES);
+    // Prioritize extensions over roads
+    const extensionSites = creep.room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_EXTENSION,
+    });
 
-    if (constructionSites.length > 0)
+    if (extensionSites.length > 0)
     {
-        // Build construction sites
-        const site = creep.pos.findClosestByPath(constructionSites);
+        // Build extension sites first
+        const site = creep.pos.findClosestByPath(extensionSites);
+
+        if (site !== null)
+        {
+            if (creep.build(site) === ERR_NOT_IN_RANGE)
+            {
+                creep.moveTo(site);
+            }
+            return;
+        }
+    }
+
+    // If no extension sites, build roads
+    const roadSites = creep.room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_ROAD,
+    });
+
+    if (roadSites.length > 0)
+    {
+        const site = creep.pos.findClosestByPath(roadSites);
 
         if (site !== null)
         {

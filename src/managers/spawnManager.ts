@@ -42,7 +42,7 @@ function getTotalEnergyAvailable(room: Room): number
  * @param energyAvailable Available energy for the body
  * @returns Array of body parts
  */
-function createCreepBody(energyAvailable: number): BodyPartConstant[]
+function createCreepBody(energyAvailable: number, role: string): BodyPartConstant[]
 {
     const body: BodyPartConstant[] = [];
 
@@ -74,25 +74,53 @@ function createCreepBody(energyAvailable: number): BodyPartConstant[]
     // Use remaining energy to add parts
     let remainingEnergy = energyAvailable - maxSets * BASE_CREEP_COST;
 
-    // Add extra WORK parts first
-    while (remainingEnergy >= 100 && body.filter((part) => part === WORK).length < body.filter((part) => part === CARRY).length + 2)
+    // For builders, prioritize WORK parts for faster construction
+    if (role === "builder")
     {
-        body.push(WORK);
-        remainingEnergy -= 100;
-    }
+        // Add extra WORK parts first for builders
+        while (remainingEnergy >= 100)
+        {
+            body.push(WORK);
+            remainingEnergy -= 100;
+        }
 
-    // Add extra CARRY parts
-    while (remainingEnergy >= 50)
-    {
-        body.push(CARRY);
-        remainingEnergy -= 50;
-    }
+        // Then add CARRY parts
+        while (remainingEnergy >= 50)
+        {
+            body.push(CARRY);
+            remainingEnergy -= 50;
+        }
 
-    // Add extra MOVE parts
-    while (remainingEnergy >= 50)
+        // Finally add MOVE parts
+        while (remainingEnergy >= 50)
+        {
+            body.push(MOVE);
+            remainingEnergy -= 50;
+        }
+    }
+    else
     {
-        body.push(MOVE);
-        remainingEnergy -= 50;
+        // For harvesters and upgraders, balance WORK and CARRY
+        // Add extra WORK parts first
+        while (remainingEnergy >= 100 && body.filter((part) => part === WORK).length < body.filter((part) => part === CARRY).length + 2)
+        {
+            body.push(WORK);
+            remainingEnergy -= 100;
+        }
+
+        // Add extra CARRY parts
+        while (remainingEnergy >= 50)
+        {
+            body.push(CARRY);
+            remainingEnergy -= 50;
+        }
+
+        // Add extra MOVE parts
+        while (remainingEnergy >= 50)
+        {
+            body.push(MOVE);
+            remainingEnergy -= 50;
+        }
     }
 
     return body;
@@ -116,11 +144,17 @@ function spawnCreep(role: string, room: Room): string | null
     const harvesterCount = getCreepCount("harvester");
 
     // For harvester, we can spawn with less energy if none exist (emergency)
+    // For builder, need enough energy for a body with WORK, CARRY, MOVE
     // Otherwise, need enough energy for a useful creep
     let minEnergyForCreep: number;
     if (isHarvester && harvesterCount === 0)
     {
         minEnergyForCreep = 200; // 1 WORK (100) + 1 CARRY (50) + 1 MOVE (50)
+    }
+    else if (role === "builder")
+    {
+        // Builder needs at least 200 energy for 1 WORK + 1 CARRY + 1 MOVE
+        minEnergyForCreep = 200;
     }
     else
     {
@@ -132,7 +166,7 @@ function spawnCreep(role: string, room: Room): string | null
         return null; // Not enough energy for a useful creep
     }
 
-    const body = createCreepBody(energyAvailable);
+    const body = createCreepBody(energyAvailable, role);
 
     if (body.length === 0)
     {
