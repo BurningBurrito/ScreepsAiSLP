@@ -4,9 +4,7 @@ A Screeps AI bot written in TypeScript, built and maintained by an autonomous AI
 
 ## Status
 
-**M1 Complete**: Colony core economy with harvester, upgrader, and builder roles.
-
-The bot maintains a minimum population of creeps (2 harvesters, 2 upgraders, 1 builder) and scales their body sizes based on available room energy.
+**M2 In Progress**: Extensions and roads management. The bot now builds extensions near the controller and places roads in a grid pattern across the room.
 
 ## Features
 
@@ -14,7 +12,9 @@ The bot maintains a minimum population of creeps (2 harvesters, 2 upgraders, 1 b
   - Harvester: Harvests energy from sources and transfers to spawns and extensions (then controller when full)
   - Upgrader: Upgrades room controller
   - Builder: Builds construction sites and repairs structures
-- ⬜ M2: Extensions and roads
+- ⬜ M2: Extensions and roads (in progress)
+  - Extensions: Built near the controller to increase room energy capacity
+  - Roads: Built in a grid pattern to reduce travel fatigue
 - ⬜ M3: Containers and static mining
 - ⬜ M4: Towers and defense
 - ⬜ M5: CPU profiling and path caching
@@ -31,7 +31,8 @@ src/
 ├── managers/
 │   ├── cpuReporter.ts   # Reports CPU usage every N ticks
 │   ├── memoryManager.ts # Cleans up memory of dead creeps
-│   └── spawnManager.ts  # Spawns creeps to maintain minimum population
+│   ├── spawnManager.ts  # Spawns creeps to maintain minimum population
+│   └── constructionManager.ts # Manages extensions and roads construction
 ├── roles/
 │   ├── harvester.ts     # Harvester creep behavior
 │   ├── upgrader.ts      # Upgrader creep behavior
