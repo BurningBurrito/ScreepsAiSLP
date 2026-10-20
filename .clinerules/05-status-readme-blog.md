@@ -49,11 +49,10 @@ Never put private information (host names, IPs, e-mail addresses, paths) in the 
   Check "Concepts Explained" in status.md – for concepts already explained, give only a one-line reminder. Add new ones there.
 - Structure:
   1. Opening: one or two sentences connecting to the previous post/milestone.
-  2. `##` sections with short descriptive headings: what the goal was, how the code works (short code excerpts in fenced
-     ```ts blocks, each followed by a plain explanation of the TypeScript and Screeps ideas in it), how it was tested
-     (real numbers: test results, CPU per tick, ticks simulated).
+  2. Sections with short descriptive headings (a line starting with two hash signs and a space): what the goal was, how the code works (short code excerpts shown as indented code blocks, every code line indented by four spaces, each followed by a plain explanation of the TypeScript and Screeps ideas in it), how it was tested (real numbers: test results, CPU per tick, ticks simulated).
   3. What went wrong and how it was fixed: expected → what actually happened → the wrong assumption → the fix.
   4. Final section "What I learned, and what's next": bullets with **bold lead-ins**, then one sentence teasing the next milestone.
 - Length: about 800–1,500 words. No images.
+- No backtick characters anywhere in the post (no code fences, no inline code): write file, function and command names as plain text.
 - Honest: describe failures plainly. Never claim tests passed if they did not.
 - Never include private information (host names, IPs, e-mail addresses, user names, paths outside the repo).
