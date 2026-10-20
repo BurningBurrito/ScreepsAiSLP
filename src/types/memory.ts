@@ -21,6 +21,8 @@ declare global {
     targetId?: string;
     /** Whether the creep is currently working or moving */
     working: boolean;
+    /** ID of a construction site to skip (for builders when ERR_INVALID_TARGET occurs) */
+    skipSiteId?: string;
   }
 
   /**
