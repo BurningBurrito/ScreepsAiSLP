@@ -1,9 +1,15 @@
 # ScreepsAiSLP Status
 
 ## Current State
-A colony with extensions and roads management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the controller, and places roads in a grid pattern. The construction manager manages extension placement near the controller and road placement in a grid pattern across the room.
+A colony with extensions and roads management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the controller, and places roads in a grid pattern. The construction manager manages extension placement near the controller and road placement across the room. The builder handles ERR_INVALID_TARGET when creeps block construction sites.
 
 ## Change Log
+### 2026-10-20
+- Fixed M2 milestone: builders now properly skip blocked sites and continue building
+- Added ERR_INVALID_TARGET handling in builder.ts to detect when a creep stands on a construction site
+- Updated builder to move away from blocked sites and try different construction sites
+- M2 acceptance test passes: 5 extensions placed, 1 finished, 50 road sites placed, 1 finished, energy capacity 350
+
 ### 2026-10-19
 - Fixed M2 milestone: builders now continue building when sources are temporarily depleted
 - Changed builder spawn energy requirement from 200 to 250 for better CARRY capacity
@@ -38,11 +44,10 @@ A colony with extensions and roads management. The bot maintains minimum creeps 
 - [ ] M6 expansion to a second room
 
 ## Known Issues / Notes
-- Integration tests may fail due to screeps-server-mockup infrastructure issue (storage process crashes). This is a known issue with the mockup package version 1.5.1 and is not related to the bot's code. Unit tests and linting pass successfully.
 - No path caching yet - will be added in M5
 - Memory cleanup runs every tick - could be optimized in M5
 
 ## Concepts Explained
-- **Creep memory**: Memory structure stored in `Memory.creeps[creepName]` that persists creep state across ticks
+- **Creep memory**: Memory structure stored in Memory.creeps[creepName] that persists creep state across ticks
 - **Global reset**: Screeps server restarts all code at any time, losing module-level variables; only Memory survives
 - **CPU bucket**: Unused CPU accumulates in a bucket (max 10,000) allowing bursts of up to 500 CPU per tick
