@@ -1,12 +1,13 @@
 # ScreepsAiSLP Status
 
 ## Current State
-A colony with extensions and roads management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the spawn, and places roads along paths from spawn to sources and controller. The construction manager manages extension and road placement, while builders handle construction and repair tasks. M2 acceptance test passes with 1 extension finished, 4 extension sites placed, 1 road finished, 49 road sites placed, and energy capacity of 350.
+A colony with extensions and roads management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the spawn, and places roads along paths from spawn to sources and controller. The construction manager manages extension and road placement, while builders handle construction and repair tasks. M2 acceptance test passes with 1 extension finished, 4 extension sites placed, 2 roads finished, 48 road sites placed, and energy capacity of 350.
 
 ## Change Log
 ### 2026-10-20
-- M2 acceptance test passes: 1 extension finished, 4 extension sites placed, 1 road finished, 49 road sites placed, energy capacity 350
-- M2 milestone completed - extensions and roads management working
+- M2 acceptance test passes: 1 extension finished, 4 extension sites placed, 2 roads finished, 48 road sites placed, energy capacity 350
+- All tests passing (6 unit tests + 4 integration tests)
+- Blog posts verified - no backticks found in current versions
 
 ### 2026-10-19
 - Fixed M2 milestone: builders now continue building when sources are temporarily depleted
