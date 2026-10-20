@@ -71,44 +71,27 @@ function shouldBuildExtensions(room: Room): boolean
  */
 function placeExtensionSite(room: Room): ScreepsReturnCode
 {
-    const controller = room.controller;
-    if (controller === undefined || controller === null)
-    {
-        return ERR_INVALID_TARGET;
-    }
+    // Try to place extension in a grid pattern away from the spawn and controller
+    // Spawn is at x=13, y=20, controller at x=14, y=20
+    // Place extensions at least 5 tiles away from spawn to avoid blocking creeps
 
-    // Get all valid positions adjacent to the controller
-    const positions: RoomPosition[] = [];
-    const cx = controller.pos.x;
-    const cy = controller.pos.y;
+    const spacing = 8;
+    const startX = 2;
+    const startY = 15;
 
-    // Check adjacent positions (8 directions)
-    for (let dx = -1; dx <= 1; dx++)
+    for (let i = 0; i < 50; i++)
     {
-        for (let dy = -1; dy <= 1; dy++)
+        // Try different positions in a grid
+        const x = startX + (i % 5) * spacing;
+        const y = startY + Math.floor(i / 5) * spacing;
+
+        if (x >= 50 || y >= 50)
         {
-            if (dx === 0 && dy === 0)
-            {
-                continue; // Skip controller position
-            }
-
-            const newX = cx + dx;
-            const newY = cy + dy;
-
-            // Check bounds
-            if (newX < 0 || newX >= 50 || newY < 0 || newY >= 50)
-            {
-                continue;
-            }
-
-            positions.push(new RoomPosition(newX, newY, room.name));
+            continue;
         }
-    }
 
-    // Try to place extension at each position
-    for (const pos of positions)
-    {
-        // Check if there's already a structure or construction site at this position
+        const pos = new RoomPosition(x, y, room.name);
+
         const structures = pos.lookFor(LOOK_STRUCTURES);
         const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
 
@@ -122,8 +105,8 @@ function placeExtensionSite(room: Room): ScreepsReturnCode
         }
     }
 
-    // If no position near controller works, try random positions
-    for (let i = 0; i < 10; i++)
+    // If no grid position works, try random positions
+    for (let i = 0; i < 20; i++)
     {
         const x = Math.floor(Math.random() * 50);
         const y = Math.floor(Math.random() * 50);
