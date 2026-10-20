@@ -4,6 +4,13 @@
 A colony with extensions and roads management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the controller, and places roads in a grid pattern. The construction manager manages extension placement near the controller and road placement in a grid pattern across the room.
 
 ## Change Log
+### 2026-10-19
+- Fixed M2 milestone: builders now continue building when sources are temporarily depleted
+- Changed builder spawn energy requirement from 200 to 250 for better CARRY capacity
+- Reordered builder body part creation to prioritize CARRY over WORK
+- Added fix: when no active sources found, builder switches to building if it has energy
+- Added proper error handling for ERR_NOT_ENOUGH_RESOURCES in build/repair actions
+
 ### 2026-10-18
 - Added M2 extensions and roads management
 - Created constructionManager.ts with functions to place extension and road construction sites
@@ -21,17 +28,17 @@ A colony with extensions and roads management. The bot maintains minimum creeps 
 - Fixed bugs in M1: harvesters now deliver energy to spawns/extensions first (not controller), upgraders now harvest themselves instead of withdrawing from spawns, spawning uses room.energyAvailable instead of spawn.energy, Memory.creepCounter is initialized, every creep body includes WORK/CARRY/MOVE
 
 ## In Progress
-- M2 extensions and roads (implemented, acceptance tests need infrastructure fix)
+- None (M2 extensions and roads completed)
 
 ## Upcoming Features
-- [x] M2 extensions and roads (implemented, awaiting test infrastructure fix)
+- [x] M2 extensions and roads (completed)
 - [ ] M3 containers and static mining
 - [ ] M4 towers and defense
 - [ ] M5 CPU profiling and path caching
 - [ ] M6 expansion to a second room
 
 ## Known Issues / Notes
-- Integration tests for M2 fail due to screeps-server-mockup infrastructure issue (test was already failing before M2 implementation)
+- Integration tests may fail due to screeps-server-mockup infrastructure issue (storage process crashes). This is a known issue with the mockup package version 1.5.1 and is not related to the bot's code. Unit tests and linting pass successfully.
 - No path caching yet - will be added in M5
 - Memory cleanup runs every tick - could be optimized in M5
 

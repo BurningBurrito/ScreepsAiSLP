@@ -28,7 +28,12 @@ export function runBuilder(creep: Creep): void
 
         if (source === null)
         {
-            return; // No sources found
+            // No active sources found, but if we have energy, we can still build
+            if (creep.store[RESOURCE_ENERGY] > 0)
+            {
+                creep.memory.working = true;
+            }
+            return;
         }
 
         if (creep.harvest(source) === ERR_NOT_IN_RANGE)
@@ -51,9 +56,15 @@ export function runBuilder(creep: Creep): void
 
         if (site !== null)
         {
-            if (creep.build(site) === ERR_NOT_IN_RANGE)
+            const result = creep.build(site);
+            if (result === ERR_NOT_IN_RANGE)
             {
                 creep.moveTo(site);
+            }
+            else if (result === ERR_NOT_ENOUGH_RESOURCES)
+            {
+                // No energy to build, switch to harvesting
+                creep.memory.working = false;
             }
             return;
         }
@@ -70,9 +81,15 @@ export function runBuilder(creep: Creep): void
 
         if (site !== null)
         {
-            if (creep.build(site) === ERR_NOT_IN_RANGE)
+            const result = creep.build(site);
+            if (result === ERR_NOT_IN_RANGE)
             {
                 creep.moveTo(site);
+            }
+            else if (result === ERR_NOT_ENOUGH_RESOURCES)
+            {
+                // No energy to build, switch to harvesting
+                creep.memory.working = false;
             }
             return;
         }
@@ -95,9 +112,15 @@ export function runBuilder(creep: Creep): void
 
         if (structure !== null)
         {
-            if (creep.repair(structure) === ERR_NOT_IN_RANGE)
+            const result = creep.repair(structure);
+            if (result === ERR_NOT_IN_RANGE)
             {
                 creep.moveTo(structure);
+            }
+            else if (result === ERR_NOT_ENOUGH_RESOURCES)
+            {
+                // No energy to repair, switch to harvesting
+                creep.memory.working = false;
             }
             return;
         }
