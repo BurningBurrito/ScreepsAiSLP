@@ -5,11 +5,11 @@ A colony with extensions and roads management. The bot maintains minimum creeps 
 
 ## Change Log
 ### 2026-10-20
-- Fixed M2 milestone: builders now properly skip blocked sites and continue building
+- M2 acceptance test passes: 1 extension finished, 4 extension sites placed, 3 roads finished, 47 road sites placed, energy capacity 350
+- Builders now properly skip blocked sites and continue building by filtering out construction sites occupied by creeps
 - Added filtering of construction sites occupied by creeps in builder.ts
 - Added filtering of damaged structures occupied by creeps in builder.ts
 - Added controller occupancy check before upgrade in builder.ts
-- M2 acceptance test passes: 5 extensions placed, 1 finished, 50 road sites placed, 2 finished, energy capacity 350
 
 ### 2026-10-19
 - Fixed M2 milestone: builders now continue building when sources are temporarily depleted
