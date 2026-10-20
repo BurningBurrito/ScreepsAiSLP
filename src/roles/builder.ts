@@ -28,7 +28,7 @@ export function runBuilder(creep: Creep): void
 
         if (source === null)
         {
-            // No active sources found, but if we have energy, we can still build
+            // No active sources found, switch to working state to build if we have energy
             if (creep.store[RESOURCE_ENERGY] > 0)
             {
                 creep.memory.working = true;
@@ -45,54 +45,43 @@ export function runBuilder(creep: Creep): void
 
     // Find the closest construction site
     // Prioritize extensions over roads
-    const extensionSites = creep.room.find(FIND_CONSTRUCTION_SITES, {
+    const extensionSite = creep.pos.findClosestByPath(FIND_MY_CONSTRUCTION_SITES, {
         filter: (site) => site.structureType === STRUCTURE_EXTENSION,
     });
 
-    if (extensionSites.length > 0)
+    if (extensionSite !== null)
     {
-        // Build extension sites first
-        const site = creep.pos.findClosestByPath(extensionSites);
-
-        if (site !== null)
+        const result = creep.build(extensionSite);
+        if (result === ERR_NOT_IN_RANGE)
         {
-            const result = creep.build(site);
-            if (result === ERR_NOT_IN_RANGE)
-            {
-                creep.moveTo(site);
-            }
-            else if (result === ERR_NOT_ENOUGH_RESOURCES)
-            {
-                // No energy to build, switch to harvesting
-                creep.memory.working = false;
-            }
-            return;
+            creep.moveTo(extensionSite);
         }
+        else if (result === ERR_NOT_ENOUGH_RESOURCES)
+        {
+            // No energy to build, switch to harvesting
+            creep.memory.working = false;
+        }
+        return;
     }
 
     // If no extension sites, build roads
-    const roadSites = creep.room.find(FIND_CONSTRUCTION_SITES, {
+    const roadSite = creep.pos.findClosestByPath(FIND_MY_CONSTRUCTION_SITES, {
         filter: (site) => site.structureType === STRUCTURE_ROAD,
     });
 
-    if (roadSites.length > 0)
+    if (roadSite !== null)
     {
-        const site = creep.pos.findClosestByPath(roadSites);
-
-        if (site !== null)
+        const result = creep.build(roadSite);
+        if (result === ERR_NOT_IN_RANGE)
         {
-            const result = creep.build(site);
-            if (result === ERR_NOT_IN_RANGE)
-            {
-                creep.moveTo(site);
-            }
-            else if (result === ERR_NOT_ENOUGH_RESOURCES)
-            {
-                // No energy to build, switch to harvesting
-                creep.memory.working = false;
-            }
-            return;
+            creep.moveTo(roadSite);
         }
+        else if (result === ERR_NOT_ENOUGH_RESOURCES)
+        {
+            // No energy to build, switch to harvesting
+            creep.memory.working = false;
+        }
+        return;
     }
 
     // Find the closest damaged structure to repair (excluding walls and ramparts)
