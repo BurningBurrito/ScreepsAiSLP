@@ -28,12 +28,7 @@ export function runBuilder(creep: Creep): void
 
         if (source === null)
         {
-            // No active sources found, switch to working state to build if we have energy
-            if (creep.store[RESOURCE_ENERGY] > 0)
-            {
-                creep.memory.working = true;
-            }
-            return;
+            return; // No sources found
         }
 
         if (creep.harvest(source) === ERR_NOT_IN_RANGE)
@@ -43,120 +38,33 @@ export function runBuilder(creep: Creep): void
         return;
     }
 
-    // Try to build the closest construction site, but skip sites that cause ERR_INVALID_TARGET
-    // We track which sites to skip in Memory for this tick (since sites can change between ticks)
-    const skipSiteId = creep.memory.skipSiteId ;
+    // Find the closest construction site
+    const constructionSites = creep.room.find(FIND_CONSTRUCTION_SITES);
 
-    // Find all construction sites, sorted by distance
-    const allSites = creep.pos.findClosestByPath(FIND_MY_CONSTRUCTION_SITES);
-
-    if (allSites === null)
+    if (constructionSites.length > 0)
     {
-        // No sites, try repair or upgrade
-        return;
-    }
+        // Build construction sites
+        const site = creep.pos.findClosestByPath(constructionSites);
 
-    // Build the closest valid site
-    let site: ConstructionSite<BuildableStructureConstant> = allSites;
-    let attempts = 0;
-    const maxAttempts = 5;
-
-    while (attempts < maxAttempts)
-    {
-        // Skip this site if it was marked to be skipped
-        if (site.id === skipSiteId)
+        if (site !== null)
         {
-            // Find the next closest site
-            const nextSite = creep.pos.findClosestByPath(FIND_MY_CONSTRUCTION_SITES, {
-                filter: (s) => s.id !== skipSiteId,
-            });
-            if (nextSite === null)
+            const result = creep.build(site);
+            if (result === ERR_NOT_IN_RANGE)
             {
-                break; // No more sites to try
+                creep.moveTo(site);
             }
-            site = nextSite;
-            attempts++;
-            continue;
-        }
-
-        const distToSite = creep.pos.getRangeTo(site);
-
-        if (distToSite > 1)
-        {
-            // Too far, move to the site
-            creep.moveTo(site);
-            return;
-        }
-
-        // If creep is on the site, move away first
-        if (distToSite === 0)
-        {
-            const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
-            const moveDir = directions[Math.floor(Math.random() * directions.length)];
-            creep.move(moveDir);
-            return;
-        }
-
-        // Build the site (range 1 - adjacent)
-        const result = creep.build(site);
-
-        if (result === OK)
-        {
-            // Successfully built, reset skip
-            if (creep.memory.skipSiteId !== undefined)
+            else if (result === ERR_INVALID_TARGET)
             {
-                delete creep.memory.skipSiteId;
+                // Creep is on top of the construction site (range 0), move away
+                // This allows the creep to try building again from range 1 next tick
+                const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
+                const moveDir = directions[Math.floor(Math.random() * directions.length)];
+                creep.move(moveDir);
             }
             return;
-        }
-        else if (result === ERR_NOT_IN_RANGE)
-        {
-            // Move to site
-            creep.moveTo(site);
-            return;
-        }
-        else if (result === ERR_INVALID_TARGET)
-        {
-            // Creep is on the site (or site is invalid), skip it for this tick and move away
-            creep.memory.skipSiteId = site.id;
-            
-            // Move away from the site in a random direction
-            const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
-            const moveDir = directions[Math.floor(Math.random() * directions.length)];
-            creep.move(moveDir);
-            
-            // Return immediately so we don't try to build again this tick
-            return;
-        }
-        else if (result === ERR_NOT_ENOUGH_RESOURCES)
-        {
-            // No energy to build, switch to harvesting
-            creep.memory.working = false;
-            if (creep.memory.skipSiteId !== undefined)
-            {
-                delete creep.memory.skipSiteId;
-            }
-            return;
-        }
-        else
-        {
-            // Other error, try next site
-            if (creep.memory.skipSiteId !== undefined)
-            {
-                delete creep.memory.skipSiteId;
-            }
-            const nextSite = creep.pos.findClosestByPath(FIND_MY_CONSTRUCTION_SITES);
-            if (nextSite === null)
-            {
-                break;
-            }
-            site = nextSite;
-            attempts++;
-            continue;
         }
     }
 
-    // If we couldn't build any site, try the fallback behaviors
     // Find the closest damaged structure to repair (excluding walls and ramparts)
     // Walls and ramparts have very high HP and would swallow all energy
     const damagedStructures = creep.room.find(FIND_STRUCTURES, {
@@ -179,10 +87,12 @@ export function runBuilder(creep: Creep): void
             {
                 creep.moveTo(structure);
             }
-            else if (result === ERR_NOT_ENOUGH_RESOURCES)
+            else if (result === ERR_INVALID_TARGET)
             {
-                // No energy to repair, switch to harvesting
-                creep.memory.working = false;
+                // Creep is on top of the structure (range 0), move away
+                const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
+                const moveDir = directions[Math.floor(Math.random() * directions.length)];
+                creep.move(moveDir);
             }
             return;
         }
@@ -193,9 +103,17 @@ export function runBuilder(creep: Creep): void
 
     if (controller !== undefined && controller !== null)
     {
-        if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE)
+        const result = creep.upgradeController(controller);
+        if (result === ERR_NOT_IN_RANGE)
         {
             creep.moveTo(controller);
+        }
+        else if (result === ERR_INVALID_TARGET)
+        {
+            // Creep is on top of the controller (range 0), move away
+            const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
+            const moveDir = directions[Math.floor(Math.random() * directions.length)];
+            creep.move(moveDir);
         }
     }
 }
