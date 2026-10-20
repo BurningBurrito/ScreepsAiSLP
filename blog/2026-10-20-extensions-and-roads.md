@@ -43,7 +43,7 @@ function manageConstruction(room: Room): void
         const result = placeExtensionSite(room);
         if (result !== OK && result !== ERR_FULL)
         {
-            console.log(`Extension construction failed: ${result}`);
+            console.log(Extension construction failed: ${result});
         }
     }
 
