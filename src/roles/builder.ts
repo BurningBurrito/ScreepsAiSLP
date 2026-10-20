@@ -43,20 +43,37 @@ export function runBuilder(creep: Creep): void
 
     if (constructionSites.length > 0)
     {
-        // Build construction sites
-        const site = creep.pos.findClosestByPath(constructionSites);
-
-        if (site !== null)
+        // Filter out sites that are occupied by creeps (ERR_INVALID_TARGET will occur)
+        const availableSites = constructionSites.filter((site) =>
         {
-            const result = creep.build(site);
+            const creepsOnSite = site.pos.lookFor(LOOK_CREEPS);
+            return creepsOnSite.length === 0;
+        });
+
+        // If no sites are available (all occupied), move away from current position
+        // to avoid blocking and try again next tick
+        if (availableSites.length === 0)
+        {
+            const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
+            const moveDir = directions[Math.floor(Math.random() * directions.length)];
+            creep.move(moveDir);
+            return;
+        }
+
+        // Build construction sites
+        const selectedSite = creep.pos.findClosestByPath(availableSites);
+
+        if (selectedSite !== null)
+        {
+            const result = creep.build(selectedSite);
             if (result === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(site);
+                creep.moveTo(selectedSite);
             }
             else if (result === ERR_INVALID_TARGET)
             {
                 // Creep is on top of the construction site (range 0), move away
-                // This allows the creep to try building again from range 1 next tick
+                // This should not happen now with the filtering, but keep as fallback
                 const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
                 const moveDir = directions[Math.floor(Math.random() * directions.length)];
                 creep.move(moveDir);
@@ -78,14 +95,30 @@ export function runBuilder(creep: Creep): void
 
     if (damagedStructures.length > 0)
     {
-        const structure = creep.pos.findClosestByPath(damagedStructures);
-
-        if (structure !== null)
+        // Filter out structures that are occupied by creeps
+        const availableStructures = damagedStructures.filter((structure) =>
         {
-            const result = creep.repair(structure);
+            const creepsOnTile = structure.pos.lookFor(LOOK_CREEPS);
+            return creepsOnTile.length === 0;
+        });
+
+        // If no structures are available (all occupied), move away
+        if (availableStructures.length === 0)
+        {
+            const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
+            const moveDir = directions[Math.floor(Math.random() * directions.length)];
+            creep.move(moveDir);
+            return;
+        }
+
+        const selectedStructure = creep.pos.findClosestByPath(availableStructures);
+
+        if (selectedStructure !== null)
+        {
+            const result = creep.repair(selectedStructure);
             if (result === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(structure);
+                creep.moveTo(selectedStructure);
             }
             else if (result === ERR_INVALID_TARGET)
             {
@@ -103,14 +136,26 @@ export function runBuilder(creep: Creep): void
 
     if (controller !== undefined && controller !== null)
     {
-        const result = creep.upgradeController(controller);
-        if (result === ERR_NOT_IN_RANGE)
+        // Check if controller position is occupied by a creep
+        const creepsOnController = controller.pos.lookFor(LOOK_CREEPS);
+        if (creepsOnController.length === 0)
         {
-            creep.moveTo(controller);
+            const result = creep.upgradeController(controller);
+            if (result === ERR_NOT_IN_RANGE)
+            {
+                creep.moveTo(controller);
+            }
+            else if (result === ERR_INVALID_TARGET)
+            {
+                // Creep is on top of the controller (range 0), move away
+                const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
+                const moveDir = directions[Math.floor(Math.random() * directions.length)];
+                creep.move(moveDir);
+            }
         }
-        else if (result === ERR_INVALID_TARGET)
+        else
         {
-            // Creep is on top of the controller (range 0), move away
+            // Controller is occupied by another creep, move away to avoid blocking
             const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
             const moveDir = directions[Math.floor(Math.random() * directions.length)];
             creep.move(moveDir);

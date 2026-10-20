@@ -1,14 +1,15 @@
 # ScreepsAiSLP Status
 
 ## Current State
-A colony with extensions and roads management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the controller, and places roads in a grid pattern. The construction manager manages extension placement near the controller and road placement across the room. The builder handles ERR_INVALID_TARGET when creeps block construction sites.
+A colony with extensions and roads management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the spawn, and places roads in a grid pattern. The construction manager manages extension placement and road placement. The builder handles blocked sites by filtering out construction sites occupied by creeps.
 
 ## Change Log
 ### 2026-10-20
 - Fixed M2 milestone: builders now properly skip blocked sites and continue building
-- Added ERR_INVALID_TARGET handling in builder.ts to detect when a creep stands on a construction site
-- Updated builder to move away from blocked sites and try different construction sites
-- M2 acceptance test passes: 5 extensions placed, 1 finished, 50 road sites placed, 1 finished, energy capacity 350
+- Added filtering of construction sites occupied by creeps in builder.ts
+- Added filtering of damaged structures occupied by creeps in builder.ts
+- Added controller occupancy check before upgrade in builder.ts
+- M2 acceptance test passes: 5 extensions placed, 1 finished, 50 road sites placed, 2 finished, energy capacity 350
 
 ### 2026-10-19
 - Fixed M2 milestone: builders now continue building when sources are temporarily depleted

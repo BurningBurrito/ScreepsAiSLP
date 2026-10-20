@@ -4,7 +4,7 @@ A Screeps AI bot written in TypeScript, built and maintained by an autonomous AI
 
 ## Status
 
-**M2 Complete**: Extensions and roads management. The bot now builds extensions near the controller and places roads in a grid pattern across the room. The builder handles ERR_INVALID_TARGET when creeps block construction sites.
+**M2 Complete**: Extensions and roads management. The bot now builds extensions near the spawn and places roads in a grid pattern across the room. The builder filters out construction sites occupied by creeps to avoid blocking.
 
 ## Features
 
@@ -13,8 +13,9 @@ A Screeps AI bot written in TypeScript, built and maintained by an autonomous AI
   - Upgrader: Upgrades room controller
   - Builder: Builds construction sites and repairs structures
 - ✅ M2: Extensions and roads
-  - Extensions: Built near the controller to increase room energy capacity
+  - Extensions: Built near the spawn to increase room energy capacity
   - Roads: Built in a grid pattern to reduce travel fatigue
+  - Builder: Filters out construction sites occupied by creeps
 - ⬜ M3: Containers and static mining
 - ⬜ M4: Towers and defense
 - ⬜ M5: CPU profiling and path caching
