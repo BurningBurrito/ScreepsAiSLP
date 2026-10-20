@@ -79,11 +79,11 @@ function placeExtensionSite(room: Room): ScreepsReturnCode
     const startX = 2;
     const startY = 15;
 
-    for (let i = 0; i < 50; i++)
+    // Try a larger grid (8x8 = 64 positions) to ensure we cover more area
+    for (let i = 0; i < 64; i++)
     {
-        // Try different positions in a grid
-        const x = startX + (i % 5) * spacing;
-        const y = startY + Math.floor(i / 5) * spacing;
+        const x = startX + (i % 8) * spacing;
+        const y = startY + Math.floor(i / 8) * spacing;
 
         if (x >= 50 || y >= 50)
         {
@@ -105,8 +105,8 @@ function placeExtensionSite(room: Room): ScreepsReturnCode
         }
     }
 
-    // If no grid position works, try random positions
-    for (let i = 0; i < 20; i++)
+    // If no grid position works, try more random positions
+    for (let i = 0; i < 50; i++)
     {
         const x = Math.floor(Math.random() * 50);
         const y = Math.floor(Math.random() * 50);
