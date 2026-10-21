@@ -7,7 +7,7 @@ declare global {
   /**
    * Role type definition for creep roles
    */
-  type Role = "harvester" | "upgrader" | "builder";
+  type Role = "harvester" | "upgrader" | "builder" | "hauler";
 
   /**
    * Creep memory structure - stored in Memory.creeps[creepName]

@@ -7,6 +7,7 @@
 /**
  * Runs the builder creep behavior.
  * Builds construction sites, repairs structures, and upgrades controller when idle.
+ * Prioritizes picking up energy from spawn when available to reduce wait time.
  * @param creep The builder creep to run
  */
 export function runBuilder(creep: Creep): void
@@ -21,24 +22,48 @@ export function runBuilder(creep: Creep): void
         creep.memory.working = true;
     }
 
-    // If not working (empty store), harvest from sources
+    // If not working (empty store), get energy from spawn or harvest from sources
     if (!creep.memory.working)
     {
-        const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
-
-        if (source === null)
+        // First, try to pick up energy from the spawn
+        const spawns = creep.room.find(FIND_MY_SPAWNS);
+        let pickedUp = false;
+        for (const sp of spawns)
         {
-            // No sources found or reachable
-            // If we have some energy, switch to working mode to build/upgrade
-            // If we have no energy, still switch to working mode to be productive
-            // This prevents the builder from being stuck in harvesting mode indefinitely
-            creep.memory.working = true;
-            return;
+            if (sp.store.getUsedCapacity(RESOURCE_ENERGY) > 0)
+            {
+                const available = sp.store.getUsedCapacity(RESOURCE_ENERGY);
+                const canTake = Math.min(creep.store.getFreeCapacity(RESOURCE_ENERGY), available);
+                if (canTake >= 50) // Only pick up if it's worth it
+                {
+                    if (creep.withdraw(sp, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+                    {
+                        creep.moveTo(sp, { ignoreCreeps: true });
+                    }
+                    pickedUp = true;
+                    break;
+                }
+            }
         }
 
-        if (creep.harvest(source) === ERR_NOT_IN_RANGE)
+        // If no energy in spawn or not enough to be worth it, harvest from sources
+        if (!pickedUp)
         {
-            creep.moveTo(source, { ignoreCreeps: true });
+            const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
+
+            if (source === null)
+            {
+                // No sources found or reachable
+                // Switch to working mode to build/upgrade
+                creep.memory.working = true;
+                return;
+            }
+
+            if (creep.harvest(source) === ERR_NOT_IN_RANGE)
+            {
+                creep.moveTo(source, { ignoreCreeps: true });
+            }
+            return;
         }
         return;
     }

@@ -405,15 +405,93 @@ function placeTowerSites(room: Room, towerPositions: RoomPosition[]): void
 /** Check if we should place road sites */
 function shouldPlaceRoadSites(room: Room): boolean
 {
-    // Only place roads when there are no tower or extension sites
-    // This ensures towers and extensions are built before roads
+    // Only place roads when:
+    // 1. No tower or extension sites exist (tower/extension priority)
+    // 2. Controller is at least level 2 (at RCL 1, priority is upgrading)
+    // 3. Or when roads to sources/controller are missing (energy delivery priority)
     const towerSites = room.find(FIND_CONSTRUCTION_SITES, {
         filter: (site) => site.structureType === STRUCTURE_TOWER,
     });
     const extensionSites = room.find(FIND_CONSTRUCTION_SITES, {
         filter: (site) => site.structureType === STRUCTURE_EXTENSION,
     });
-    return towerSites.length === 0 && extensionSites.length === 0;
+    const controllerLevel = getControllerLevel(room);
+    
+    // If tower or extension sites exist, only place roads if sources/controller aren't connected
+    if (towerSites.length > 0 || extensionSites.length > 0)
+    {
+        const roadPaths = computeRoadPaths(room);
+        return !areSourcesAndControllerConnected(room, roadPaths);
+    }
+    
+    return towerSites.length === 0 && extensionSites.length === 0 && controllerLevel >= 2;
+}
+
+/** Check if sources and controller are connected via roads */
+function areSourcesAndControllerConnected(room: Room, roadPaths: RoomPosition[]): boolean
+{
+    const spawn = getSpawnPosition(room);
+    if (spawn === null)
+    {
+        return false;
+    }
+    
+    // Check if sources are connected (roads exist on path to sources)
+    const sources = getSources(room);
+    for (const source of sources)
+    {
+        let sourceConnected = false;
+        for (const pos of roadPaths)
+        {
+            if (pos.x === source.pos.x && pos.y === source.pos.y)
+            {
+                // This position is on the road path - check if there's a road here
+                const structures = pos.lookFor(LOOK_STRUCTURES);
+                for (const structure of structures)
+                {
+                    if (structure.structureType === STRUCTURE_ROAD)
+                    {
+                        sourceConnected = true;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        if (!sourceConnected)
+        {
+            return false;
+        }
+    }
+    
+    // Check if controller is connected
+    const controllerPos = getControllerPosition(room);
+    if (controllerPos !== null)
+    {
+        let controllerConnected = false;
+        for (const pos of roadPaths)
+        {
+            if (pos.x === controllerPos.x && pos.y === controllerPos.y)
+            {
+                const structures = pos.lookFor(LOOK_STRUCTURES);
+                for (const structure of structures)
+                {
+                    if (structure.structureType === STRUCTURE_ROAD)
+                    {
+                        controllerConnected = true;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        if (!controllerConnected)
+        {
+            return false;
+        }
+    }
+    
+    return true;
 }
 
 /** Manages construction of extensions, roads, and towers */
