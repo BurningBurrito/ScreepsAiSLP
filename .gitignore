@@ -89,3 +89,8 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+# Scorecard reports: keep the .md summaries and history.csv, ignore the bulky per-run files
+reports/*.json
+reports/*-console.log
+reports/*-creeps.txt
