@@ -1,241 +1,405 @@
 /** Construction Manager
- * Manages the construction of extensions and roads in the room.
+ * Manages the construction of extensions, roads, and towers in the room.
  * Extensions store energy and increase room energy capacity.
  * Roads reduce travel fatigue and speed up movement.
+ * Towers defend the room, heal creeps, and repair structures.
+ *
+ * This manager computes optimal placement layouts based on the room's
+ * actual objects (spawn, sources, controller) rather than using fixed coordinates.
  */
 
-import { ROADS_PER_INTERVAL, ROAD_BUILD_INTERVAL, TARGET_EXTENSIONS } from "config";
-
-/**
- * Gets the number of extensions currently built in the room
- * @param room The room to check
- * @returns Number of extensions built
- */
-function getExtensionsBuilt(room: Room): number
+/** Get the spawn position in this room */
+function getSpawnPosition(room: Room): RoomPosition | null
 {
-    const mine = room.find(FIND_MY_STRUCTURES, {
+    const spawns = room.find(FIND_MY_SPAWNS);
+    if (spawns.length === 0)
+    {
+        return null;
+    }
+    return spawns[0].pos;
+}
+
+/** Get the controller position in this room */
+function getControllerPosition(room: Room): RoomPosition | null
+{
+    if (room.controller === undefined || room.controller === null)
+    {
+        return null;
+    }
+    return room.controller.pos;
+}
+
+/** Get all sources in the room */
+function getSources(room: Room): Source[]
+{
+    return room.find(FIND_SOURCES);
+}
+
+/** Compute road paths from spawn to each source and to the controller */
+function computeRoadPaths(room: Room): RoomPosition[]
+{
+    const paths: RoomPosition[] = [];
+    const spawn = getSpawnPosition(room);
+    if (spawn === null)
+    {
+        return paths;
+    }
+
+    // Compute path to each source (range 1)
+    const sources = getSources(room);
+    for (const source of sources)
+    {
+        const path = room.findPath(spawn, source.pos, {
+            ignoreCreeps: true,
+            range: 1,
+        });
+        for (const pos of path)
+        {
+            paths.push(new RoomPosition(pos.x, pos.y, room.name));
+        }
+    }
+
+    // Compute path to controller (range 3)
+    const controller = getControllerPosition(room);
+    if (controller !== null)
+    {
+        const path = room.findPath(spawn, controller, {
+            ignoreCreeps: true,
+            range: 3,
+        });
+        for (const pos of path)
+        {
+            paths.push(new RoomPosition(pos.x, pos.y, room.name));
+        }
+    }
+
+    return paths;
+}
+
+/** Check if a position is on a wall (natural or built) */
+function isWallPosition(pos: RoomPosition, room: Room): boolean
+{
+    const terrain = room.getTerrain();
+    const terrainCode = terrain.get(pos.x, pos.y);
+    if (terrainCode === TERRAIN_MASK_WALL)
+    {
+        return true;
+    }
+
+    // Check for built walls
+    const structures = pos.lookFor(LOOK_STRUCTURES);
+    for (const structure of structures)
+    {
+        if (structure.structureType === STRUCTURE_WALL || structure.structureType === STRUCTURE_RAMPART)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/** Generate extension positions in a checkerboard pattern around the spawn */
+function computeExtensionPositions(room: Room): RoomPosition[]
+{
+    const positions: RoomPosition[] = [];
+    const spawn = getSpawnPosition(room);
+    if (spawn === null)
+    {
+        return positions;
+    }
+
+    // Try positions around spawn, starting from range 2 and going outward
+    // Use checkerboard pattern: only positions where (x + y) % 2 === (spawnX + spawnY) % 2
+    const spawnParity = (spawn.x + spawn.y) % 2;
+    const maxRange = 8;
+
+    for (let range = 2; range <= maxRange; range++)
+    {
+        // Generate all positions at this range
+        const positionsAtRange: RoomPosition[] = [];
+
+        for (let dx = -range; dx <= range; dx++)
+        {
+            const dy1 = range - Math.abs(dx);
+            if (dy1 >= 0)
+            {
+                // Top and bottom positions
+                const pos1 = new RoomPosition(spawn.x + dx, spawn.y + dy1, room.name);
+                const pos2 = new RoomPosition(spawn.x + dx, spawn.y - dy1, room.name);
+                positionsAtRange.push(pos1);
+                if (dy1 > 0)
+                {
+                    positionsAtRange.push(pos2);
+                }
+            }
+        }
+
+        // Filter by checkerboard pattern and valid placement
+        for (const pos of positionsAtRange)
+        {
+            // Skip if out of bounds
+            if (pos.x < 0 || pos.x >= 49 || pos.y < 0 || pos.y >= 49)
+            {
+                continue;
+            }
+
+            // Skip if on wall terrain
+            if (isWallPosition(pos, room))
+            {
+                continue;
+            }
+
+            // Skip if not on checkerboard pattern
+            const posParity = (pos.x + pos.y) % 2;
+            if (posParity !== spawnParity)
+            {
+                continue;
+            }
+
+            // Skip if occupied by structure or site
+            const structures = pos.lookFor(LOOK_STRUCTURES);
+            const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
+            if (structures.length > 0 || sites.length > 0)
+            {
+                continue;
+            }
+
+            // Skip if too close to source (range 1)
+            const sources = getSources(room);
+            let tooCloseToSource = false;
+            for (const source of sources)
+            {
+                if (pos.getRangeTo(source.pos) <= 1)
+                {
+                    tooCloseToSource = true;
+                    break;
+                }
+            }
+            if (tooCloseToSource)
+            {
+                continue;
+            }
+
+            // Skip if too close to controller (range 1)
+            const controller = getControllerPosition(room);
+            if (controller !== null && pos.getRangeTo(controller) <= 1)
+            {
+                continue;
+            }
+
+            positions.push(pos);
+
+            // Limit to 10 extensions (RCL 3 max)
+            if (positions.length >= 10)
+            {
+                return positions;
+            }
+        }
+    }
+
+    return positions;
+}
+
+/** Get tower positions near the spawn */
+function computeTowerPositions(room: Room): RoomPosition[]
+{
+    const positions: RoomPosition[] = [];
+    const spawn = getSpawnPosition(room);
+    if (spawn === null)
+    {
+        return positions;
+    }
+
+    // Try positions at range 2, then 3
+    const spawnParity = (spawn.x + spawn.y) % 2;
+    const ranges = [2, 3, 4];
+
+    for (const range of ranges)
+    {
+        const positionsAtRange: RoomPosition[] = [];
+
+        for (let dx = -range; dx <= range; dx++)
+        {
+            const dy = range - Math.abs(dx);
+            if (dy >= 0)
+            {
+                const pos1 = new RoomPosition(spawn.x + dx, spawn.y + dy, room.name);
+                const pos2 = new RoomPosition(spawn.x + dx, spawn.y - dy, room.name);
+                positionsAtRange.push(pos1);
+                if (dy > 0)
+                {
+                    positionsAtRange.push(pos2);
+                }
+            }
+        }
+
+        for (const pos of positionsAtRange)
+        {
+            if (pos.x < 0 || pos.x >= 49 || pos.y < 0 || pos.y >= 49)
+            {
+                continue;
+            }
+
+            if (isWallPosition(pos, room))
+            {
+                continue;
+            }
+
+            const posParity = (pos.x + pos.y) % 2;
+            if (posParity !== spawnParity)
+            {
+                continue;
+            }
+
+            const structures = pos.lookFor(LOOK_STRUCTURES);
+            const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
+            if (structures.length > 0 || sites.length > 0)
+            {
+                continue;
+            }
+
+            // Skip if too close to source
+            const sources = getSources(room);
+            let tooCloseToSource = false;
+            for (const source of sources)
+            {
+                if (pos.getRangeTo(source.pos) <= 1)
+                {
+                    tooCloseToSource = true;
+                    break;
+                }
+            }
+            if (tooCloseToSource)
+            {
+                continue;
+            }
+
+            // Skip if too close to controller
+            const controller = getControllerPosition(room);
+            if (controller !== null && pos.getRangeTo(controller) <= 1)
+            {
+                continue;
+            }
+
+            positions.push(pos);
+
+            if (positions.length >= 1) // Only need 1 tower
+            {
+                return positions;
+            }
+        }
+    }
+
+    return positions;
+}
+
+/** Clean up old road construction sites that are not on the computed paths */
+function cleanOldRoadSites(room: Room, validRoadPositions: RoomPosition[]): void
+{
+    const roadSites = room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_ROAD,
+    });
+
+    for (const site of roadSites)
+    {
+        const isValid = validRoadPositions.some((pos) =>
+            pos.x === site.pos.x && pos.y === site.pos.y
+        );
+        if (!isValid)
+        {
+            site.remove();
+        }
+    }
+}
+
+/** Place road construction sites on computed paths */
+function placeRoadSites(room: Room, roadPositions: RoomPosition[]): void
+{
+    const existingRoadSites = room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_ROAD,
+    });
+
+    const existingRoadPositions = existingRoadSites.map((site) => `${site.pos.x},${site.pos.y}`);
+
+    for (const pos of roadPositions)
+    {
+        const key = `${pos.x},${pos.y}`;
+        if (!existingRoadPositions.includes(key))
+        {
+            room.createConstructionSite(pos, STRUCTURE_ROAD);
+        }
+    }
+}
+
+/** Place extension construction sites */
+function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): void
+{
+    const extensionsBuilt = room.find(FIND_MY_STRUCTURES, {
         filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
-    });
-    return mine.length;
-}
+    }).length;
 
-/**
- * Gets the number of extension construction sites in the room
- * @param room The room to check
- * @returns Number of extension construction sites
- */
-function getExtensionSites(room: Room): number
-{
-    const sites = room.find(FIND_CONSTRUCTION_SITES, {
+    const extensionSites = room.find(FIND_CONSTRUCTION_SITES, {
         filter: (site) => site.structureType === STRUCTURE_EXTENSION,
-    });
-    return sites.length;
-}
+    }).length;
 
-/**
- * Checks if the room should build extensions based on controller level and current state
- * @param room The room to check
- * @returns True if extensions should be built
- */
-function shouldBuildExtensions(room: Room): boolean
-{
-    const controller = room.controller;
-    if (controller === undefined || controller === null)
-    {
-        return false;
-    }
-
-    // Only build extensions if controller is at least level 1
-    if (controller.level < 1)
-    {
-        return false;
-    }
-
-    const extensionsBuilt = getExtensionsBuilt(room);
-    const extensionSites = getExtensionSites(room);
     const totalExtensions = extensionsBuilt + extensionSites;
 
-    // Stop building if we have the target number of extensions
-    if (totalExtensions >= TARGET_EXTENSIONS)
-    {
-        return false;
-    }
+    // Limit to room capacity
+    const remaining = Math.min(10 - totalExtensions, extensionPositions.length);
 
-    return true;
+    for (let i = 0; i < remaining; i++)
+    {
+        room.createConstructionSite(extensionPositions[i], STRUCTURE_EXTENSION);
+    }
 }
 
-/**
- * Places a construction site for an extension if possible
- * @param room The room to place the construction site in
- * @returns OK if successful, otherwise an error code
- */
-function placeExtensionSite(room: Room): ScreepsReturnCode
+/** Place tower construction sites */
+function placeTowerSites(room: Room, towerPositions: RoomPosition[]): void
 {
-    // Try to place extension in a grid pattern away from the spawn and controller
-    // Spawn is at x=13, y=20, controller at x=14, y=20
-    // Place extensions at least 5 tiles away from spawn to avoid blocking creeps
+    const towersBuilt = room.find(FIND_MY_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_TOWER,
+    }).length;
 
-    const spacing = 8;
-    const startX = 2;
-    const startY = 15;
-
-    // Try a larger grid (8x8 = 64 positions) to ensure we cover more area
-    for (let i = 0; i < 64; i++)
+    if (towersBuilt >= 1 || towerPositions.length === 0)
     {
-        const x = startX + (i % 8) * spacing;
-        const y = startY + Math.floor(i / 8) * spacing;
-
-        if (x >= 50 || y >= 50)
-        {
-            continue;
-        }
-
-        const pos = new RoomPosition(x, y, room.name);
-
-        const structures = pos.lookFor(LOOK_STRUCTURES);
-        const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
-
-        if (structures.length === 0 && sites.length === 0)
-        {
-            const result = room.createConstructionSite(pos, STRUCTURE_EXTENSION);
-            if (result === OK)
-            {
-                return OK;
-            }
-        }
+        return;
     }
 
-    // If no grid position works, try more random positions
-    for (let i = 0; i < 50; i++)
-    {
-        const x = Math.floor(Math.random() * 50);
-        const y = Math.floor(Math.random() * 50);
-        const pos = new RoomPosition(x, y, room.name);
-
-        const structures = pos.lookFor(LOOK_STRUCTURES);
-        const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
-
-        if (structures.length === 0 && sites.length === 0)
-        {
-            const result = room.createConstructionSite(pos, STRUCTURE_EXTENSION);
-            if (result === OK)
-            {
-                return OK;
-            }
-        }
-    }
-
-    return ERR_FULL; // No valid position found
+    room.createConstructionSite(towerPositions[0], STRUCTURE_TOWER);
 }
 
-/**
- * Places a construction site for a road if possible
- * @param room The room to place the construction site in
- * @returns OK if successful, otherwise an error code
- */
-function placeRoadSite(room: Room): ScreepsReturnCode
+/** Check if we should place road sites */
+function shouldPlaceRoadSites(room: Room): boolean
 {
-    // Try to place roads in a grid pattern across the room
-
-    const spacing = 10;
-    const startX = 5;
-    const startY = 5;
-
-    for (let i = 0; i < 50; i++)
-    {
-        // Try different positions in a grid
-        const x = startX + (i % 5) * spacing;
-        const y = startY + Math.floor(i / 5) * spacing;
-
-        if (x >= 50 || y >= 50)
-        {
-            continue;
-        }
-
-        const pos = new RoomPosition(x, y, room.name);
-
-        const structures = pos.lookFor(LOOK_STRUCTURES);
-        const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
-
-        if (structures.length === 0 && sites.length === 0)
-        {
-            const result = room.createConstructionSite(pos, STRUCTURE_ROAD);
-            if (result === OK)
-            {
-                return OK;
-            }
-        }
-    }
-
-    // If no grid position works, try random positions
-    for (let i = 0; i < 20; i++)
-    {
-        const x = Math.floor(Math.random() * 50);
-        const y = Math.floor(Math.random() * 50);
-        const pos = new RoomPosition(x, y, room.name);
-
-        const structures = pos.lookFor(LOOK_STRUCTURES);
-        const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
-
-        if (structures.length === 0 && sites.length === 0)
-        {
-            const result = room.createConstructionSite(pos, STRUCTURE_ROAD);
-            if (result === OK)
-            {
-                return OK;
-            }
-        }
-    }
-
-    return ERR_FULL; // No valid position found
+    // Only place roads when there are no road sites already
+    // This ensures we compute the layout once and don't create duplicates
+    const roadSites = room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_ROAD,
+    });
+    return roadSites.length === 0;
 }
 
-/**
- * Checks if the room should build roads based on time interval
- * @returns True if roads should be built
- */
-function shouldBuildRoads(): boolean
-{
-    // Build roads every ROAD_BUILD_INTERVAL ticks
-    return Game.time % ROAD_BUILD_INTERVAL === 0;
-}
-
-/**
- * Manages construction of extensions and roads
- * @param room The room to manage construction in
- */
+/** Manages construction of extensions, roads, and towers */
 export function manageConstruction(room: Room): void
 {
-    // Build extensions if we're at level 1+ and haven't reached the target
-    if (shouldBuildExtensions(room))
-    {
-        const extensionsBuilt = getExtensionsBuilt(room);
-        const extensionSites = getExtensionSites(room);
-        const totalExtensions = extensionsBuilt + extensionSites;
+    // Compute road paths
+    const roadPaths = computeRoadPaths(room);
 
-        // Build more extensions if needed
-        if (totalExtensions < TARGET_EXTENSIONS)
-        {
-            const result = placeExtensionSite(room);
-            if (result !== OK && result !== ERR_FULL)
-            {
-                console.log(`Extension construction failed: ${result}`);
-            }
-        }
+    // Clean up old road sites that aren't on the computed paths
+    cleanOldRoadSites(room, roadPaths);
+
+    // Place road sites on computed paths
+    if (shouldPlaceRoadSites(room))
+    {
+        placeRoadSites(room, roadPaths);
     }
 
-    // Build roads periodically
-    if (shouldBuildRoads())
-    {
-        // Try to build multiple roads per interval
-        for (let i = 0; i < ROADS_PER_INTERVAL; i++)
-        {
-            const result = placeRoadSite(room);
-            if (result !== OK)
-            {
-                // Stop if we can't place any more roads
-                break;
-            }
-        }
-    }
+    // Compute and place extension positions
+    const extensionPositions = computeExtensionPositions(room);
+    placeExtensionSites(room, extensionPositions);
+
+    // Compute and place tower positions
+    const towerPositions = computeTowerPositions(room);
+    placeTowerSites(room, towerPositions);
 }

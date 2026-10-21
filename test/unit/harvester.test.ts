@@ -5,6 +5,9 @@ import {Game, Memory} from "./mock";
 // Import types to extend global scope
 import "../../src/types/memory";
 
+// Define RESOURCE_ENERGY for tests
+const RESOURCE_ENERGY = "energy";
+
 describe("harvester", () => {
   beforeEach(() => {
     // @ts-ignore : allow adding Game to global

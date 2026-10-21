@@ -1,9 +1,17 @@
 # ScreepsAiSLP Status
 
 ## Current State
-A colony with extensions and roads management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the spawn, and places roads along paths from spawn to sources and controller. The construction manager manages extension and road placement, while builders handle construction and repair tasks. M2 acceptance test passes with 1 extension finished, 4 extension sites placed, 2 roads finished, 48 road sites placed, and energy capacity of 350.
+A colony with extensions and roads management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the spawn, and places roads along paths from spawn to sources and controller. The construction manager manages extension and road placement, while builders handle construction and repair tasks.
 
 ## Change Log
+### 2026-10-21
+- Starting M3: build priorities, layout and a tower (owner's feedback)
+- Fixed builder to prioritize tower and extension sites over roads
+- Fixed constructionManager to place roads only on computed paths (not grid/random)
+- Fixed extension placement to search tiles around spawn in checkerboard pattern
+- Added tower manager with defense, healing, and repair logic
+- Fixed unit test mock creep to have store with getFreeCapacity method
+
 ### 2026-10-20
 - M2 acceptance test passes: 1 extension finished, 4 extension sites placed, 2 roads finished, 48 road sites placed, energy capacity 350
 - All tests passing (6 unit tests + 4 integration tests)
@@ -33,18 +41,21 @@ A colony with extensions and roads management. The bot maintains minimum creeps 
 - Fixed bugs in M1: harvesters now deliver energy to spawns/extensions first (not controller), upgraders now harvest themselves instead of withdrawing from spawns, spawning uses room.energyAvailable instead of spawn.energy, Memory.creepCounter is initialized, every creep body includes WORK/CARRY/MOVE
 
 ## In Progress
-- None (M2 extensions and roads completed)
+- M3: build priorities, layout and a tower
+- Baseline 2026-10-20: smoke test shows no builders, no roads finished (2 roads), 48 road sites placed, energy capacity 350
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
-- [ ] M3 containers and static mining
-- [ ] M4 towers and defense
+- [ ] M3 containers and static mining (now M3: build priorities, layout and a tower per owner feedback)
+- [ ] M4 towers and defense (deferred after M3)
 - [ ] M5 CPU profiling and path caching
 - [ ] M6 expansion to a second room
 
 ## Known Issues / Notes
 - No path caching yet - will be added in M5
 - Memory cleanup runs every tick - could be optimized in M5
+- Unit test error: creep mock missing store property with getFreeCapacity method
+- M3 acceptance test expected at least 1 builder but got 0 - need to fix builder spawning and construction priorities
 
 ## Concepts Explained
 - **Creep memory**: Memory structure stored in Memory.creeps[creepName] that persists creep state across ticks
