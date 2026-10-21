@@ -1,6 +1,6 @@
 import {assert} from "chai";
 import {runHarvester} from "../../src/roles/harvester";
-import {Game, Memory} from "./mock";
+import {Game, Memory, FIND_MY_SPAWNS, FIND_MY_STRUCTURES, STRUCTURE_EXTENSION, STRUCTURE_TOWER} from "./mock";
 
 // Import types to extend global scope
 import "../../src/types/memory";
@@ -14,6 +14,23 @@ describe("harvester", () => {
     global.Game = _.clone(Game);
     // @ts-ignore : allow adding Memory to global
     global.Memory = _.clone(Memory);
+    // Define Screeps globals for harvester tests
+    // @ts-ignore
+    global.FIND_SOURCES_ACTIVE = 104;
+    // @ts-ignore
+    global.FIND_MY_SPAWNS = 112;
+    // @ts-ignore
+    global.FIND_STRUCTURES = 107;
+    // @ts-ignore
+    global.FIND_MY_STRUCTURES = 108;
+    // @ts-ignore
+    global.STRUCTURE_EXTENSION = "extension";
+    // @ts-ignore
+    global.STRUCTURE_TOWER = "tower";
+    // @ts-ignore
+    global.RESOURCE_ENERGY = "energy";
+    // @ts-ignore
+    global.ERR_NOT_IN_RANGE = -9;
   });
 
   it("transfers to spawn when spawn has free capacity and creep has partial energy", () => {
@@ -65,6 +82,7 @@ describe("harvester", () => {
       room: {
         find: (type: number, options?: any) => {
           if (type === FIND_MY_SPAWNS) return [{ store: { getFreeCapacity: () => 0 } }];
+          if (type === FIND_MY_STRUCTURES) return []; // No towers
           return [];
         },
         controller: { pos: { findClosestByPath: () => null } },

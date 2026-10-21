@@ -348,9 +348,20 @@ function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): vo
     // Limit to room capacity
     const remaining = Math.min(10 - totalExtensions, extensionPositions.length);
 
-    for (let i = 0; i < remaining; i++)
+    let placed = 0;
+    for (let i = 0; i < extensionPositions.length && placed < remaining; i++)
     {
-        room.createConstructionSite(extensionPositions[i], STRUCTURE_EXTENSION);
+        const pos = extensionPositions[i];
+        
+        // Skip if there's already a construction site (e.g., tower)
+        const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
+        if (sites.length > 0)
+        {
+            continue;
+        }
+        
+        room.createConstructionSite(pos, STRUCTURE_EXTENSION);
+        placed++;
     }
 }
 
@@ -372,34 +383,37 @@ function placeTowerSites(room: Room, towerPositions: RoomPosition[]): void
 /** Check if we should place road sites */
 function shouldPlaceRoadSites(room: Room): boolean
 {
-    // Only place roads when there are no road sites already
-    // This ensures we compute the layout once and don't create duplicates
-    const roadSites = room.find(FIND_CONSTRUCTION_SITES, {
-        filter: (site) => site.structureType === STRUCTURE_ROAD,
+    // Only place roads when there are no tower or extension sites
+    // This ensures towers and extensions are built before roads
+    const towerSites = room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_TOWER,
     });
-    return roadSites.length === 0;
+    const extensionSites = room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_EXTENSION,
+    });
+    return towerSites.length === 0 && extensionSites.length === 0;
 }
 
 /** Manages construction of extensions, roads, and towers */
 export function manageConstruction(room: Room): void
 {
+    // Compute and place tower positions first (highest priority)
+    const towerPositions = computeTowerPositions(room);
+    placeTowerSites(room, towerPositions);
+
+    // Compute and place extension positions (second priority)
+    const extensionPositions = computeExtensionPositions(room);
+    placeExtensionSites(room, extensionPositions);
+
     // Compute road paths
     const roadPaths = computeRoadPaths(room);
 
     // Clean up old road sites that aren't on the computed paths
     cleanOldRoadSites(room, roadPaths);
 
-    // Place road sites on computed paths
+    // Place road sites on computed paths (only when no tower/extension sites exist)
     if (shouldPlaceRoadSites(room))
     {
         placeRoadSites(room, roadPaths);
     }
-
-    // Compute and place extension positions
-    const extensionPositions = computeExtensionPositions(room);
-    placeExtensionSites(room, extensionPositions);
-
-    // Compute and place tower positions
-    const towerPositions = computeTowerPositions(room);
-    placeTowerSites(room, towerPositions);
 }

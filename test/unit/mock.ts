@@ -3,7 +3,9 @@ export const RESOURCE_ENERGY = "energy";
 export const OK = 0;
 export const ERR_NOT_IN_RANGE = -9;
 export const FIND_MY_SPAWNS = 112;
+export const FIND_MY_STRUCTURES = 108;
 export const STRUCTURE_EXTENSION = "extension";
+export const STRUCTURE_TOWER = "tower";
 
 // Mock store class with getFreeCapacity
 class MockStore {

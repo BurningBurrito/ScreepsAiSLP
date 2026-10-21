@@ -1,12 +1,12 @@
 /**
  * Harvester Role
- * Harvests energy from sources and transfers it to spawns and extensions.
+ * Harvests energy from sources and transfers it to spawns, extensions, towers, and upgrades controller.
  */
 
 /**
  * Runs the harvester creep behavior.
- * Harvests from assigned sources and delivers energy to spawns/extensions.
- * Uses the working flag to decide between gathering energy and delivering it.
+ * Harvests from assigned sources and delivers energy to spawns/extensions/tower.
+ * Priority: spawns > extensions > tower > controller
  * @param creep The harvester creep to run
  */
 export function runHarvester(creep: Creep): void
@@ -39,7 +39,8 @@ export function runHarvester(creep: Creep): void
         return;
     }
 
-    // If full, transfer energy to spawns/extensions first, then upgrade controller
+    // If full, transfer energy to spawns first, then extensions, then tower, then controller
+
     // Try to transfer to spawns first
     const spawns = creep.room.find(FIND_MY_SPAWNS);
     for (const spawn of spawns)
@@ -72,7 +73,24 @@ export function runHarvester(creep: Creep): void
         }
     }
 
-    // If all spawns and extensions are full, upgrade the controller
+    // Try to transfer to towers (keep them filled for defense and repair)
+    const towers = creep.room.find(FIND_MY_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_TOWER,
+    });
+    for (const tower of towers)
+    {
+        const freeCapacity = (tower as StructureTower).store.getFreeCapacity(RESOURCE_ENERGY);
+        if (freeCapacity !== null && freeCapacity > 0)
+        {
+            if (creep.transfer(tower, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+            {
+                creep.moveTo(tower);
+            }
+            return;
+        }
+    }
+
+    // If all spawns, extensions, and towers are full, upgrade the controller
     const controller = creep.room.controller;
     if (controller !== undefined && controller !== null)
     {

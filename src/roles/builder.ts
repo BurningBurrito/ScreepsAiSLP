@@ -43,26 +43,25 @@ export function runBuilder(creep: Creep): void
         return;
     }
 
-    // Find construction sites, prioritizing tower and extension over roads
-    const constructionSites = creep.room.find(FIND_CONSTRUCTION_SITES, {
-        filter: (site) =>
-        {
-            const creepsOnSite = site.pos.lookFor(LOOK_CREEPS);
-            return creepsOnSite.length === 0;
-        },
-    });
+    // Find construction sites, prioritizing tower > extension > roads
+    const constructionSites = creep.room.find(FIND_CONSTRUCTION_SITES);
 
     if (constructionSites.length > 0)
     {
-        // Sort sites by priority: tower and extension first, then roads
-        const prioritySites: ConstructionSite[] = [];
+        // Sort sites by priority: tower first, then extension, then roads
+        const towerSites: ConstructionSite[] = [];
+        const extensionSites: ConstructionSite[] = [];
         const roadSites: ConstructionSite[] = [];
 
         for (const site of constructionSites)
         {
-            if (site.structureType === STRUCTURE_TOWER || site.structureType === STRUCTURE_EXTENSION)
+            if (site.structureType === STRUCTURE_TOWER)
             {
-                prioritySites.push(site);
+                towerSites.push(site);
+            }
+            else if (site.structureType === STRUCTURE_EXTENSION)
+            {
+                extensionSites.push(site);
             }
             else
             {
@@ -70,16 +69,21 @@ export function runBuilder(creep: Creep): void
             }
         }
 
-        // If we have priority sites, only build those
+        // If we have tower sites, only build those
         let selectedSite: ConstructionSite | null = null;
-        if (prioritySites.length > 0)
+        if (towerSites.length > 0)
         {
-            // Get the closest priority site
-            selectedSite = creep.pos.findClosestByPath(prioritySites);
+            // Get the closest tower site
+            selectedSite = creep.pos.findClosestByPath(towerSites);
+        }
+        else if (extensionSites.length > 0)
+        {
+            // Get the closest extension site
+            selectedSite = creep.pos.findClosestByPath(extensionSites);
         }
         else if (roadSites.length > 0)
         {
-            // Only build roads if no priority sites exist
+            // Only build roads if no tower or extension sites exist
             selectedSite = creep.pos.findClosestByPath(roadSites);
         }
 
@@ -88,7 +92,7 @@ export function runBuilder(creep: Creep): void
             const result = creep.build(selectedSite);
             if (result === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(selectedSite, { ignoreCreeps: true });
+                creep.moveTo(selectedSite, { ignoreCreeps: true, range: 1 });
             }
             else if (result === ERR_INVALID_TARGET)
             {
@@ -101,7 +105,7 @@ export function runBuilder(creep: Creep): void
     }
 
     // Find the closest damaged structure to repair (excluding walls and ramparts)
-    // Walls and ramparts have very high HP and would swallow all energy
+    // Prioritize: tower > roads/containers
     const damagedStructures = creep.room.find(FIND_STRUCTURES, {
         filter: (structure) =>
         {
@@ -113,20 +117,45 @@ export function runBuilder(creep: Creep): void
 
     if (damagedStructures.length > 0)
     {
-        // Filter out structures that are occupied by creeps
-        const availableStructures = damagedStructures.filter((structure) =>
-        {
-            const creepsOnTile = structure.pos.lookFor(LOOK_CREEPS);
-            return creepsOnTile.length === 0;
-        });
+        // Prioritize tower repair
+        const damagedTowers = damagedStructures.filter((structure) =>
+            structure.structureType === STRUCTURE_TOWER
+        );
 
-        // If no structures are available (all occupied), just wait and try again next tick
-        if (availableStructures.length === 0)
+        let selectedStructure: Structure | null = null;
+
+        if (damagedTowers.length > 0)
         {
-            return;
+            // Filter out towers that are occupied by creeps
+            const availableTowers = damagedTowers.filter((structure) =>
+            {
+                const creepsOnTile = structure.pos.lookFor(LOOK_CREEPS);
+                return creepsOnTile.length === 0;
+            });
+
+            if (availableTowers.length > 0)
+            {
+                selectedStructure = creep.pos.findClosestByPath(availableTowers);
+            }
         }
 
-        const selectedStructure = creep.pos.findClosestByPath(availableStructures);
+        if (selectedStructure === null)
+        {
+            // Filter out structures that are occupied by creeps
+            const availableStructures = damagedStructures.filter((structure) =>
+            {
+                const creepsOnTile = structure.pos.lookFor(LOOK_CREEPS);
+                return creepsOnTile.length === 0;
+            });
+
+            // If no structures are available (all occupied), just wait and try again next tick
+            if (availableStructures.length === 0)
+            {
+                return;
+            }
+
+            selectedStructure = creep.pos.findClosestByPath(availableStructures);
+        }
 
         if (selectedStructure !== null)
         {
@@ -177,7 +206,7 @@ export function runBuilder(creep: Creep): void
 
 /**
  * Moves the creep away from a site to unblock the path.
- * Calculates the direction opposite to the site's position.
+ * Tries all 8 directions until one succeeds.
  * @param creep The creep to move
  * @param targetPos The position to move away from
  */
@@ -200,17 +229,31 @@ function moveAwayFromSite(creep: Creep, targetPos: RoomPosition): void
         moveDir = dy > 0 ? BOTTOM : TOP;
     }
 
-    // Try to move in the calculated direction
-    const result = creep.move(moveDir);
-    if (result !== OK)
+    // Try all 8 directions in order of preference
+    const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
+    
+    // Start from the calculated direction and try all others
+    const startIdx = directions.indexOf(moveDir);
+    if (startIdx === -1)
     {
-        // If primary direction blocked, try perpendicular directions
-        const perpendicular: DirectionConstant[] = dx > 0 ? [TOP, BOTTOM] : [LEFT, RIGHT];
-        for (const dir of perpendicular)
+        // If calculated direction not in list, start from 0
+        for (const dir of directions)
         {
             if (creep.move(dir) === OK)
             {
-                break;
+                return;
+            }
+        }
+    }
+    else
+    {
+        // Try all directions starting from the calculated direction
+        for (let i = 0; i < 8; i++)
+        {
+            const dirIdx = (startIdx + i) % 8;
+            if (creep.move(directions[dirIdx]) === OK)
+            {
+                return;
             }
         }
     }
