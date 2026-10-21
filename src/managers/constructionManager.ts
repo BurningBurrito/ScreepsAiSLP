@@ -29,6 +29,16 @@ function getControllerPosition(room: Room): RoomPosition | null
     return room.controller.pos;
 }
 
+/** Get the controller level in this room */
+function getControllerLevel(room: Room): number
+{
+    if (room.controller === undefined || room.controller === null)
+    {
+        return 0;
+    }
+    return room.controller.level;
+}
+
 /** Get all sources in the room */
 function getSources(room: Room): Source[]
 {
@@ -344,24 +354,30 @@ function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): vo
     }).length;
 
     const totalExtensions = extensionsBuilt + extensionSites;
-
-    // Limit to room capacity
     const remaining = Math.min(10 - totalExtensions, extensionPositions.length);
+
+    const controllerLevel = getControllerLevel(room);
+    if (controllerLevel < 2)
+    {
+        return;
+    }
 
     let placed = 0;
     for (let i = 0; i < extensionPositions.length && placed < remaining; i++)
     {
         const pos = extensionPositions[i];
         
-        // Skip if there's already a construction site (e.g., tower)
         const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
         if (sites.length > 0)
         {
             continue;
         }
         
-        room.createConstructionSite(pos, STRUCTURE_EXTENSION);
-        placed++;
+        const result = room.createConstructionSite(pos, STRUCTURE_EXTENSION);
+        if (result === OK)
+        {
+            placed++;
+        }
     }
 }
 
@@ -373,6 +389,12 @@ function placeTowerSites(room: Room, towerPositions: RoomPosition[]): void
     }).length;
 
     if (towersBuilt >= 1 || towerPositions.length === 0)
+    {
+        return;
+    }
+
+    const controllerLevel = getControllerLevel(room);
+    if (controllerLevel < 3)
     {
         return;
     }

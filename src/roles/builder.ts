@@ -100,6 +100,12 @@ export function runBuilder(creep: Creep): void
                 // Move away from the site to unblock the path
                 moveAwayFromSite(creep);
             }
+            else if (result === ERR_NOT_OWNER)
+            {
+                // This shouldn't happen, but if the creep doesn't own the site,
+                // try to move to an adjacent tile
+                moveAwayFromSite(creep);
+            }
             return;
         }
     }
