@@ -28,12 +28,17 @@ export function runBuilder(creep: Creep): void
 
         if (source === null)
         {
-            return; // No sources found
+            // No sources found or reachable
+            // If we have some energy, switch to working mode to build/upgrade
+            // If we have no energy, still switch to working mode to be productive
+            // This prevents the builder from being stuck in harvesting mode indefinitely
+            creep.memory.working = true;
+            return;
         }
 
         if (creep.harvest(source) === ERR_NOT_IN_RANGE)
         {
-            creep.moveTo(source);
+            creep.moveTo(source, { ignoreCreeps: true });
         }
         return;
     }
@@ -50,13 +55,37 @@ export function runBuilder(creep: Creep): void
             return creepsOnSite.length === 0;
         });
 
-        // If no sites are available (all occupied), move away from current position
-        // to avoid blocking and try again next tick
+        // If no sites are available (all occupied), move away from the occupied site
+        // to unblock paths for other creeps
         if (availableSites.length === 0)
         {
-            const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
-            const moveDir = directions[Math.floor(Math.random() * directions.length)];
-            creep.move(moveDir);
+            // Find an occupied site and move away from it
+            for (const site of constructionSites)
+            {
+                const creepsOnSite = site.pos.lookFor(LOOK_CREEPS);
+                if (creepsOnSite.length > 0)
+                {
+                    // Calculate direction away from the occupied site
+                    const dx = site.pos.x - creep.pos.x;
+                    const dy = site.pos.y - creep.pos.y;
+                    
+                    // Determine direction based on relative position
+                    let moveDir: DirectionConstant;
+                    if (Math.abs(dx) > Math.abs(dy))
+                    {
+                        // farther apart in X direction
+                        moveDir = dx > 0 ? LEFT : RIGHT;
+                    }
+                    else
+                    {
+                        // farther apart in Y direction
+                        moveDir = dy > 0 ? TOP : BOTTOM;
+                    }
+                    creep.move(moveDir);
+                    return;
+                }
+            }
+            // If no occupied sites found (unexpected), just wait and try again
             return;
         }
 
@@ -65,19 +94,46 @@ export function runBuilder(creep: Creep): void
 
         if (selectedSite !== null)
         {
-            const result = creep.build(selectedSite);
-            if (result === ERR_NOT_IN_RANGE)
+            // Check if we're already on the site tile - if so, move away first
+            if (creep.pos.x === selectedSite.pos.x && creep.pos.y === selectedSite.pos.y)
             {
-                creep.moveTo(selectedSite);
-            }
-            else if (result === ERR_INVALID_TARGET)
-            {
-                // Creep is on top of the construction site (range 0), move away
-                // This should not happen now with the filtering, but keep as fallback
                 const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
                 const moveDir = directions[Math.floor(Math.random() * directions.length)];
                 creep.move(moveDir);
+                return;
             }
+
+            const result = creep.build(selectedSite);
+            if (result === ERR_NOT_IN_RANGE)
+            {
+                // If we can't reach the site, switch to harvesting to refill
+                // This allows the builder to continue building when it can reach the site again
+                creep.memory.working = false;
+                creep.moveTo(selectedSite, { ignoreCreeps: true });
+            }
+            else if (result === ERR_INVALID_TARGET)
+            {
+                // Creep is on top of the construction site (range 0), or the site is blocked
+                // Just move away and try again next tick without switching modes
+                const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
+                const moveDir = directions[Math.floor(Math.random() * directions.length)];
+                creep.move(moveDir);
+                return;
+            }
+            else if (result !== OK)
+            {
+                // Other error (e.g., ERR_BUSY), skip this site and try again next tick
+                // Don't switch modes as this might be a temporary issue
+                return;
+            }
+        }
+        else
+        {
+            // findClosestByPath returned null - no path to any site
+            // Try to move away in a random direction to unblock the path
+            const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
+            const moveDir = directions[Math.floor(Math.random() * directions.length)];
+            creep.move(moveDir);
             return;
         }
     }
@@ -102,12 +158,10 @@ export function runBuilder(creep: Creep): void
             return creepsOnTile.length === 0;
         });
 
-        // If no structures are available (all occupied), move away
+        // If no structures are available (all occupied), just wait and try again next tick
+        // Don't move away randomly as this wastes CPU and can block other creeps
         if (availableStructures.length === 0)
         {
-            const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
-            const moveDir = directions[Math.floor(Math.random() * directions.length)];
-            creep.move(moveDir);
             return;
         }
 
@@ -118,7 +172,7 @@ export function runBuilder(creep: Creep): void
             const result = creep.repair(selectedStructure);
             if (result === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(selectedStructure);
+                creep.moveTo(selectedStructure, { ignoreCreeps: true });
             }
             else if (result === ERR_INVALID_TARGET)
             {
@@ -143,22 +197,23 @@ export function runBuilder(creep: Creep): void
             const result = creep.upgradeController(controller);
             if (result === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(controller);
+                creep.moveTo(controller, { ignoreCreeps: true });
             }
             else if (result === ERR_INVALID_TARGET)
             {
-                // Creep is on top of the controller (range 0), move away
+                // Creep is on top of the controller (range 0) or controller is full
+                // Move away and switch to harvesting to refill
                 const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
                 const moveDir = directions[Math.floor(Math.random() * directions.length)];
                 creep.move(moveDir);
+                creep.memory.working = false;
+                return;
             }
         }
         else
         {
-            // Controller is occupied by another creep, move away to avoid blocking
-            const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
-            const moveDir = directions[Math.floor(Math.random() * directions.length)];
-            creep.move(moveDir);
+            // Controller is occupied by another creep, just wait and try again next tick
+            // Don't move away randomly as this wastes CPU and can block other creeps
         }
     }
 }

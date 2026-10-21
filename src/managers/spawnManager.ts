@@ -77,18 +77,18 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     // For builders, prioritize WORK and CARRY parts for faster construction
     if (role === "builder")
     {
-        // Add extra CARRY parts first (builders need more carry capacity)
-        while (remainingEnergy >= 50 && body.filter((part) => part === CARRY).length < body.filter((part) => part === WORK).length + 1)
-        {
-            body.push(CARRY);
-            remainingEnergy -= 50;
-        }
-
-        // Then add extra WORK parts
+        // Add extra WORK parts first (builders need WORK to build)
         while (remainingEnergy >= 100)
         {
             body.push(WORK);
             remainingEnergy -= 100;
+        }
+
+        // Add extra CARRY parts (builders need more carry capacity)
+        while (remainingEnergy >= 50 && body.filter((part) => part === CARRY).length < body.filter((part) => part === WORK).length + 1)
+        {
+            body.push(CARRY);
+            remainingEnergy -= 50;
         }
 
         // Then add extra CARRY parts (any remaining)
@@ -160,9 +160,10 @@ function spawnCreep(role: string, room: Room): string | null
     }
     else if (role === "builder")
     {
-        // Builder needs at least 250 energy for 1 WORK + 2 CARRY + 1 MOVE
-        // This ensures the builder has enough capacity to build efficiently
-        minEnergyForCreep = 250;
+        // Builder needs at least 350 energy for 2 WORK + 2 CARRY + 1 MOVE
+        // This ensures the builder has enough WORK parts to build efficiently
+        // 2 WORK (200) + 2 CARRY (100) + 1 MOVE (50) = 350
+        minEnergyForCreep = 350;
     }
     else
     {
