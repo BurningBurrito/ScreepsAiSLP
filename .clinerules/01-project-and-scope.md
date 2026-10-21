@@ -20,7 +20,8 @@
 4. Decide the smallest useful step that moves the task forward. Prefer several small commits over one big change.
 
 ## Scope – NEVER do these
-- Never work outside this repository folder. Never read files outside it (no home folder, no `/etc`, no other projects).
+- Never work outside this repository folder. Never read files outside it (no home folder, no other projects).
+  The one exception is `/etc/agent-tasks/FEEDBACK.md`, the owner's notes: you read it at the start of every run (rule 07) and never change it.
 - Never install, remove or upgrade npm packages, and never edit the dependency lists in `package.json`.
   If you need a package, write the request in `status.md` and continue without it.
 - Never download files, never use network tools (`curl`, `wget`, `ssh`, `nc`, `nmap` …), never scan or contact other machines.
@@ -33,6 +34,7 @@
 
 ## Test tooling – NEVER do these
 - Never edit, patch or delete anything in `node_modules/`. After your run the launcher deletes `node_modules` and reinstalls it from `package-lock.json`, so such edits are thrown away anyway.
-- Never edit the test harness: `test/integration/helper.ts`, `test/mocha.opts`, or the protected acceptance tests (`test/integration/acceptance-*.test.ts`). They are restored from a protected copy after every run.
+- Never edit the test harness: `test/integration/helper.ts`, `test/integration/scorecard.ts`, `test/integration/criteria.ts`, `test/integration/smoke.test.ts`, `test/mocha.opts`, or the protected acceptance tests (`test/integration/acceptance-*.test.ts`). They are restored from a protected copy after every run.
+- Never edit `milestones/*.md` (written by the owner), anything under `reports/` (written by the test harness), or anything under `test/candidates/`, `test/verify/` and `tools/`. You read them; you do not change them.
 - Never kill processes (`kill`, `pkill`, `killall`, `fuser -k`).
 - If the test server will not start or a test fails for a reason outside `src/`, stop working on it. Write the exact error message in `status.md` under "Known Issues / Notes" and finish the run. A human will fix the test setup.

@@ -8,3 +8,4 @@
 - Never claim in a commit message, `status.md`, the README or a blog post that tests pass unless you ran `npm test` in this run and saw it pass. Copy the real result line (for example "6 passing").
 - Never claim you wrote, changed or simplified a test unless `git diff` shows that change.
 - If something failed or is unfinished, say so plainly. An honest "not done yet" is always better than a wrong "done".
+- The scorecard in `reports/latest.md` (and `reports/<test>.md`) is written by the test harness after every integration run, measured from the game's event log. When you describe how the colony performs, quote its numbers; never estimate, and never claim an improvement that the scorecard does not show.

@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# agent-test: background runner for long tests, used by the agent. Reference implementation.
+#
+# The agent's own commands are stopped after 30 seconds, so long tests run here in the
+# background and the agent polls with "status N" (N counts up so no two commands look the
+# same to Cline's repeat detector). If you already have an agent-test script, the parts to
+# merge are marked MERGE below:
+#   MERGE 1  while running, print the last [scorecard] progress line
+#   MERGE 2  when finished, print the mocha result line, the failure text, and reports/latest.md
+#   MERGE 3  stop also removes leftover engine processes (they hold the storage port and cause
+#            "port in use" / "storage process exited" on the next start)
+#
+# Usage (run as the agent user, inside the project directory, or set AGENT_PROJECT_DIR):
+#   agent-test start <test file>   e.g. agent-test start test/integration/smoke.test.ts
+#   agent-test start all           the full suite (npm test)
+#   agent-test status <n>          waits up to 20 s, prints RUNNING or FINISHED, names the next check
+#   agent-test stop                ends the current run and leftover engine processes
+#   agent-test last                prints the last finished run's summary again
+set -u
+
+PROJECT_DIR="${AGENT_PROJECT_DIR:-$PWD}"
+STATE_DIR="${AGENT_TEST_DIR:-${TMPDIR:-/tmp}/agent-test}"
+WAIT_SECONDS="${AGENT_TEST_WAIT:-20}"
+MOCHA_TIMEOUT_MS=1200000
+
+LOG="$STATE_DIR/run.log"
+PIDFILE="$STATE_DIR/run.pid"
+META="$STATE_DIR/run.meta"
+DONE="$STATE_DIR/run.done"
+STARTED="$STATE_DIR/run.started"
+mkdir -p "$STATE_DIR"
+
+usage() {
+  echo "usage: agent-test start <test file | all> | status <n> | stop | last"
+}
+
+is_running() {
+  [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
+}
+
+elapsed() {
+  local s
+  s=$(cat "$STARTED" 2>/dev/null || echo 0)
+  echo $(( $(date +%s) - s ))
+}
+
+# MERGE 2: everything the agent needs to read after a run, in one screen.
+summary() {
+  echo "FINISHED: $(cat "$META" 2>/dev/null), $(cat "$DONE" 2>/dev/null), after $(elapsed) s"
+  echo "--- result ---"
+  grep -E '^[[:space:]]*[0-9]+ (passing|failing|pending)' "$LOG" \
+    || echo "(no mocha result line: the run crashed or was stopped; read the end of the log)"
+  echo "--- failures (first 60 lines, stack frames removed) ---"
+  awk '/^[[:space:]]*[0-9]+\) /{p=1} p' "$LOG" | grep -vE '^[[:space:]]+at ' | head -60
+  echo "--- snapshot lines ---"
+  grep -E 'acceptance snapshot|smoke summary' "$LOG" | tail -5
+  echo "--- scorecard (reports/latest.md) ---"
+  if [ -f "$PROJECT_DIR/reports/latest.md" ]; then
+    cat "$PROJECT_DIR/reports/latest.md"
+  else
+    echo "(none: the run was shorter than 50 ticks or crashed before the end)"
+  fi
+  echo "Full log: $LOG"
+}
+
+cmd_start() {
+  local target="${1:-}"
+  if [ -z "$target" ]; then usage; exit 2; fi
+  if is_running; then
+    echo "A run is already going: $(cat "$META"). Check it with: agent-test status 1 (or end it with: agent-test stop)"
+    exit 1
+  fi
+  local cmdline
+  if [ "$target" = all ]; then
+    cmdline="npm test"
+  else
+    if [ ! -f "$PROJECT_DIR/$target" ]; then echo "no such file: $target"; exit 2; fi
+    cmdline="npm run build && npx mocha '$target' --timeout $MOCHA_TIMEOUT_MS"
+  fi
+  rm -f "$DONE"
+  : > "$LOG"
+  date +%s > "$STARTED"
+  echo "$target (started $(date '+%F %T'))" > "$META"
+  # setsid: the run gets its own session and process group, so the agent's 30-second limit
+  # does not reach it and "stop" can end the whole group. The inner shell records its own pid.
+  (
+    cd "$PROJECT_DIR" || exit 1
+    setsid bash -c "echo \$\$ > '$PIDFILE'; $cmdline; echo \"EXIT \$?\" > '$DONE'" > "$LOG" 2>&1 < /dev/null &
+  )
+  sleep 1
+  echo "Started in the background: $cmdline"
+  echo "Next check: agent-test status 1"
+}
+
+cmd_status() {
+  local n="${1:-1}"
+  local next=$(( n + 1 ))
+  if [ ! -f "$META" ]; then
+    echo "No run was started. Start one with: agent-test start <test file>"
+    exit 1
+  fi
+  local waited=0
+  while [ ! -f "$DONE" ] && is_running && [ "$waited" -lt "$WAIT_SECONDS" ]; do
+    sleep 1
+    waited=$(( waited + 1 ))
+  done
+  if [ ! -f "$DONE" ] && is_running; then
+    echo "RUNNING: $(cat "$META"), $(elapsed) s elapsed, check $n"
+    # MERGE 1: the scorecard prints one progress line every 100 ticks.
+    local prog
+    prog=$(grep '^\[scorecard\]' "$LOG" | tail -1)
+    if [ -n "$prog" ]; then echo "$prog"; fi
+    echo "last log line: $(grep -vE '^[[:space:]]*$' "$LOG" | tail -1)"
+    echo "Next check: agent-test status $next"
+    return 0
+  fi
+  if [ ! -f "$DONE" ]; then
+    echo "EXIT unknown (the process is gone without a result; it was probably killed)" > "$DONE"
+  fi
+  summary
+}
+
+cmd_stop() {
+  if [ -f "$PIDFILE" ]; then
+    local pid
+    pid=$(cat "$PIDFILE")
+    kill -TERM -- "-$pid" 2>/dev/null
+    sleep 2
+    kill -KILL -- "-$pid" 2>/dev/null
+  fi
+  # MERGE 3: leftover engine processes from a crashed run keep the storage port.
+  pkill -KILL -u "$(id -un)" -f '@screeps/(storage|engine|driver)' 2>/dev/null
+  pkill -KILL -u "$(id -un)" -f 'mocha .*test/integration' 2>/dev/null
+  rm -f "$PIDFILE"
+  if [ ! -f "$DONE" ]; then echo "EXIT stopped" > "$DONE"; fi
+  echo "Stopped. Start a new run with: agent-test start <test file>"
+}
+
+case "${1:-}" in
+  start)  shift; cmd_start "$@" ;;
+  status) shift; cmd_status "$@" ;;
+  stop)   cmd_stop ;;
+  last)   summary ;;
+  *)      usage; exit 2 ;;
+esac
