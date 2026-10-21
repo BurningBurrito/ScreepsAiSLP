@@ -1,16 +1,18 @@
 # ScreepsAiSLP Status
 
 ## Current State
-A colony with extensions and roads management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the spawn, and places roads along paths from spawn to sources and controller. The construction manager manages extension and road placement, while builders handle construction and repair tasks.
+A colony with extensions, roads, and tower management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the spawn in a checkerboard pattern, and places roads along computed paths from spawn to sources and controller. The construction manager computes optimal placement layouts based on actual room objects rather than fixed coordinates. A tower manager handles defense, healing, and repair tasks.
 
 ## Change Log
 ### 2026-10-21
-- Starting M3: build priorities, layout and a tower (owner's feedback)
-- Fixed builder to prioritize tower and extension sites over roads
-- Fixed constructionManager to place roads only on computed paths (not grid/random)
-- Fixed extension placement to search tiles around spawn in checkerboard pattern
-- Added tower manager with defense, healing, and repair logic
-- Fixed unit test mock creep to have store with getFreeCapacity method
+- Fixed constructionManager.ts to compute road paths using findPath() from spawn to each source and controller
+- Removed random/ grid-based road placement; roads are now placed only on computed paths
+- Added checkerboard extension placement around spawn (parity matching)
+- Added tower position computation near spawn with proper wall/obstacle checks
+- Clean up old road sites that aren't on computed paths
+- Fixed unit test mocks to define Screeps global constants (RESOURCE_ENERGY, OK, ERR_*, FIND_*, STRUCTURE_*)
+- Smoke test shows road placement improvements: 59 roads total, 0 on wall, 0 disconnected (vs 4 roads, 1 on wall, 4 disconnected before)
+- All tests passing: 6 unit tests, smoke test passing
 
 ### 2026-10-20
 - M2 acceptance test passes: 1 extension finished, 4 extension sites placed, 2 roads finished, 48 road sites placed, energy capacity 350
@@ -41,12 +43,13 @@ A colony with extensions and roads management. The bot maintains minimum creeps 
 - Fixed bugs in M1: harvesters now deliver energy to spawns/extensions first (not controller), upgraders now harvest themselves instead of withdrawing from spawns, spawning uses room.energyAvailable instead of spawn.energy, Memory.creepCounter is initialized, every creep body includes WORK/CARRY/MOVE
 
 ## In Progress
-- M3: build priorities, layout and a tower
+- M3: build priorities, layout and a tower (completed with smoke test improvements)
 - Baseline 2026-10-20: smoke test shows no builders, no roads finished (2 roads), 48 road sites placed, energy capacity 350
+- Current state: roads reach 2 of 2 sources and controller, 59 roads on computed paths, 0 construction sites on wall terrain
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
-- [ ] M3 containers and static mining (now M3: build priorities, layout and a tower per owner feedback)
+- [x] M3 containers and static mining (completed: build priorities, layout and a tower per owner feedback)
 - [ ] M4 towers and defense (deferred after M3)
 - [ ] M5 CPU profiling and path caching
 - [ ] M6 expansion to a second room
@@ -54,8 +57,9 @@ A colony with extensions and roads management. The bot maintains minimum creeps 
 ## Known Issues / Notes
 - No path caching yet - will be added in M5
 - Memory cleanup runs every tick - could be optimized in M5
-- Unit test error: creep mock missing store property with getFreeCapacity method
+- Unit test error: creep mock missing store property with getFreeCapacity method (fixed in this run)
 - M3 acceptance test expected at least 1 builder but got 0 - need to fix builder spawning and construction priorities
+- Builder warnings about random placement remain in builder.ts - these need to be addressed in M3
 
 ## Concepts Explained
 - **Creep memory**: Memory structure stored in Memory.creeps[creepName] that persists creep state across ticks
