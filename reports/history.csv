@@ -1,0 +1,2 @@
+name,date,commit,ticks,harvestedPerTick,wastedEnergy,upgradePerTick,buildPerTick,roadBuildShare,spawnIdleFullShare,creepIdleShare,cpuPerTick,level,progress,ticksToRcl2,creepsAtEnd,sitesOnWall,roadsTotal,roadsDisconnected,extensionsTowersFarFromSpawn,consoleErrors
+smoke,2026-10-21 04:45,6aaaaab,500,0.91,1056,0.7,0,0,1,0.148,1.09,1,183,,4,1,4,4,0,0
