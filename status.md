@@ -48,8 +48,8 @@ A colony with extensions, roads, and tower management. The bot maintains minimum
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
-- [x] M3 containers and static mining (completed: build priorities, layout and a tower per owner feedback)
-- [ ] M4 towers and defense (deferred after M3)
+- [ ] M3: build priorities, layout and a tower (in progress - M3 acceptance test needs tower/road layout fixes)
+- [ ] M4 containers and static mining
 - [ ] M5 CPU profiling and path caching
 - [ ] M6 expansion to a second room
 
