@@ -21,6 +21,9 @@ Short description of what the bot can currently do.
 ## Known Issues / Notes
 - Bugs, limitations, decisions you made on your own, questions for the human.
 
+## Feedback acknowledged
+- Acknowledged YYYY-MM-DD: <item from FEEDBACK.md> – done in <commit or file> (or: not done because …)
+
 ## Concepts Explained
 - TypeScript and Screeps concepts already explained in a blog post (so later posts give only a short reminder).
 ```
