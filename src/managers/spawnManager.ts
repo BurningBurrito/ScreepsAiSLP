@@ -160,10 +160,10 @@ function spawnCreep(role: string, room: Room): string | null
     }
     else if (role === "builder")
     {
-        // Builder needs at least 350 energy for 2 WORK + 2 CARRY + 1 MOVE
-        // This ensures the builder has enough WORK parts to build efficiently
-        // 2 WORK (200) + 2 CARRY (100) + 1 MOVE (50) = 350
-        minEnergyForCreep = 350;
+        // Builder needs at least 250 energy for 1 WORK + 2 CARRY + 1 MOVE
+        // This allows builders to spawn at RCL 1 (300 energy capacity)
+        // 1 WORK (100) + 2 CARRY (100) + 1 MOVE (50) = 250
+        minEnergyForCreep = 250;
     }
     else
     {
