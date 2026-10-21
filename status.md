@@ -1,18 +1,16 @@
 # ScreepsAiSLP Status
 
 ## Current State
-A colony with extensions, roads, and tower management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the spawn in a checkerboard pattern, and places roads along computed paths from spawn to sources and controller. The construction manager computes optimal placement layouts based on actual room objects rather than fixed coordinates. A tower manager handles defense, healing, and repair tasks.
+A colony with extensions, roads, and tower management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the spawn in a checkerboard pattern, and places roads along computed paths from spawn to sources and controller. The construction manager computes optimal placement layouts based on actual room objects rather than fixed coordinates. A tower manager handles defense (attacking hostiles), healing damaged creeps, and repairing roads/containers. The builder prioritizes tower and extension sites over roads and uses computed directions instead of random moves to unblock paths.
 
 ## Change Log
 ### 2026-10-21
-- Fixed constructionManager.ts to compute road paths using findPath() from spawn to each source and controller
-- Removed random/ grid-based road placement; roads are now placed only on computed paths
-- Added checkerboard extension placement around spawn (parity matching)
-- Added tower position computation near spawn with proper wall/obstacle checks
-- Clean up old road sites that aren't on computed paths
-- Fixed unit test mocks to define Screeps global constants (RESOURCE_ENERGY, OK, ERR_*, FIND_*, STRUCTURE_*)
-- Smoke test shows road placement improvements: 59 roads total, 0 on wall, 0 disconnected (vs 4 roads, 1 on wall, 4 disconnected before)
-- All tests passing: 6 unit tests, smoke test passing
+- Fixed builder.ts to use computed directions instead of random moves (addresses ESLint warnings)
+- Created towerManager.ts for tower defense, healing, and repair logic
+- Updated main.ts to import and call manageTower()
+- Fixed unit test mock to include store property with getFreeCapacity
+- Added priority-based construction site selection: tower/extension sites built before roads
+- All tests passing: 6 unit tests, lint passing, smoke test passing
 
 ### 2026-10-20
 - M2 acceptance test passes: 1 extension finished, 4 extension sites placed, 2 roads finished, 48 road sites placed, energy capacity 350
@@ -43,9 +41,9 @@ A colony with extensions, roads, and tower management. The bot maintains minimum
 - Fixed bugs in M1: harvesters now deliver energy to spawns/extensions first (not controller), upgraders now harvest themselves instead of withdrawing from spawns, spawning uses room.energyAvailable instead of spawn.energy, Memory.creepCounter is initialized, every creep body includes WORK/CARRY/MOVE
 
 ## In Progress
-- M3: build priorities, layout and a tower (completed with smoke test improvements)
+- M3: build priorities, layout and a tower
 - Baseline 2026-10-20: smoke test shows no builders, no roads finished (2 roads), 48 road sites placed, energy capacity 350
-- Current state: roads reach 2 of 2 sources and controller, 59 roads on computed paths, 0 construction sites on wall terrain
+- Current state: roads reach 2 of 2 sources and controller, 59 roads on computed paths, 0 construction sites on wall terrain, no random moves in builder.ts
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
@@ -59,7 +57,6 @@ A colony with extensions, roads, and tower management. The bot maintains minimum
 - Memory cleanup runs every tick - could be optimized in M5
 - Unit test error: creep mock missing store property with getFreeCapacity method (fixed in this run)
 - M3 acceptance test expected at least 1 builder but got 0 - need to fix builder spawning and construction priorities
-- Builder warnings about random placement remain in builder.ts - these need to be addressed in M3
 
 ## Concepts Explained
 - **Creep memory**: Memory structure stored in Memory.creeps[creepName] that persists creep state across ticks

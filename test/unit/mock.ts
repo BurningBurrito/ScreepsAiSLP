@@ -5,6 +5,37 @@ export const ERR_NOT_IN_RANGE = -9;
 export const FIND_MY_SPAWNS = 112;
 export const STRUCTURE_EXTENSION = "extension";
 
+// Mock store class with getFreeCapacity
+class MockStore {
+    private _energy: number;
+
+    constructor(energy: number = 0) {
+        this._energy = energy;
+    }
+
+    get RESOURCE_ENERGY(): number {
+        return this._energy;
+    }
+
+    getFreeCapacity(resourceType?: string): number {
+        // In Screeps, getFreeCapacity returns the free capacity for energy (or specified resource)
+        // For simplicity, we always return a fixed amount
+        return 50;
+    }
+
+    getUsedCapacity(resourceType?: string): number {
+        return this._energy;
+    }
+
+    set energy(value: number) {
+        this._energy = value;
+    }
+
+    get energy(): number {
+        return this._energy;
+    }
+}
+
 export const Game: {
   creeps: { [name: string]: any };
   rooms: { [name: string]: any };

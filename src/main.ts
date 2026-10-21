@@ -3,6 +3,7 @@ import { ErrorMapper } from "utils/ErrorMapper";
 import { checkAndSpawn } from "managers/spawnManager";
 import { cleanMemory } from "managers/memoryManager";
 import { manageConstruction } from "managers/constructionManager";
+import { manageTower } from "managers/towerManager";
 import { reportCPU } from "managers/cpuReporter";
 import { runBuilder } from "roles/builder";
 import { runHarvester } from "roles/harvester";
@@ -57,6 +58,7 @@ function mainLoop(): void
         {
             checkAndSpawn(room);
             manageConstruction(room);
+            manageTower(room);
         }
     }
 }
