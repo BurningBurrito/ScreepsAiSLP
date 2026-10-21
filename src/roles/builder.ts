@@ -98,7 +98,7 @@ export function runBuilder(creep: Creep): void
             {
                 // Creep is on top of the construction site (range 0)
                 // Move away from the site to unblock the path
-                moveAwayFromSite(creep, selectedSite.pos);
+                moveAwayFromSite(creep);
             }
             return;
         }
@@ -168,7 +168,7 @@ export function runBuilder(creep: Creep): void
             {
                 // Creep is on top of the structure (range 0)
                 // Move away from the structure to unblock the path
-                moveAwayFromSite(creep, selectedStructure.pos);
+                moveAwayFromSite(creep);
             }
             return;
         }
@@ -192,7 +192,7 @@ export function runBuilder(creep: Creep): void
             {
                 // Creep is on top of the controller (range 0) or controller is full
                 // Move away from controller to unblock the path and switch to harvesting
-                moveAwayFromSite(creep, controller.pos);
+                moveAwayFromSite(creep);
                 creep.memory.working = false;
                 return;
             }
@@ -204,57 +204,133 @@ export function runBuilder(creep: Creep): void
     }
 }
 
-/**
- * Moves the creep away from a site to unblock the path.
- * Tries all 8 directions until one succeeds.
- * @param creep The creep to move
- * @param targetPos The position to move away from
+/** Helper function to find a safe position to move to when blocked by a construction site
+ * When a creep is on a construction site, it cannot move off directly using creep.move() in some cases.
+ * Instead, we find an adjacent empty tile and use moveTo to move there.
+ * @param creep The creep to find a safe position for
+ * @returns A valid adjacent position, or null if all are blocked
  */
-function moveAwayFromSite(creep: Creep, targetPos: RoomPosition): void
+function getSafeMovePosition(creep: Creep): RoomPosition | null
 {
-    // Calculate direction away from the site/controller
-    const dx = creep.pos.x - targetPos.x;
-    const dy = creep.pos.y - targetPos.y;
-
-    // Determine best direction based on relative position
-    let moveDir: DirectionConstant;
-    if (Math.abs(dx) > Math.abs(dy))
-    {
-        // Farther apart in X direction
-        moveDir = dx > 0 ? RIGHT : LEFT;
-    }
-    else
-    {
-        // Farther apart in Y direction or equal
-        moveDir = dy > 0 ? BOTTOM : TOP;
-    }
-
-    // Try all 8 directions in order of preference
     const directions: DirectionConstant[] = [TOP, TOP_RIGHT, RIGHT, BOTTOM_RIGHT, BOTTOM, BOTTOM_LEFT, LEFT, TOP_LEFT];
     
-    // Start from the calculated direction and try all others
-    const startIdx = directions.indexOf(moveDir);
-    if (startIdx === -1)
+    for (const dir of directions)
     {
-        // If calculated direction not in list, start from 0
-        for (const dir of directions)
+        // Calculate the adjacent tile position
+        let dx = 0;
+        let dy = 0;
+        switch (dir)
         {
-            if (creep.move(dir) === OK)
+            case TOP:
+                dy = -1;
+                break;
+            case TOP_RIGHT:
+                dx = 1;
+                dy = -1;
+                break;
+            case RIGHT:
+                dx = 1;
+                break;
+            case BOTTOM_RIGHT:
+                dx = 1;
+                dy = 1;
+                break;
+            case BOTTOM:
+                dy = 1;
+                break;
+            case BOTTOM_LEFT:
+                dx = -1;
+                dy = 1;
+                break;
+            case LEFT:
+                dx = -1;
+                break;
+            case TOP_LEFT:
+                dx = -1;
+                dy = -1;
+                break;
+        }
+        
+        const targetX = creep.pos.x + dx;
+        const targetY = creep.pos.y + dy;
+        
+        // Check if the adjacent tile is within room bounds
+        if (targetX < 0 || targetX > 49 || targetY < 0 || targetY > 49)
+        {
+            continue;
+        }
+        
+        // Create a RoomPosition for the adjacent tile
+        const targetPos = new RoomPosition(targetX, targetY, creep.pos.roomName);
+        
+        // Check if this tile is occupied by another creep
+        const creepsOnTile = targetPos.lookFor(LOOK_CREEPS);
+        if (creepsOnTile.length > 0)
+        {
+            continue;
+        }
+        
+        // Check if this tile is a construction site (we don't want to move onto another site)
+        const sitesOnTile = targetPos.lookFor(LOOK_CONSTRUCTION_SITES);
+        if (sitesOnTile.length > 0)
+        {
+            continue;
+        }
+        
+        // Check if this tile is a structure (wall, road, etc.)
+        const structuresOnTile = targetPos.lookFor(LOOK_STRUCTURES);
+        if (structuresOnTile.length > 0)
+        {
+            continue;
+        }
+        
+        // This tile is empty, try to move there
+        // First try moveTo with range: 1 to ensure we move to the tile
+        const moveToResult = creep.moveTo(targetPos, { ignoreCreeps: true, range: 1 });
+        
+        // If moveTo succeeded, return the target
+        if (moveToResult === OK)
+        {
+            // Successfully started moving to the tile
+            return targetPos;
+        }
+        
+        // If moveTo failed with ERR_INVALID_TARGET (we're on the construction site),
+        // try move(direction) directly to push off the site
+        if (moveToResult === ERR_INVALID_TARGET)
+        {
+            const moveResult = creep.move(dir);
+            if (moveResult === OK)
             {
-                return;
+                // Successfully moved away from the construction site
+                return targetPos;
+            }
+            // If move also failed, continue to next direction
+        }
+        else if (moveToResult === ERR_NOT_FOUND)
+        {
+            // No path found, but we can still try to move in the direction
+            const moveResult = creep.move(dir);
+            if (moveResult === OK)
+            {
+                // Successfully moved
+                return targetPos;
             }
         }
+        // For other errors (ERR_NO_PATH, etc.), continue to next direction
     }
-    else
-    {
-        // Try all directions starting from the calculated direction
-        for (let i = 0; i < 8; i++)
-        {
-            const dirIdx = (startIdx + i) % 8;
-            if (creep.move(directions[dirIdx]) === OK)
-            {
-                return;
-            }
-        }
-    }
+    
+    // If all directions failed (blocked), return null
+    return null;
+}
+
+/**
+ * Moves the creep away from a site to unblock the path.
+ * This is a legacy function - now replaced by getSafeMovePosition().
+ * @param creep The creep to move
+ */
+function moveAwayFromSite(creep: Creep): void
+{
+    // Use the new getSafeMovePosition function which handles ERR_INVALID_TARGET correctly
+    getSafeMovePosition(creep);
 }
