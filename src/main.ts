@@ -7,6 +7,7 @@ import { manageTower } from "managers/towerManager";
 import { reportCPU } from "managers/cpuReporter";
 import { runBuilder } from "roles/builder";
 import { runHarvester } from "roles/harvester";
+import { runHauler } from "roles/hauler";
 import { runUpgrader } from "roles/upgrader";
 
 /**
@@ -42,6 +43,9 @@ function mainLoop(): void
                     break;
                 case "builder":
                     runBuilder(creep);
+                    break;
+                case "hauler":
+                    runHauler(creep);
                     break;
             }
         }

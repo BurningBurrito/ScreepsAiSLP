@@ -1,17 +1,17 @@
-# Scorecard: smoke · 2026-10-21 15:31 · 500 ticks · commit 084aced
+# Scorecard: smoke · 2026-10-21 18:37 · 500 ticks · commit ea64962
 
-| Metric (last 200 ticks unless noted) | This run | Previous run (2026-10-21 15:07, 084aced) | Change |
+| Metric (last 200 ticks unless noted) | This run | Previous run (2026-10-21 15:31, 084aced) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 2.7 | 2.7 | 0 |
 | Energy wasted at source regeneration (sum) | 900 | 900 | 0 |
-| Controller progress / tick | 0.03 | 0.03 | 0 |
+| Controller progress / tick | 0.02 | 0.03 | -0.01 |
 | Construction progress / tick | 0 | 0 | 0 |
-| Energy delivered to spawn and extensions / tick | 2.5 | 2.5 | 0 |
-| Spawn idle while energy is full | 0 % | 0 % | 0 pts |
+| Energy delivered to spawn and extensions / tick | 47.87 | 2.5 | +45.37 |
+| Spawn idle while energy is full | 13 % | 0 % | +13 pts |
 | Spawn busy | 11 % | 11 % | 0 pts |
-| Creep ticks idle (no action, no move for 5+ ticks) | 55 % | 55 % | 0 pts |
-| CPU / tick (average, max) | 1.5, 5.94 | 1.5, 8.69 | 0 |
-| RCL / progress at end (whole run) | 1 / 5 | 1 / 5 | 0 |
+| Creep ticks idle (no action, no move for 5+ ticks) | 29 % | 55 % | -26 pts |
+| CPU / tick (average, max) | 1.98, 5.73 | 1.5, 5.94 | +0.48 |
+| RCL / progress at end (whole run) | 1 / 3 | 1 / 5 | -2 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
 | Energy harvested (whole run) | 1,640 | 1,640 | 0 |
 | Build energy spent on roads (share of all build energy) | 0 % | 0 % | 0 pts |
@@ -25,12 +25,12 @@
 Creeps at end by role: builder 2, harvester 2, hauler 2, upgrader 2.
 Structures at end: spawn 1. Construction sites: 0 (none). Build energy in the window by target: none.
 Room energy capacity 300; source capacity 3000 and 3000; Memory 1 KB; bucket 10000.
-Bot console: 13 lines, 0 with errors (reports/smoke-console.log). Probe results missing for 0 ticks.
+Bot console: 80 lines, 0 with errors (reports/smoke-console.log). Probe results missing for 0 ticks.
 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
       100 | harvester 2, upgrader 1                  |   3.9 |     0 |    49/300 | busy | 1.2
-      200 | harvester 2, hauler 2, upgrader 2        |   5.7 |     0 |    99/300 | busy | 1.6
-      300 | harvester 2, hauler 2, upgrader 2        |   1.4 |     0 |   199/300 | idle | 1.6
-      400 | builder 1, harvester 2, hauler 2, upgrader 2 |   1.7 |     0 |   134/300 | idle | 1.3
-      500 | builder 2, harvester 2, hauler 2, upgrader 2 |   3.7 |   0.1 |   262/300 | idle | 1.7
+      200 | harvester 2, hauler 2, upgrader 2        |   5.7 |     0 |   199/300 | idle | 1.8
+      300 | builder 1, harvester 2, hauler 2, upgrader 2 |   1.4 |     0 |   250/300 | idle | 2.2
+      400 | builder 2, harvester 2, hauler 2, upgrader 2 |     2 |     0 |   300/300 | idle | 1.8
+      500 | builder 2, harvester 2, hauler 2, upgrader 2 |   3.4 |     0 |   300/300 | idle | 2.1

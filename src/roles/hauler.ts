@@ -22,8 +22,8 @@ export function runHauler(creep: Creep): void
         {
             const spawnEnergy = (spawn ).energy;
             const spawnCapacity = (spawn ).energyCapacity;
-            // If spawn has less than 150 energy, deliver to it first (needed for spawning)
-            if (spawnEnergy < 150)
+            // Deliver to spawn when it has free capacity (spawn needs 300 for spawning)
+            if (spawnEnergy < spawnCapacity - 50) // Deliver to spawn when it has <250 free capacity
             {
                 if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
@@ -32,7 +32,7 @@ export function runHauler(creep: Creep): void
                 return;
             }
         }
-
+        // Priority 1: Tower - needs energy for repairs and attacks
         // Priority 1: Tower - needs energy for repairs and attacks
         const towers = creep.room.find(FIND_STRUCTURES, {
             filter: (s: AnyOwnedStructure) => s.structureType === STRUCTURE_TOWER && (s as StructureTower).energy < (s as StructureTower).energyCapacity,
