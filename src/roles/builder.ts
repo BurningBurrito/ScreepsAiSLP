@@ -22,7 +22,7 @@ export function runBuilder(creep: Creep): void
         creep.memory.working = true;
     }
 
-    // If not working (empty store), get energy from spawn or harvest from sources
+    // If not working (empty store), get energy from spawn, extensions, or harvest from sources
     if (!creep.memory.working)
     {
         // First, try to pick up energy from the spawn
@@ -34,7 +34,7 @@ export function runBuilder(creep: Creep): void
             {
                 const available = sp.store.getUsedCapacity(RESOURCE_ENERGY);
                 const canTake = Math.min(creep.store.getFreeCapacity(RESOURCE_ENERGY), available);
-                if (canTake >= 50) // Only pick up if it's worth it
+                if (canTake > 0) // Withdraw any available energy
                 {
                     if (creep.withdraw(sp, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                     {
@@ -46,7 +46,29 @@ export function runBuilder(creep: Creep): void
             }
         }
 
-        // If no energy in spawn or not enough to be worth it, harvest from sources
+        // If no energy in spawn, try extensions
+        if (!pickedUp)
+        {
+            const extensions = creep.room.find(FIND_STRUCTURES, {
+                filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
+            });
+            for (const ext of extensions)
+            {
+                const available = (ext as StructureExtension).store.getUsedCapacity(RESOURCE_ENERGY);
+                const canTake = Math.min(creep.store.getFreeCapacity(RESOURCE_ENERGY), available);
+                if (canTake > 0)
+                {
+                    if (creep.withdraw(ext, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+                    {
+                        creep.moveTo(ext, { ignoreCreeps: true });
+                    }
+                    pickedUp = true;
+                    break;
+                }
+            }
+        }
+
+        // If no energy in spawn or extensions, harvest from sources
         if (!pickedUp)
         {
             const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);

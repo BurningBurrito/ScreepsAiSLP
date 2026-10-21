@@ -1,40 +1,36 @@
-# Scorecard: acceptance-m1 · 2026-10-21 20:11 · 801 ticks · commit c9407b9
+# Scorecard: smoke · 2026-10-21 21:26 · 500 ticks · commit 1125a4e
 
-| Metric (last 320 ticks unless noted) | This run | Previous run (2026-10-21 05:42, 1ebd257) | Change |
+| Metric (last 200 ticks unless noted) | This run | Previous run (2026-10-21 20:06, 1577bca) | Change |
 | --- | --- | --- | --- |
-| Energy harvested / tick | 1.92 | 3.25 | -1.33 |
-| Energy wasted at source regeneration (sum) | 2,354 | 4,924 | -2,570 |
-| Controller progress / tick | 0.98 | 1.04 | -0.06 |
-| Construction progress / tick | 2.14 | 2.2 | -0.06 |
-| Energy delivered to spawn and extensions / tick | 4.68 | 0 | +4.68 |
-| Spawn idle while energy is full | 53 % | 100 % | -47 pts |
-| Spawn busy | 0 % | 0 % | 0 pts |
-| Creep ticks idle (no action, no move for 5+ ticks) | 40 % | 12 % | +28 pts |
-| CPU / tick (average, max) | 2.31, 17.35 | 2, 19.14 | +0.31 |
-| RCL / progress at end (whole run) | 2 / 113 | 2 / 134 | -21 |
-| Ticks to RCL 2 / RCL 3 (whole run) | 633 / - | 684 / - | -51 |
-| Energy harvested (whole run) | 2,146 | 2,782 | -636 |
-| Build energy spent on roads (share of all build energy) | 0 % | 84 % | -84 pts |
-| Road tiles: total / on wall / disconnected from the spawn network (end) | 60 / 0 / 0 | 59 / 0 / 0 | 0 |
-| Roads reach (end): sources, controller | 2 of 2, yes | 2 of 2, yes |  |
+| Energy harvested / tick | 2.5 | 2.5 | 0 |
+| Energy wasted at source regeneration (sum) | 900 | 900 | 0 |
+| Controller progress / tick | 0.03 | 0.03 | 0 |
+| Construction progress / tick | 0 | 0 | 0 |
+| Energy delivered to spawn and extensions / tick | 15.61 | 15.61 | 0 |
+| Spawn idle while energy is full | 6 % | 6 % | 0 pts |
+| Spawn busy | 11 % | 11 % | 0 pts |
+| Creep ticks idle (no action, no move for 5+ ticks) | 48 % | 48 % | 0 pts |
+| CPU / tick (average, max) | 1.87, 6.06 | 1.76, 5.7 | +0.11 |
+| RCL / progress at end (whole run) | 1 / 5 | 1 / 5 | 0 |
+| Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
+| Energy harvested (whole run) | 1,600 | 1,600 | 0 |
+| Build energy spent on roads (share of all build energy) | 0 % | 0 % | 0 pts |
+| Road tiles: total / on wall / disconnected from the spawn network (end) | 0 / 0 / 0 | 0 / 0 / 0 | 0 |
+| Roads reach (end): sources, controller | 0 of 2, no | 0 of 2, no |  |
 | Extensions and towers farther than 8 tiles from the spawn (end) | 0 | 0 | 0 |
 | Construction sites on wall terrain (end) | 0 | 0 | 0 |
 | Extension sites next to a source or the controller (end) | 0 | 0 | 0 |
-| Creeps at end (peak) | 8 (8) | 6 (6) | +2 |
+| Creeps at end (peak) | 8 (8) | 8 (8) | 0 |
 
 Creeps at end by role: builder 2, harvester 2, hauler 2, upgrader 2.
-Structures at end: spawn 1. Construction sites: 65 (extension 5, road 60). Build energy in the window by target: extension 686.
+Structures at end: spawn 1. Construction sites: 0 (none). Build energy in the window by target: none.
 Room energy capacity 300; source capacity 3000 and 3000; Memory 1 KB; bucket 10000.
-Bot console: 80 lines, 0 with errors (reports/acceptance-m1-console.log). Probe results missing for 0 ticks.
+Bot console: 77 lines, 0 with errors (reports/smoke-console.log). Probe results missing for 0 ticks.
 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
       100 | harvester 2, upgrader 1                  |   3.9 |     0 |    49/300 | busy | 1.2
-      200 | builder 1, harvester 2, hauler 2, upgrader 2 |   5.7 |     0 |   299/300 | idle | 1.7
-      300 | builder 1, harvester 2, hauler 2, upgrader 2 |   1.4 |     0 |   300/300 | idle | 2.2
-      400 | builder 1, harvester 2, hauler 2, upgrader 2 |   1.3 |     0 |   249/300 | idle | 1.5
-      500 | builder 2, harvester 2, hauler 2, upgrader 2 |   3.7 |   0.1 |   237/300 | idle | 2
-      600 | builder 2, harvester 2, hauler 2, upgrader 2 |   1.2 |   1.5 |   300/300 | idle | 1.8
-      700 | builder 2, harvester 2, hauler 2, upgrader 2 |   0.8 |   0.8 |   124/300 | idle | 2.5
-      800 | builder 2, harvester 2, hauler 2, upgrader 2 |   3.4 |   0.8 |   174/300 | idle | 2.6
-      801 | builder 2, harvester 2, hauler 2, upgrader 2 |     4 |     1 |   175/300 | idle | 2.7
+      200 | builder 1, harvester 2, hauler 2, upgrader 2 |   5.7 |     0 |   299/300 | idle | 1.8
+      300 | builder 1, harvester 2, hauler 2, upgrader 2 |   1.4 |     0 |   300/300 | idle | 2.3
+      400 | builder 1, harvester 2, hauler 2, upgrader 2 |   1.3 |     0 |   249/300 | idle | 1.6
+      500 | builder 2, harvester 2, hauler 2, upgrader 2 |   3.7 |   0.1 |   237/300 | idle | 2.1

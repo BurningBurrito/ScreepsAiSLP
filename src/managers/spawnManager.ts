@@ -52,9 +52,12 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     if (maxSets < 1)
     {
         // If we can't afford even one set, try to make a minimal creep
-        const workParts = Math.min(MIN_BODY_PARTS.work, Math.floor(energyAvailable / 100));
-        const carryParts = Math.min(MIN_BODY_PARTS.carry, Math.floor((energyAvailable - workParts * 100) / 50));
-        const moveParts = Math.min(MIN_BODY_PARTS.move, Math.floor((energyAvailable - workParts * 100 - carryParts * 50) / 50));
+        // Prioritize MOVE parts since they're essential for movement
+        const moveParts = Math.min(MIN_BODY_PARTS.move, Math.floor(energyAvailable / 50));
+        const energyAfterMove = energyAvailable - moveParts * 50;
+        const carryParts = Math.min(MIN_BODY_PARTS.carry, Math.floor(energyAfterMove / 50));
+        const energyAfterCarry = energyAfterMove - carryParts * 50;
+        const workParts = Math.min(MIN_BODY_PARTS.work, Math.floor(energyAfterCarry / 100));
 
         for (let i = 0; i < workParts; i++) body.push(WORK);
         for (let i = 0; i < carryParts; i++) body.push(CARRY);
@@ -215,10 +218,10 @@ function spawnCreep(role: string, room: Room): string | null
     }
     else if (role === "builder")
     {
-        // Builder needs at least 250 energy for 1 WORK + 2 CARRY + 1 MOVE
-        // This allows builders to spawn at RCL 1 (300 energy capacity)
-        // 1 WORK (100) + 2 CARRY (100) + 1 MOVE (50) = 250
-        minEnergyForCreep = 250;
+        // Builder needs at least 200 energy for 1 WORK + 1 CARRY + 1 MOVE
+        // This allows builders to spawn at RCL 1 with 300 energy capacity
+        // 1 WORK (100) + 1 CARRY (50) + 1 MOVE (50) = 200
+        minEnergyForCreep = 200;
     }
     else if (role === "hauler")
     {
@@ -235,9 +238,16 @@ function spawnCreep(role: string, room: Room): string | null
         minEnergyForCreep = BASE_CREEP_COST / 2;
     }
 
-    if (energyAvailable < minEnergyForCreep)
+    // Allow spawning with any available energy (createCreepBody handles low-energy cases)
+    // This ensures the colony can maintain minimum creep count even when energy is low
+
+    const creepName = `${role}_${Game.time}_${Memory.creepCounter}`;
+    Memory.creepCounter++;
+
+    const spawns = room.find(FIND_MY_SPAWNS);
+    if (spawns.length === 0)
     {
-        return null; // Not enough energy for a useful creep
+        return null; // No spawns available
     }
 
     const body = createCreepBody(energyAvailable, role);
@@ -256,16 +266,25 @@ function spawnCreep(role: string, room: Room): string | null
 
     if (!hasCarry || !hasMove || (isHauler ? false : !hasWork))
     {
-        return null; // Body must have at least CARRY and MOVE; haulers don't need WORK
-    }
-
-    const creepName = `${role}_${Game.time}_${Memory.creepCounter}`;
-    Memory.creepCounter++;
-
-    const spawns = room.find(FIND_MY_SPAWNS);
-    if (spawns.length === 0)
-    {
-        return null; // No spawns available
+        // Allow spawning with partial bodies when energy is low
+        // This ensures the colony can maintain minimum creep count even when energy is low
+        // For harvesters, we require at least WORK and MOVE (CARRY is optional for initial harvesting)
+        if (role === "harvester" && harvesterCount === 0)
+        {
+            // For the first harvester, allow spawning with just WORK and MOVE
+            if (hasWork && hasMove)
+            {
+                // Can spawn minimal harvester without CARRY
+            }
+            else
+            {
+                return null; // Body doesn't have WORK and MOVE
+            }
+        }
+        else
+        {
+            return null; // Body must have at least CARRY and MOVE; haulers don't need WORK
+        }
     }
 
     const result = spawns[0].spawnCreep(body, creepName, { memory: { role, working: false } as CreepMemory });

@@ -39,24 +39,9 @@ export function runHarvester(creep: Creep): void
         return;
     }
 
-    // If full, transfer energy to spawns first, then extensions, then tower, then controller
+    // If full, transfer energy to extensions first (more accessible), then spawn, then tower, then controller
 
-    // Try to transfer to spawns first
-    const spawns = creep.room.find(FIND_MY_SPAWNS);
-    for (const spawn of spawns)
-    {
-        const freeCapacity = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
-        if (freeCapacity !== null && freeCapacity > 0)
-        {
-            if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-            {
-                creep.moveTo(spawn);
-            }
-            return;
-        }
-    }
-
-    // Try to transfer to extensions
+    // Try to transfer to extensions first (they're more accessible than spawn)
     const extensions = creep.room.find(FIND_STRUCTURES, {
         filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
     });
@@ -68,6 +53,21 @@ export function runHarvester(creep: Creep): void
             if (creep.transfer(extension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
             {
                 creep.moveTo(extension);
+            }
+            return;
+        }
+    }
+
+    // Try to transfer to spawns
+    const spawns = creep.room.find(FIND_MY_SPAWNS);
+    for (const spawn of spawns)
+    {
+        const freeCapacity = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
+        if (freeCapacity !== null && freeCapacity > 0)
+        {
+            if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+            {
+                creep.moveTo(spawn);
             }
             return;
         }
@@ -94,9 +94,52 @@ export function runHarvester(creep: Creep): void
     const controller = creep.room.controller;
     if (controller !== undefined && controller !== null)
     {
-        if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE)
+        // Check if all energy storage is full before upgrading
+        let allStorageFull = true;
+
+        // Check spawn
+        for (const spawn of spawns)
         {
-            creep.moveTo(controller);
+            if (spawn.store.getFreeCapacity(RESOURCE_ENERGY) > 0)
+            {
+                allStorageFull = false;
+                break;
+            }
+        }
+
+        // Check extensions
+        if (allStorageFull)
+        {
+            for (const ext of extensions)
+            {
+                if ((ext as StructureExtension).store.getFreeCapacity(RESOURCE_ENERGY) > 0)
+                {
+                    allStorageFull = false;
+                    break;
+                }
+            }
+        }
+
+        // Check towers
+        if (allStorageFull)
+        {
+            for (const tower of towers)
+            {
+                if ((tower as StructureTower).store.getFreeCapacity(RESOURCE_ENERGY) > 0)
+                {
+                    allStorageFull = false;
+                    break;
+                }
+            }
+        }
+
+        // Only upgrade if all storage is full
+        if (allStorageFull)
+        {
+            if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE)
+            {
+                creep.moveTo(controller);
+            }
         }
     }
 }
