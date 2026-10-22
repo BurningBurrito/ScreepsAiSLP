@@ -80,21 +80,21 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     // Use remaining energy to add parts
     let remainingEnergy = energyAvailable - maxSets * BASE_CREEP_COST;
 
-    // For builders, prioritize CARRY parts first (for energy transport)
+    // For builders, prioritize WORK parts first (for efficient building)
     if (role === "builder")
     {
-        // Add extra CARRY parts first (builders need more carry capacity)
-        while (remainingEnergy >= 50)
-        {
-            body.push(CARRY);
-            remainingEnergy -= 50;
-        }
-
-        // Then add extra WORK parts (for building)
+        // Add extra WORK parts first (builders need WORK for efficient building)
         while (remainingEnergy >= 100)
         {
             body.push(WORK);
             remainingEnergy -= 100;
+        }
+
+        // Then add extra CARRY parts (for energy transport)
+        while (remainingEnergy >= 50)
+        {
+            body.push(CARRY);
+            remainingEnergy -= 50;
         }
 
         // Finally add MOVE parts
