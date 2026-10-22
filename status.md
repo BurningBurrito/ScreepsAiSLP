@@ -1,17 +1,19 @@
 # ScreepsAiSLP Status
 
 ## Current State
-A colony with extensions, roads, and tower management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the spawn in a checkerboard pattern, and places roads along computed paths from spawn to sources and controller. The construction manager computes optimal placement layouts based on actual room objects rather than fixed coordinates. A tower manager handles defense (attacking hostiles), healing damaged creeps, and repairing roads/containers. The builder prioritizes tower and extension sites over roads and uses computed directions instead of random moves to unblock paths.
+A colony with extensions, roads, and tower management. The bot maintains minimum creeps per role (harvester, upgrader, builder), builds extensions near the spawn in a checkerboard pattern, and places roads along computed paths from spawn to sources and controller. The construction manager computes optimal placement layouts based on actual room objects rather than fixed coordinates. A tower manager handles defense (attacking hostiles), healing damaged creeps, and repairing roads/containers. The harvester now properly handles cases where all targets are full by dropping energy and switching back to harvesting mode, preventing it from standing still with unchanged energy.
 
 ## Change Log
 ### 2026-10-21
-- Created towerManager.ts for tower defense (attacking hostiles), healing, and repair logic
-- Updated builder.ts to use computed directions instead of random moves (addresses ESLint warnings)
-- Added priority-based construction site selection: tower/extension sites built before roads
-- Fixed unit test mock to include store property with getFreeCapacity method
-- Lowered builder minimum energy requirement from 350 to 250 for RCL 1 spawning
-- Updated main.ts to import and call manageTower()
-- All tests passing: 6 unit tests, lint passing, smoke test passing, M1 acceptance passing
+- Fixed M1 acceptance test: harvester now drops energy when it cannot deliver to any target, preventing it from freezing (standing still with unchanged energy for 30+ ticks)
+- Changed harvester priority: spawn first, then extensions, then towers (was: extensions first)
+- Added proper `range: 1` to moveTo calls for better creep movement
+- When harvester is full but cannot upgrade controller, it drops energy and switches to harvesting mode
+
+### 2026-10-20
+- M2 acceptance test passes: 1 extension finished, 4 extension sites placed, 2 roads finished, 48 road sites placed, energy capacity 350
+- All tests passing (6 unit tests + 4 integration tests)
+- Blog posts verified - no backticks found in current versions
 
 ### 2026-10-20
 - M2 acceptance test passes: 1 extension finished, 4 extension sites placed, 2 roads finished, 48 road sites placed, energy capacity 350
