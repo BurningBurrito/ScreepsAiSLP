@@ -130,9 +130,10 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
             }
             else if (role === "upgrader")
             {
-                // Upgraders upgrade directly using room energy - no CARRY needed
-                // Prioritize WORK and MOVE only
-                // Order: MOVE first (can't function without movement), then WORK
+                // Upgraders harvest from sources directly and upgrade the controller.
+                // They need CARRY parts to store harvested energy.
+                // Prioritize WORK and MOVE, then CARRY.
+                // Order: MOVE first (can't function without movement), then WORK, then CARRY.
                 
                 // Ensure at least 1 MOVE part
                 const energyAfterMove = energyAvailable - 50;
@@ -140,9 +141,13 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
                 {
                     // Add WORK parts
                     const work = Math.min(MIN_BODY_PARTS.work, Math.floor(energyAfterMove / 100));
+                    const energyAfterWork = energyAfterMove - work * 100;
+                    
+                    // Add at least 1 CARRY part to store energy
+                    const carry = energyAfterWork >= 50 ? 1 : 0;
                     
                     moveParts = 1;
-                    carryParts = 0;
+                    carryParts = carry;
                     
                     // Ensure at least 1 WORK part for upgraders
                     return Math.max(1, work);
@@ -181,9 +186,11 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
         }
         else if (role === "upgrader")
         {
-            // Upgraders upgrade directly using room energy - no CARRY needed
-            // They need WORK to upgrade and MOVE to move
+            // Upgraders harvest from sources directly and upgrade the controller.
+            // They need CARRY parts to store harvested energy.
+            // They need WORK to upgrade and MOVE to move.
             body.push(WORK);
+            body.push(CARRY);
             body.push(MOVE);
         }
         else
