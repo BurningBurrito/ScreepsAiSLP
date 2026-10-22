@@ -1,12 +1,12 @@
 /**
  * Upgrader Role
  * Upgrades the controller to increase colony level.
- * In M1, upgraders harvest energy from sources themselves.
+ * In M1, upgraders go directly to the controller (don't harvest).
  */
 
 /**
  * Runs the upgrader creep behavior.
- * Harvests from sources when empty, then upgrades the controller.
+ * Goes directly to the controller and upgrades it.
  * @param creep The upgrader creep to run
  */
 export function runUpgrader(creep: Creep): void
@@ -18,38 +18,17 @@ export function runUpgrader(creep: Creep): void
         return; // No controller in room
     }
 
-    // Update working state based on store capacity
-    if (creep.memory.working && creep.store[RESOURCE_ENERGY] === 0)
-    {
-        creep.memory.working = false;
-    }
-    else if (!creep.memory.working && creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
-    {
-        creep.memory.working = true;
-    }
-
-    // If not working (empty store), harvest from sources
-    if (!creep.memory.working)
-    {
-        const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
-
-        if (source === null)
-        {
-            return; // No sources found
-        }
-
-        if (creep.harvest(source) === ERR_NOT_IN_RANGE)
-        {
-            creep.moveTo(source, { ignoreCreeps: true, range: 1 });
-            return;
-        }
-    }
-
-    // Upgrade the controller
+    // Upgrade the controller directly
+    // Upgraders don't need to harvest - they upgrade using the room's energy
     const controllerPos = controller.pos;
-    if (creep.pos.getRangeTo(controllerPos) > 3)
+    
+    // Check if within range to upgrade (range 3 is max for upgradeController)
+    const rangeToController = creep.pos.getRangeTo(controllerPos);
+    if (rangeToController > 3)
     {
-        creep.moveTo(controllerPos, { ignoreCreeps: true, range: 3 });
+        // Move toward the controller without range restriction
+        // This ensures we path directly to the controller, not just within 3 tiles
+        creep.moveTo(controllerPos, { ignoreCreeps: true, reusePath: 5 });
     }
     else
     {

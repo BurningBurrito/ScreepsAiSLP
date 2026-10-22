@@ -66,13 +66,13 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
                 moveParts = Math.min(MIN_BODY_PARTS.move, Math.floor(energyAfterCarry / 50));
                 return 0; // Haulers don't need WORK parts
             }
-            else if (role === "upgrader" || role === "harvester" || role === "builder")
+            else if (role === "harvester" || role === "builder")
             {
                 // Prioritize MOVE and CARRY for movement and energy storage
-                // Then WORK (needed for harvesting/upgrading/building)
+                // Then WORK (needed for harvesting/building)
                 // Order: MOVE first (can't function without movement), then CARRY, then WORK
                 
-                // For upgraders, add extra MOVE parts to reduce fatigue accumulation
+                // For harvesters and builders, add extra MOVE parts to reduce fatigue accumulation
                 // With 2 MOVE parts and 2 non-MOVE parts, fatigue is neutral (no accumulation)
                 // First, ensure at least 2 MOVE parts for better movement efficiency
                 const energyAfterMove = energyAvailable - 100; // Reserve for 2 MOVE
@@ -128,6 +128,31 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
                     }
                 }
             }
+            else if (role === "upgrader")
+            {
+                // Upgraders upgrade directly using room energy - no CARRY needed
+                // Prioritize WORK and MOVE only
+                // Order: MOVE first (can't function without movement), then WORK
+                
+                // Ensure at least 1 MOVE part
+                const energyAfterMove = energyAvailable - 50;
+                if (energyAfterMove > 0)
+                {
+                    // Add WORK parts
+                    const work = Math.min(MIN_BODY_PARTS.work, Math.floor(energyAfterMove / 100));
+                    
+                    moveParts = 1;
+                    carryParts = 0;
+                    
+                    // Ensure at least 1 WORK part for upgraders
+                    return Math.max(1, work);
+                }
+                else
+                {
+                    // Can't afford even 1 MOVE part, can't spawn a useful creep
+                    return 0;
+                }
+            }
             else
             {
                 // Default: prioritize MOVE, then CARRY, then WORK
@@ -156,10 +181,9 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
         }
         else if (role === "upgrader")
         {
-            // Upgraders need CARRY to store energy from harvesting
-            // They also need WORK to upgrade the controller and MOVE to move
+            // Upgraders upgrade directly using room energy - no CARRY needed
+            // They need WORK to upgrade and MOVE to move
             body.push(WORK);
-            body.push(CARRY);
             body.push(MOVE);
         }
         else
@@ -250,19 +274,9 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     }
     else if (role === "upgrader")
     {
-        // For upgraders, prioritize MOVE parts first (to reduce fatigue and move efficiently)
-        // Then WORK parts (to upgrade faster), then CARRY (to store energy)
-        // Ensure at least 2 MOVE parts for neutral fatigue (2 MOVE removes 4 fatigue/tick)
-        // With 2 WORK + 2 CARRY = 4 non-MOVE parts, we need at least 2 MOVE for neutral fatigue
-        
-        // Reserve 100 energy for at least 2 MOVE parts (for neutral fatigue)
-        // This ensures upgraders can move efficiently even with multiple non-MOVE parts
-        const energyForMove = remainingEnergy >= 100 ? 100 : (remainingEnergy >= 50 ? 50 : 0);
-        remainingEnergy -= energyForMove;
-        for (let i = 0; i < energyForMove / 50; i++)
-        {
-            body.push(MOVE);
-        }
+        // For upgraders, prioritize WORK parts first (to upgrade faster)
+        // Then MOVE parts (to reduce fatigue and move efficiently)
+        // Upgraders don't need CARRY parts - they upgrade using room energy
         
         // Reserve 100 energy for at least 1 WORK part
         const energyForWork = remainingEnergy >= 100 ? 100 : (remainingEnergy >= 50 ? 50 : 0);
@@ -272,12 +286,12 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
             body.push(WORK);
         }
         
-        // Reserve 50 energy for at least 1 CARRY part
-        const energyForCarry = remainingEnergy >= 50 ? 50 : 0;
-        remainingEnergy -= energyForCarry;
-        if (energyForCarry >= 50)
+        // Reserve 100 energy for at least 2 MOVE parts (for neutral fatigue)
+        const energyForMove = remainingEnergy >= 100 ? 100 : (remainingEnergy >= 50 ? 50 : 0);
+        remainingEnergy -= energyForMove;
+        for (let i = 0; i < energyForMove / 50; i++)
         {
-            body.push(CARRY);
+            body.push(MOVE);
         }
         
         // Add more WORK parts if we have enough energy (upgrade speed scales with WORK parts)
@@ -285,13 +299,6 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
         {
             body.push(WORK);
             remainingEnergy -= 100;
-        }
-        
-        // Add more CARRY parts to increase energy storage
-        while (remainingEnergy >= 50)
-        {
-            body.push(CARRY);
-            remainingEnergy -= 50;
         }
         
         // Add more MOVE if there's energy (1 MOVE per 2 other parts on plain terrain)
@@ -417,7 +424,10 @@ function spawnCreep(role: string, room: Room): string | null
         }
     }
 
-    const result = spawns[0].spawnCreep(body, creepName, { memory: { role, working: false } as CreepMemory });
+    // Upgraders start with working=true to go directly to the controller
+    // Harvesters, builders, and haulers start with working=false
+    const working = isUpgrader ? true : false;
+    const result = spawns[0].spawnCreep(body, creepName, { memory: { role, working } as CreepMemory });
 
     if (result === OK)
     {
