@@ -14,6 +14,8 @@
     "test": "npm run test-unit && npm run test-integration",
     "test-unit": "mocha test/unit/**/*.ts",
     "test-integration": "npm run build && mocha 'test/integration/**/*.ts' --timeout 60000",
+    "test-smoke": "npm run build && mocha test/integration/smoke.test.ts --timeout 1200000",
+    "verify-harness": "ts-node -P tsconfig.test.json test/verify/verify-scorecard.ts && ts-node -P tsconfig.test.json test/verify/verify-criteria.ts src",
     "watch-main": "rollup -cw --environment DEST:main",
     "watch-pserver": "rollup -cw --environment DEST:pserver",
     "watch-season": "rollup -cw --environment DEST:season",

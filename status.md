@@ -37,14 +37,20 @@ A colony with extensions and roads management. The bot maintains minimum creeps 
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
-- [ ] M3 containers and static mining
-- [ ] M4 towers and defense
-- [ ] M5 CPU profiling and path caching
-- [ ] M6 expansion to a second room
+- [ ] M3 build properly, then defend: build priorities, layout near the spawn, roads on real paths, a tower (spec: milestones/M3.md)
+- [ ] M4 containers and static mining (spec: milestones/M4.md)
+- [ ] M5 spawn queue and body templates from energy capacity
+- [ ] M6 storage and upgrading
+- [ ] M7 CPU budget and path caching
+- [ ] M8 remote mining
+- [ ] M9 second room
 
 ## Known Issues / Notes
 - No path caching yet - will be added in M5
 - Memory cleanup runs every tick - could be optimized in M5
+
+## Feedback acknowledged
+- (none yet; rule 07 step A3 says what to write here)
 
 ## Concepts Explained
 - **Creep memory**: Memory structure stored in Memory.creeps[creepName] that persists creep state across ticks

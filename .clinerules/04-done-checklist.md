@@ -4,8 +4,9 @@ A task step is only done when ALL of these pass. Do every step, in order, with t
 
 1. `npm run lint -- --fix` then `npm run lint`
    → must end with 0 errors. Fix every error yourself.
-2. `npm test`
-   → runs unit tests AND integration tests (a real Screeps engine). Must show only "passing", no "failing", exit code 0.
+2. `npm run build` then `npm run test-unit`
+   → the fast checks; both must pass. Integration, smoke and acceptance tests (a real Screeps engine) run only through
+   `agent-test` (rule 07), never with `npm test` or `npx mocha` directly: they take longer than the 30-second command limit and are stopped.
    If a test fails: read the error, fix the code (not the test – unless the test itself is wrong, then explain why in the commit message).
 3. New behavior needs a test:
    - logic without game objects → unit test in `test/unit/` (mocks in `test/unit/mock.ts`)

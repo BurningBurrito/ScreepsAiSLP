@@ -12,6 +12,10 @@
    search it there, for example: `grep -n "spawnCreep" node_modules/@types/screeps/index.d.ts`
 2. This machine has no internet access. Do not try to reach websites or download anything; rely on the type definitions above and the code in this repository.
 3. If the type definitions do not confirm it, do not use it. Write the open question in `status.md`.
+4. If the folder `/etc/agent-docs/screeps/` exists, it holds a copy of the official documentation pages on game
+   mechanics (controller, creeps, defence, invaders, resources, CPU, Memory). Search it with grep for the term you
+   need and read only that file. It explains how things behave; the type definitions stay the authority for names,
+   signatures and return codes.
 
 ## Start checklist (do every step, in order)
 1. `git status --short` – must be empty. If not, commit the leftovers first (see your global rules).
@@ -20,7 +24,9 @@
 4. Decide the smallest useful step that moves the task forward. Prefer several small commits over one big change.
 
 ## Scope – NEVER do these
-- Never work outside this repository folder. Never read files outside it (no home folder, no `/etc`, no other projects).
+- Never work outside this repository folder. Never read files outside it (no home folder, no other projects).
+  The two exceptions are `/etc/agent-tasks/FEEDBACK.md`, the owner's notes, which you read at the start of every run (rule 07)
+  and never change, and the documentation copy in `/etc/agent-docs/screeps/` when it exists (read only).
 - Never install, remove or upgrade npm packages, and never edit the dependency lists in `package.json`.
   If you need a package, write the request in `status.md` and continue without it.
 - Never download files, never use network tools (`curl`, `wget`, `ssh`, `nc`, `nmap` …), never scan or contact other machines.
@@ -33,6 +39,7 @@
 
 ## Test tooling – NEVER do these
 - Never edit, patch or delete anything in `node_modules/`. After your run the launcher deletes `node_modules` and reinstalls it from `package-lock.json`, so such edits are thrown away anyway.
-- Never edit the test harness: `test/integration/helper.ts`, `test/mocha.opts`, or the protected acceptance tests (`test/integration/acceptance-*.test.ts`). They are restored from a protected copy after every run.
+- Never edit the test harness: `test/integration/helper.ts`, `test/integration/scorecard.ts`, `test/integration/criteria.ts`, `test/integration/smoke.test.ts`, `test/mocha.opts`, or the protected acceptance tests (`test/integration/acceptance-*.test.ts`). They are restored from a protected copy after every run.
+- Never edit `milestones/*.md` (written by the owner), anything under `reports/` (written by the test harness), or anything under `test/candidates/`, `test/verify/` and `tools/`. You read them; you do not change them.
 - Never kill processes (`kill`, `pkill`, `killall`, `fuser -k`).
 - If the test server will not start or a test fails for a reason outside `src/`, stop working on it. Write the exact error message in `status.md` under "Known Issues / Notes" and finish the run. A human will fix the test setup.

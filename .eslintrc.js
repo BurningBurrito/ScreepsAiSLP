@@ -73,6 +73,21 @@ module.exports = {
     "no-invalid-this": "off",
     "no-multiple-empty-lines": "off",
     "no-new-wrappers": "error",
+    "no-restricted-syntax": [
+      "warn",
+      {
+        selector: "NewExpression[callee.name='RoomPosition'][arguments.0.type='Literal']",
+        message: "Positions come from room objects and terrain at run time, never from number literals (rule 02b)."
+      },
+      {
+        selector: "CallExpression[callee.property.name='createConstructionSite'][arguments.0.type='Literal']",
+        message: "Construction site positions are computed, never number literals (rule 02b)."
+      },
+      {
+        selector: "CallExpression[callee.object.name='Math'][callee.property.name='random']",
+        message: "Random moves and random placement are forbidden (rule 02b): compute a target instead."
+      }
+    ],
     "no-shadow": "off",
     "no-throw-literal": "error",
     "no-trailing-spaces": "off",
