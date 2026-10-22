@@ -1,4 +1,4 @@
-/**
+/** 
  * Harvester Role
  * Harvests energy from sources and transfers it to spawns, extensions, towers, and upgrades controller.
  */
@@ -40,8 +40,6 @@ export function runHarvester(creep: Creep): void
         if (harvestResult === ERR_NOT_IN_RANGE)
         {
             // Move toward source to harvest
-            // Only move to spawn range if we're very close to the spawn already
-            // (to quickly deliver energy when full)
             const sourceRange = creep.pos.getRangeTo(source);
             if (sourceRange > 1)
             {
@@ -50,7 +48,6 @@ export function runHarvester(creep: Creep): void
             else
             {
                 // Already at source, try to harvest again next tick
-                // Or if we're close to spawn, move to spawn to deliver
                 const spawn = creep.pos.findClosestByPath(FIND_MY_SPAWNS);
                 if (spawn !== null && creep.pos.getRangeTo(spawn) <= 3)
                 {
@@ -65,6 +62,7 @@ export function runHarvester(creep: Creep): void
 
     // Try to transfer to spawns first
     const spawns = creep.room.find(FIND_MY_SPAWNS);
+    let deliveredToSpawn = false;
     for (const spawn of spawns)
     {
         const freeCapacity = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
@@ -74,65 +72,39 @@ export function runHarvester(creep: Creep): void
             if (transferResult === ERR_NOT_IN_RANGE)
             {
                 const moveResult = creep.moveTo(spawn, { ignoreCreeps: true, range: 1, maxRooms: 1 });
-                // Only drop energy if we've been trying for a while or truly can't reach
+                // If we can't reach the spawn, drop energy and switch to harvesting
                 if (moveResult === ERR_NO_PATH || moveResult === ERR_INVALID_TARGET)
-                {
-                    // Track consecutive failures to avoid dropping energy prematurely
-                    const failedAttempts = creep.memory.failedTransferAttempts || 0;
-                    if (failedAttempts >= 3)
-                    {
-                        creep.drop(RESOURCE_ENERGY);
-                        creep.memory.working = false;
-                        creep.memory.failedTransferAttempts = 0;
-                    }
-                    else
-                    {
-                        creep.memory.failedTransferAttempts = failedAttempts + 1;
-                    }
-                }
-                else
-                {
-                    // Reset failure count on successful movement attempt
-                    creep.memory.failedTransferAttempts = 0;
-                }
-            }
-            else if (transferResult === ERR_NO_PATH)
-            {
-                const failedAttempts = creep.memory.failedTransferAttempts || 0;
-                if (failedAttempts >= 3)
                 {
                     creep.drop(RESOURCE_ENERGY);
                     creep.memory.working = false;
-                    creep.memory.failedTransferAttempts = 0;
-                }
-                else
-                {
-                    creep.memory.failedTransferAttempts = failedAttempts + 1;
+                    return;
                 }
             }
             else if (transferResult === OK)
             {
-                // Successful transfer, reset failure count
-                creep.memory.failedTransferAttempts = 0;
+                deliveredToSpawn = true;
             }
-            return;
+            break; // Only try one spawn
         }
     }
-
-    // Try to transfer to extensions
-    const extensions = creep.room.find(FIND_STRUCTURES, {
-        filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
-    });
-    for (const extension of extensions)
+    
+    // If we couldn't deliver to spawn (no free capacity or couldn't reach), try extensions
+    if (!deliveredToSpawn && creep.store[RESOURCE_ENERGY] > 0)
     {
-        const freeCapacity = (extension as StructureExtension).store.getFreeCapacity(RESOURCE_ENERGY);
-        if (freeCapacity !== null && freeCapacity > 0)
+        const extensions = creep.room.find(FIND_STRUCTURES, {
+            filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
+        });
+        for (const extension of extensions)
         {
-            if (creep.transfer(extension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+            const freeCapacity = (extension as StructureExtension).store.getFreeCapacity(RESOURCE_ENERGY);
+            if (freeCapacity !== null && freeCapacity > 0)
             {
-                creep.moveTo(extension, { ignoreCreeps: true, range: 1 });
+                if (creep.transfer(extension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+                {
+                    creep.moveTo(extension, { ignoreCreeps: true, range: 1 });
+                }
+                return;
             }
-            return;
         }
     }
 
@@ -171,6 +143,9 @@ export function runHarvester(creep: Creep): void
         }
 
         // Check extensions
+        const extensions = creep.room.find(FIND_STRUCTURES, {
+            filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
+        });
         if (allStorageFull)
         {
             for (const ext of extensions)
@@ -202,14 +177,11 @@ export function runHarvester(creep: Creep): void
             const upgradeResult = creep.upgradeController(controller);
             if (upgradeResult === ERR_NOT_IN_RANGE)
             {
-                // If we can't reach the controller, drop the energy and switch to harvesting
-                // This prevents the harvester from standing still with full energy
                 creep.drop(RESOURCE_ENERGY);
                 creep.memory.working = false;
             }
             else if (upgradeResult === OK)
             {
-                // Successfully upgraded, check if we're still full
                 if (creep.store[RESOURCE_ENERGY] === 0)
                 {
                     creep.memory.working = false;
@@ -218,14 +190,12 @@ export function runHarvester(creep: Creep): void
         }
         else
         {
-            // Storage is not full but we couldn't find a target - drop energy and switch to harvesting
             creep.drop(RESOURCE_ENERGY);
             creep.memory.working = false;
         }
     }
     else
     {
-        // No controller - drop energy and switch to harvesting
         creep.drop(RESOURCE_ENERGY);
         creep.memory.working = false;
     }

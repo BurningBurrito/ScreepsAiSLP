@@ -1,13 +1,14 @@
 /** 
  * Upgrader Role
  * Upgrades the controller to increase colony level.
- * Upgraders go directly to the controller and upgrade from their stored energy.
- * They harvest from sources only if their store runs low.
+ * Upgraders harvest directly from sources only - they do NOT take energy from spawns.
+ * This prevents energy from going in circles (spawn -> upgrader -> controller).
  */
 
 /**
  * Runs the upgrader creep behavior.
- * Goes directly to the controller to upgrade, only harvesting if store is low.
+ * Harvests directly from sources, then upgrades the controller.
+ * Never takes energy from spawns - that's the harvester's job.
  * @param creep The upgrader creep to run
  */
 export function runUpgrader(creep: Creep): void
@@ -50,23 +51,9 @@ export function runUpgrader(creep: Creep): void
     }
     else
     {
-        // Creep is nearly empty, try to pick up energy first from spawn/extension
-        // If the spawn has energy, prioritize it (it's the colony's central storage)
-        // Otherwise, fall through to harvesting from sources
-        const spawns = creep.room.find(FIND_MY_SPAWNS);
-        const spawnWithEnergy = spawns.find(sp => sp.store.getUsedCapacity(RESOURCE_ENERGY) > 0);
-        
-        if (spawnWithEnergy !== undefined)
-        {
-            if (creep.withdraw(spawnWithEnergy, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-            {
-                console.log(`[${tick}] ${creepName} moving to spawn (range ${creep.pos.getRangeTo(spawnWithEnergy)})`);
-                creep.moveTo(spawnWithEnergy, { ignoreCreeps: true, reusePath: 5 });
-            }
-            return; // Try again next tick after picking up energy
-        }
-
-        // Priority 2: harvest from sources if nothing else available
+        // Creep is nearly empty - harvest directly from sources
+        // Do NOT take energy from spawns (that's the harvester's job)
+        // This prevents energy from going in circles
         const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
         if (source !== null)
         {

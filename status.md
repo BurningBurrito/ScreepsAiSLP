@@ -1,9 +1,17 @@
 # ScreepsAiSLP Status
 
 ## Current State
-M1 complete: basic economy with harvesters, haulers, upgraders, and builders. Colony reaches RCL 2 by tick 640. Harvester creeps properly handle moveTo failures (ERR_NO_PATH, ERR_INVALID_TARGET) by dropping energy and switching back to harvesting mode, preventing freezing. Extensions and roads are built with proper placement layouts.
+M3 in progress: build priorities, layout and a tower. M2 acceptance test was failing (no extensions built), M1 had issues with harvester freezing and energy going in circles. Fixes implemented:
+- Harvester now drops energy and switches to harvesting when it can't reach spawn with ERR_NO_PATH or ERR_INVALID_TARGET
+- Upgrader no longer takes energy from spawns (prevents energy going in circles), only harvests directly from sources
+- All unit tests passing
 
 ## Change Log
+### 2026-10-22
+- Fixed harvester: drops energy when it can't reach spawn (ERR_NO_PATH/ERR_INVALID_TARGET) instead of freezing
+- Fixed upgrader: no longer withdraws energy from spawns, only harvests directly from sources
+- Updated unit test mock to include drop() method
+
 ### 2026-10-21
 - Fixed M1 acceptance test: harvester now drops energy when it cannot deliver to any target, preventing it from freezing (standing still with unchanged energy for 30+ ticks)
 - Changed harvester priority: spawn first, then extensions, then towers (was: extensions first)
@@ -47,7 +55,6 @@ M1 complete: basic economy with harvesters, haulers, upgraders, and builders. Co
 
 ## In Progress
 - M3: build priorities, layout and a tower
-- M1 acceptance test passes: 8 creeps (2 harvester, 2 hauler, 2 upgrader, 2 builder), RCL 2 reached at tick 640, 2986 energy harvested
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)

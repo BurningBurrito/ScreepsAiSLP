@@ -61,6 +61,7 @@ describe("harvester", () => {
       upgradeController: () => { upgradeControllerCallCount++; return OK; },
       transfer: (target: any, resourceType: ResourceConstant) => { transferCallCount++; return ERR_NOT_IN_RANGE; },
       harvest: () => ERR_NOT_IN_RANGE,
+      drop: () => {},
     };
 
     runHarvester(creep);
