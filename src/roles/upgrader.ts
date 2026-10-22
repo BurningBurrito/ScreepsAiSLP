@@ -18,6 +18,14 @@ export function runUpgrader(creep: Creep): void
         return; // No controller in room
     }
 
+    // Debug: log controller position
+    if (Game.time % 100 === 0)
+    {
+        const x: number = controller.pos.x;
+        const y: number = controller.pos.y;
+        console.log(`[upgrader] Controller at (${x}, ${y})`);
+    }
+
     // Update working state based on store capacity
     if (creep.memory.working && creep.store[RESOURCE_ENERGY] === 0)
     {
@@ -40,23 +48,38 @@ export function runUpgrader(creep: Creep): void
 
         if (creep.harvest(source) === ERR_NOT_IN_RANGE)
         {
-            creep.moveTo(source, { ignoreCreeps: true, range: 1 });
+            const sourcePos = source.pos;
+            
+            // Always try to move towards source using directional movement
+            // This is more reliable than moveTo when paths are blocked
+            const direction = creep.pos.getDirectionTo(sourcePos);
+            creep.move(direction);
             return;
         }
+        // If we harvested successfully but are still not full, continue harvesting
+        // (this handles the case where harvest returned ERR_NOT_IN_RANGE but we were in range)
+        return;
     }
 
-    // Upgrade the controller
+    // If working (full store), upgrade the controller
     const controllerPos = controller.pos;
     const rangeToController = creep.pos.getRangeTo(controllerPos);
 
     if (rangeToController > 3)
     {
-        const moveResult = creep.moveTo(controllerPos, { ignoreCreeps: true, range: 3 });
-        // Fall back to directional movement if pathfinding fails (e.g., blocked by terrain)
-        if (moveResult === ERR_NO_PATH || moveResult === ERR_NOT_FOUND)
+        // Get direction to controller regardless of pathing state
+        const direction = creep.pos.getDirectionTo(controllerPos);
+        
+        // Always try to move in the direction of the controller
+        // This is critical for making progress when moveTo fails due to walls or pathing issues
+        const moveResult = creep.move(direction);
+        
+        // If move fails, log for debugging (but don't block execution)
+        if (moveResult !== OK && Game.time % 50 === 0)
         {
-            const direction = creep.pos.getDirectionTo(controllerPos);
-            creep.move(direction);
+            const x: number = creep.pos.x;
+            const y: number = creep.pos.y;
+            console.log(`[upgrader] Move failed: ${moveResult} at (${x}, ${y})`);
         }
     }
     else

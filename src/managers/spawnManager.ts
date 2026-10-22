@@ -72,8 +72,10 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
                 // Then WORK (needed for harvesting/upgrading/building)
                 // Order: MOVE first (can't function without movement), then CARRY, then WORK
                 
-                // First, ensure at least 1 MOVE part (required for movement)
-                const energyAfterMove = energyAvailable - 50; // Reserve for 1 MOVE
+                // For upgraders, add extra MOVE parts to reduce fatigue accumulation
+                // With 2 MOVE parts and 2 non-MOVE parts, fatigue is neutral (no accumulation)
+                // First, ensure at least 2 MOVE parts for better movement efficiency
+                const energyAfterMove = energyAvailable - 100; // Reserve for 2 MOVE
                 if (energyAfterMove > 0)
                 {
                     // Then ensure at least 1 CARRY part (required for storing energy)
@@ -83,23 +85,47 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
                         // Then add WORK parts
                         const work = Math.min(MIN_BODY_PARTS.work, Math.floor(energyAfterCarry / 100));
                         
-                        moveParts = 1;
+                        moveParts = 2;
                         carryParts = 1;
                         
-                        return work;
+                        // Ensure at least 1 WORK part for these roles - they can't function without WORK
+                        return Math.max(1, work);
                     }
                     else
                     {
-                        // Can afford MOVE but not CARRY
-                        // For harvester/upgrader/builder, we need CARRY to store energy and WORK to do work
-                        // If energy is between 50 and 150, we can't spawn a useful creep
-                        return 0; // Can't spawn useful creep
+                        // Can afford CARRY but not WORK
+                        // We still need WORK for these roles, so add 1 WORK part even if it's minimal
+                        moveParts = 2;
+                        carryParts = 1;
+                        return 1;  // At least 1 WORK part is essential
                     }
                 }
                 else
                 {
-                    // Can't afford even 1 MOVE part, can't spawn a useful creep
-                    return 0;
+                    // Can't afford even 2 MOVE parts, try with 1 MOVE
+                    const energyAfterMove1 = energyAvailable - 50;
+                    if (energyAfterMove1 > 0)
+                    {
+                        const energyAfterCarry = energyAfterMove1 - 50;
+                        if (energyAfterCarry > 0)
+                        {
+                            const work = Math.min(MIN_BODY_PARTS.work, Math.floor(energyAfterCarry / 100));
+                            moveParts = 1;
+                            carryParts = 1;
+                            return Math.max(1, work);
+                        }
+                        else
+                        {
+                            moveParts = 1;
+                            carryParts = 1;
+                            return 1;
+                        }
+                    }
+                    else
+                    {
+                        // Can't afford even 1 MOVE part, can't spawn a useful creep
+                        return 0;
+                    }
                 }
             }
             else
@@ -224,24 +250,48 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     }
     else if (role === "upgrader")
     {
-        // For upgraders, prioritize WORK parts first (to upgrade faster)
-        // But always ensure at least 1 MOVE part for mobility
-        // Upgraders upgrade directly with WORK - they don't need CARRY
-        // Ensure at least 1 MOVE part before adding WORK
+        // For upgraders, prioritize MOVE parts first (to reduce fatigue and move efficiently)
+        // Then WORK parts (to upgrade faster), then CARRY (to store energy)
+        // Ensure at least 2 MOVE parts for neutral fatigue (2 MOVE removes 4 fatigue/tick)
+        // With 2 WORK + 2 CARRY = 4 non-MOVE parts, we need at least 2 MOVE for neutral fatigue
         
-        // Reserve 50 energy for at least 1 MOVE part
-        const energyForMove = remainingEnergy >= 50 ? 50 : 0;
+        // Reserve 100 energy for at least 2 MOVE parts (for neutral fatigue)
+        // This ensures upgraders can move efficiently even with multiple non-MOVE parts
+        const energyForMove = remainingEnergy >= 100 ? 100 : (remainingEnergy >= 50 ? 50 : 0);
         remainingEnergy -= energyForMove;
-        if (energyForMove > 0)
+        for (let i = 0; i < energyForMove / 50; i++)
         {
             body.push(MOVE);
         }
         
-        // Add WORK parts with remaining energy
+        // Reserve 100 energy for at least 1 WORK part
+        const energyForWork = remainingEnergy >= 100 ? 100 : (remainingEnergy >= 50 ? 50 : 0);
+        remainingEnergy -= energyForWork;
+        if (energyForWork >= 50)
+        {
+            body.push(WORK);
+        }
+        
+        // Reserve 50 energy for at least 1 CARRY part
+        const energyForCarry = remainingEnergy >= 50 ? 50 : 0;
+        remainingEnergy -= energyForCarry;
+        if (energyForCarry >= 50)
+        {
+            body.push(CARRY);
+        }
+        
+        // Add more WORK parts if we have enough energy (upgrade speed scales with WORK parts)
         while (remainingEnergy >= 100)
         {
             body.push(WORK);
             remainingEnergy -= 100;
+        }
+        
+        // Add more CARRY parts to increase energy storage
+        while (remainingEnergy >= 50)
+        {
+            body.push(CARRY);
+            remainingEnergy -= 50;
         }
         
         // Add more MOVE if there's energy (1 MOVE per 2 other parts on plain terrain)
@@ -322,8 +372,10 @@ function spawnCreep(role: string, room: Room): string | null
     // Ensure body has at least one of each: WORK, CARRY, MOVE
     // (Haulers don't need WORK parts, just CARRY and MOVE)
     // (Harvesters can work without CARRY initially - they can harvest without CARRY parts)
+    // (Upgraders can work without CARRY - they harvest directly from sources)
     const isHauler = role === "hauler";
     const isHarvester = role === "harvester";
+    const isUpgrader = role === "upgrader";
     const hasWork = body.some((part) => part === WORK);
     const hasCarry = body.some((part) => part === CARRY);
     const hasMove = body.some((part) => part === MOVE);
@@ -344,6 +396,19 @@ function spawnCreep(role: string, room: Room): string | null
             else
             {
                 return null; // Body doesn't have WORK and MOVE - can't harvest
+            }
+        }
+        else if (isUpgrader)
+        {
+            // Upgraders can work without CARRY - they harvest directly from sources
+            // They only need WORK (to upgrade) and MOVE (to move)
+            if (hasWork && hasMove)
+            {
+                // Can spawn upgrader without CARRY
+            }
+            else
+            {
+                return null; // Body doesn't have WORK and MOVE - can't upgrade
             }
         }
         else
