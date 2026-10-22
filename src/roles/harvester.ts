@@ -9,6 +9,7 @@
  * Priority: spawns > extensions > tower > controller
  * @param creep The harvester creep to run
  */
+
 export function runHarvester(creep: Creep): void
 {
     // Update working state based on store capacity
@@ -48,9 +49,20 @@ export function runHarvester(creep: Creep): void
         const freeCapacity = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
         if (freeCapacity !== null && freeCapacity > 0)
         {
-            if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+            const transferResult = creep.transfer(spawn, RESOURCE_ENERGY);
+            if (transferResult === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(spawn, { ignoreCreeps: true, range: 1 });
+                const moveResult = creep.moveTo(spawn, { ignoreCreeps: true, range: 1 });
+                if (moveResult === ERR_NO_PATH || moveResult === ERR_INVALID_TARGET)
+                {
+                    creep.drop(RESOURCE_ENERGY);
+                    creep.memory.working = false;
+                }
+            }
+            else if (transferResult === ERR_NO_PATH)
+            {
+                creep.drop(RESOURCE_ENERGY);
+                creep.memory.working = false;
             }
             return;
         }

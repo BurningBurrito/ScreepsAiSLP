@@ -1,19 +1,19 @@
-# Scorecard: smoke · 2026-10-22 00:55 · 500 ticks · commit 8818ed8
+# Scorecard: smoke · 2026-10-22 01:30 · 500 ticks · commit 81760db
 
-| Metric (last 200 ticks unless noted) | This run | Previous run (2026-10-22 00:47, 8818ed8) | Change |
+| Metric (last 200 ticks unless noted) | This run | Previous run (2026-10-22 01:25, 81760db) | Change |
 | --- | --- | --- | --- |
-| Energy harvested / tick | 3.97 | 3.04 | +0.93 |
-| Energy wasted at source regeneration (sum) | 910 | 950 | -40 |
+| Energy harvested / tick | 3.97 | 3.97 | 0 |
+| Energy wasted at source regeneration (sum) | 910 | 910 | 0 |
 | Controller progress / tick | 0.5 | 0.5 | 0 |
 | Construction progress / tick | 0 | 0 | 0 |
-| Energy delivered to spawn and extensions / tick | 21.1 | 18.1 | +3 |
-| Spawn idle while energy is full | 24 % | 40 % | -16 pts |
+| Energy delivered to spawn and extensions / tick | 21.1 | 21.1 | 0 |
+| Spawn idle while energy is full | 24 % | 24 % | 0 pts |
 | Spawn busy | 4 % | 4 % | 0 pts |
-| Creep ticks idle (no action, no move for 5+ ticks) | 39 % | 33 % | +6 pts |
-| CPU / tick (average, max) | 2.15, 5.8 | 1.87, 7.31 | +0.28 |
+| Creep ticks idle (no action, no move for 5+ ticks) | 39 % | 39 % | 0 pts |
+| CPU / tick (average, max) | 2.15, 5.72 | 2.16, 5.84 | -0.01 |
 | RCL / progress at end (whole run) | 1 / 100 | 1 / 100 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
-| Energy harvested (whole run) | 1,882 | 1,658 | +224 |
+| Energy harvested (whole run) | 1,882 | 1,882 | 0 |
 | Build energy spent on roads (share of all build energy) | 0 % | 0 % | 0 pts |
 | Road tiles: total / on wall / disconnected from the spawn network (end) | 0 / 0 / 0 | 0 / 0 / 0 | 0 |
 | Roads reach (end): sources, controller | 0 of 2, no | 0 of 2, no |  |

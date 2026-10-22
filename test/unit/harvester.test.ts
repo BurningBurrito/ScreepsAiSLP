@@ -31,6 +31,10 @@ describe("harvester", () => {
     global.RESOURCE_ENERGY = "energy";
     // @ts-ignore
     global.ERR_NOT_IN_RANGE = -9;
+    // @ts-ignore
+    global.ERR_NO_PATH = -4;
+    // @ts-ignore
+    global.ERR_INVALID_TARGET = -8;
   });
 
   it("transfers to spawn when spawn has free capacity and creep has partial energy", () => {
