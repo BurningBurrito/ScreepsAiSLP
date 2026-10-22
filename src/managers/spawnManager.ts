@@ -52,12 +52,29 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     if (maxSets < 1)
     {
         // If we can't afford even one set, try to make a minimal creep
-        // Prioritize MOVE parts since they're essential for movement
-        const moveParts = Math.min(MIN_BODY_PARTS.move, Math.floor(energyAvailable / 50));
-        const energyAfterMove = energyAvailable - moveParts * 50;
-        const carryParts = Math.min(MIN_BODY_PARTS.carry, Math.floor(energyAfterMove / 50));
-        const energyAfterCarry = energyAfterMove - carryParts * 50;
-        const workParts = Math.min(MIN_BODY_PARTS.work, Math.floor(energyAfterCarry / 100));
+        // For haulers, prioritize CARRY over MOVE since they need CARRY to be useful
+        // For other roles, prioritize MOVE since they need it to move to harvest/transfer
+        let moveParts: number;
+        let carryParts: number;
+        const workParts: number = ((): number =>
+        {
+            if (role === "hauler")
+            {
+                // Prioritize CARRY for haulers
+                carryParts = Math.min(MIN_BODY_PARTS.carry, Math.floor(energyAvailable / 50));
+                const energyAfterCarry = energyAvailable - carryParts * 50;
+                moveParts = Math.min(MIN_BODY_PARTS.move, Math.floor(energyAfterCarry / 50));
+            }
+            else
+            {
+                // Prioritize MOVE for other roles
+                moveParts = Math.min(MIN_BODY_PARTS.move, Math.floor(energyAvailable / 50));
+                const energyAfterMove = energyAvailable - moveParts * 50;
+                carryParts = Math.min(MIN_BODY_PARTS.carry, Math.floor(energyAfterMove / 50));
+            }
+
+            return Math.min(MIN_BODY_PARTS.work, Math.floor((energyAvailable - moveParts * 50 - carryParts * 50) / 100));
+        })();
 
         for (let i = 0; i < workParts; i++) body.push(WORK);
         for (let i = 0; i < carryParts; i++) body.push(CARRY);

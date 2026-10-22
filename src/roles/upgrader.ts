@@ -47,9 +47,9 @@ export function runUpgrader(creep: Creep): void
 
     // Upgrade the controller
     const controllerPos = controller.pos;
-    if (creep.pos.getRangeTo(controllerPos) > 0)
+    if (creep.pos.getRangeTo(controllerPos) > 3)
     {
-        creep.moveTo(controllerPos, { ignoreCreeps: true, range: 0 });
+        creep.moveTo(controllerPos, { ignoreCreeps: true, range: 3 });
     }
     else
     {
