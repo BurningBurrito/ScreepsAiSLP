@@ -337,17 +337,18 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[]): void
 
     for (const pos of roadPositions)
     {
-        // Skip if too close to controller (range 1)
+        // Skip if too close to controller (range 1) - keep controller area clear
         if (controller !== null && pos.getRangeTo(controller) <= 1)
         {
             continue;
         }
 
-        // Skip if too close to sources (range 1) - harvester needs to be on source tile
+        // Skip if too close to sources (range 1) - harvester needs to be on source tile,
+        // but roads should be on adjacent tiles where harvesters walk to
         let tooCloseToSource = false;
         for (const source of sources)
         {
-            if (pos.getRangeTo(source.pos) <= 1)
+            if (pos.getRangeTo(source.pos) < 1)
             {
                 tooCloseToSource = true;
                 break;
@@ -460,25 +461,104 @@ function areSourcesAndControllerConnected(room: Room, roadPaths: RoomPosition[])
         return false;
     }
     
-    // Check if sources are connected (roads exist on path to sources)
+    // First, collect all tiles that have roads (built or sites)
+    const roadTiles = new Set<string>();
+    const structures = room.find(FIND_STRUCTURES);
+    for (const structure of structures)
+    {
+        if (structure.structureType === STRUCTURE_ROAD)
+        {
+            roadTiles.add(String(structure.pos.x) + ',' + String(structure.pos.y));
+        }
+    }
+    const sites = room.find(FIND_CONSTRUCTION_SITES);
+    for (const site of sites)
+    {
+        if (site.structureType === STRUCTURE_ROAD)
+        {
+            roadTiles.add(String(site.pos.x) + ',' + String(site.pos.y));
+        }
+    }
+    
+    // Flood fill from the spawn to find all connected road tiles
+    const connectedTiles = new Set<string>();
+    const queue: [number, number][] = [];
+    
+    // Check if spawn tile has a road
+    const spawnKey = String(spawn.x) + ',' + String(spawn.y);
+    if (roadTiles.has(spawnKey))
+    {
+        connectedTiles.add(spawnKey);
+        queue.push([spawn.x, spawn.y]);
+    }
+    else
+    {
+        // If spawn doesn't have a road, start from spawn position anyway
+        queue.push([spawn.x, spawn.y]);
+    }
+    
+    while (queue.length > 0)
+    {
+        const [x, y] = queue.shift()!;
+        
+        // Check all 8 neighbors
+        for (let dx = -1; dx <= 1; dx++)
+        {
+            for (let dy = -1; dy <= 1; dy++)
+            {
+                if (dx === 0 && dy === 0)
+                {
+                    continue;
+                }
+                
+                const nx = x + dx;
+                const ny = y + dy;
+                
+                // Check bounds
+                if (nx < 0 || nx > 49 || ny < 0 || ny > 49)
+                {
+                    continue;
+                }
+                
+                const nkey = String(nx) + ',' + String(ny);
+                
+                // Skip if already visited
+                if (connectedTiles.has(nkey))
+                {
+                    continue;
+                }
+                
+                // Check if neighbor has a road
+                if (roadTiles.has(nkey))
+                {
+                    connectedTiles.add(nkey);
+                    queue.push([nx, ny]);
+                }
+            }
+        }
+    }
+    
+    // Check if sources are connected (road tile adjacent to source)
     const sources = getSources(room);
     for (const source of sources)
     {
         let sourceConnected = false;
-        for (const pos of roadPaths)
+        // Check all tiles adjacent to source (range 1)
+        for (let dx = -1; dx <= 1; dx++)
         {
-            if (pos.x === source.pos.x && pos.y === source.pos.y)
+            for (let dy = -1; dy <= 1; dy++)
             {
-                // This position is on the road path - check if there's a road here
-                const structures = pos.lookFor(LOOK_STRUCTURES);
-                for (const structure of structures)
+                const nx = source.pos.x + dx;
+                const ny = source.pos.y + dy;
+                const nkey = String(nx) + ',' + String(ny);
+                if (connectedTiles.has(nkey))
                 {
-                    if (structure.structureType === STRUCTURE_ROAD)
-                    {
-                        sourceConnected = true;
-                        break;
-                    }
+                    sourceConnected = true;
+                    break;
                 }
+            }
+            if (sourceConnected)
+            {
                 break;
             }
         }
@@ -488,24 +568,26 @@ function areSourcesAndControllerConnected(room: Room, roadPaths: RoomPosition[])
         }
     }
     
-    // Check if controller is connected
+    // Check if controller is connected (road tile within range 3 of controller)
     const controllerPos = getControllerPosition(room);
     if (controllerPos !== null)
     {
         let controllerConnected = false;
-        for (const pos of roadPaths)
+        for (let dx = -3; dx <= 3; dx++)
         {
-            if (pos.x === controllerPos.x && pos.y === controllerPos.y)
+            for (let dy = -3; dy <= 3; dy++)
             {
-                const structures = pos.lookFor(LOOK_STRUCTURES);
-                for (const structure of structures)
+                const nx = controllerPos.x + dx;
+                const ny = controllerPos.y + dy;
+                const nkey = String(nx) + ',' + String(ny);
+                if (connectedTiles.has(nkey))
                 {
-                    if (structure.structureType === STRUCTURE_ROAD)
-                    {
-                        controllerConnected = true;
-                        break;
-                    }
+                    controllerConnected = true;
+                    break;
                 }
+            }
+            if (controllerConnected)
+            {
                 break;
             }
         }

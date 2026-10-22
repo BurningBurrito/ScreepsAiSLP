@@ -47,12 +47,30 @@ export function runUpgrader(creep: Creep): void
 
     // Upgrade the controller
     const controllerPos = controller.pos;
-    if (creep.pos.getRangeTo(controllerPos) > 3)
+    const rangeToController = creep.pos.getRangeTo(controllerPos);
+    
+    // Log debug info every 100 ticks
+    if (Game.time % 100 === 0)
     {
-        creep.moveTo(controllerPos, { ignoreCreeps: true, range: 3 });
+        console.log(`Upgrader ${creep.name}: range=${rangeToController}, working=${String(creep.memory.working)}, store=${creep.store[RESOURCE_ENERGY]}/50, pos=(${creep.pos.x},${creep.pos.y})`);
+    }
+    
+    if (rangeToController > 3)
+    {
+        const moveResult = creep.moveTo(controllerPos, { ignoreCreeps: true, range: 3 });
+        // Fall back to directional movement if pathfinding fails (e.g., blocked by terrain)
+        if (moveResult === ERR_NO_PATH || moveResult === ERR_NOT_FOUND)
+        {
+            const direction = creep.pos.getDirectionTo(controllerPos);
+            creep.move(direction);
+        }
     }
     else
     {
-        creep.upgradeController(controller);
+        const upgradeResult = creep.upgradeController(controller);
+        if (Game.time % 100 === 0)
+        {
+            console.log(`Upgrader ${creep.name}: upgradeResult=${upgradeResult}`);
+        }
     }
 }

@@ -53,9 +53,9 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     {
         // If we can't afford even one set, try to make a minimal creep
         // For haulers, prioritize CARRY over MOVE since they need CARRY to be useful
-        // For other roles, prioritize MOVE since they need it to move to harvest/transfer
-        let moveParts: number;
-        let carryParts: number;
+        // For roles that need WORK, prioritize WORK parts first
+        let moveParts = 0;
+        let carryParts = 0;
         const workParts: number = ((): number =>
         {
             if (role === "hauler")
@@ -64,16 +64,43 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
                 carryParts = Math.min(MIN_BODY_PARTS.carry, Math.floor(energyAvailable / 50));
                 const energyAfterCarry = energyAvailable - carryParts * 50;
                 moveParts = Math.min(MIN_BODY_PARTS.move, Math.floor(energyAfterCarry / 50));
+                return 0; // Haulers don't need WORK parts
+            }
+            else if (role === "upgrader" || role === "harvester" || role === "builder")
+            {
+                // Prioritize WORK parts first for these roles (they need WORK to function)
+                // Then CARRY (they need CARRY to store harvested energy)
+                // Then MOVE (they need MOVE to move to targets)
+                
+                // First, ensure at least 1 CARRY part (required for storing energy)
+                const energyAfterCarry = energyAvailable - 50; // Reserve for 1 CARRY
+                if (energyAfterCarry > 0)
+                {
+                    // Then prioritize WORK
+                    const work = Math.min(MIN_BODY_PARTS.work, Math.floor(energyAfterCarry / 100));
+                    const energyAfterWork = energyAfterCarry - work * 100;
+                    
+                    // Then MOVE
+                    moveParts = Math.min(MIN_BODY_PARTS.move, Math.floor(energyAfterWork / 50));
+                    
+                    carryParts = 1;
+                    
+                    return work;
+                }
+                else
+                {
+                    // Can't even afford 1 CARRY part, can't spawn a useful creep
+                    return 0;
+                }
             }
             else
             {
-                // Prioritize MOVE for other roles
+                // Default: prioritize MOVE, then CARRY, then WORK
                 moveParts = Math.min(MIN_BODY_PARTS.move, Math.floor(energyAvailable / 50));
                 const energyAfterMove = energyAvailable - moveParts * 50;
                 carryParts = Math.min(MIN_BODY_PARTS.carry, Math.floor(energyAfterMove / 50));
+                return Math.min(MIN_BODY_PARTS.work, Math.floor((energyAvailable - moveParts * 50 - carryParts * 50) / 100));
             }
-
-            return Math.min(MIN_BODY_PARTS.work, Math.floor((energyAvailable - moveParts * 50 - carryParts * 50) / 100));
         })();
 
         for (let i = 0; i < workParts; i++) body.push(WORK);
@@ -83,15 +110,28 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
         return body;
     }
 
-    // Add full sets of body parts (haulers don't need WORK parts)
+    // Add full sets of body parts (haulers don't need WORK parts, upgraders don't need CARRY)
     for (let i = 0; i < maxSets; i++)
     {
-        if (role !== "hauler")
+        if (role === "hauler")
         {
-            body.push(WORK);
+            // Haulers: CARRY + MOVE only
+            body.push(CARRY);
+            body.push(MOVE);
         }
-        body.push(CARRY);
-        body.push(MOVE);
+        else if (role === "upgrader")
+        {
+            // Upgraders: WORK + MOVE only (no CARRY needed)
+            body.push(WORK);
+            body.push(MOVE);
+        }
+        else
+        {
+            // Harvesters, builders: WORK + CARRY + MOVE
+            body.push(WORK);
+            body.push(CARRY);
+            body.push(MOVE);
+        }
     }
 
     // Use remaining energy to add parts
@@ -101,6 +141,11 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     if (role === "builder")
     {
         // Add extra WORK parts first (builders need WORK for efficient building)
+        // But ensure at least 1 MOVE part first
+        const energyForMove = remainingEnergy >= 50 ? 50 : 0;
+        remainingEnergy -= energyForMove;
+        body.push(MOVE);
+        
         while (remainingEnergy >= 100)
         {
             body.push(WORK);
@@ -114,7 +159,7 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
             remainingEnergy -= 50;
         }
 
-        // Finally add MOVE parts
+        // Finally add more MOVE parts
         while (remainingEnergy >= 50)
         {
             body.push(MOVE);
@@ -125,16 +170,18 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     {
         // For haulers, prioritize CARRY parts first (for carrying energy)
         // Haulers don't need WORK parts - they just transport energy
+        // Ensure at least 2 MOVE parts (MIN_BODY_PARTS.move)
+        const energyForMove = remainingEnergy >= 100 ? 100 : (remainingEnergy >= 50 ? 50 : 0);
+        remainingEnergy -= energyForMove;
+        for (let i = 0; i < energyForMove / 50; i++)
+        {
+            body.push(MOVE);
+        }
+        
+        // Then add CARRY parts with remaining energy
         while (remainingEnergy >= 50)
         {
             body.push(CARRY);
-            remainingEnergy -= 50;
-        }
-
-        // Then add extra MOVE parts
-        while (remainingEnergy >= 50)
-        {
-            body.push(MOVE);
             remainingEnergy -= 50;
         }
     }
@@ -142,6 +189,11 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     {
         // For harvesters, prioritize WORK parts first (to harvest more energy)
         // Then CARRY to deliver, then MOVE to move
+        // Ensure at least 1 MOVE part before adding WORK
+        const energyForMove = remainingEnergy >= 50 ? 50 : 0;
+        remainingEnergy -= energyForMove;
+        body.push(MOVE);
+        
         while (remainingEnergy >= 100)
         {
             body.push(WORK);
@@ -152,6 +204,7 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
             body.push(CARRY);
             remainingEnergy -= 50;
         }
+        // Add more MOVE if there's energy
         while (remainingEnergy >= 50)
         {
             body.push(MOVE);
@@ -160,18 +213,27 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     }
     else if (role === "upgrader")
     {
-        // For upgraders, prioritize WORK parts first (to harvest more energy)
-        // Then CARRY to hold, then MOVE to move
+        // For upgraders, prioritize WORK parts first (to upgrade faster)
+        // But always ensure at least 1 MOVE part for mobility
+        // Upgraders upgrade directly with WORK - they don't need CARRY
+        // Ensure at least 1 MOVE part before adding WORK
+        
+        // Reserve 50 energy for at least 1 MOVE part
+        const energyForMove = remainingEnergy >= 50 ? 50 : 0;
+        remainingEnergy -= energyForMove;
+        if (energyForMove > 0)
+        {
+            body.push(MOVE);
+        }
+        
+        // Add WORK parts with remaining energy
         while (remainingEnergy >= 100)
         {
             body.push(WORK);
             remainingEnergy -= 100;
         }
-        while (remainingEnergy >= 50)
-        {
-            body.push(CARRY);
-            remainingEnergy -= 50;
-        }
+        
+        // Add more MOVE if there's energy (1 MOVE per 2 other parts on plain terrain)
         while (remainingEnergy >= 50)
         {
             body.push(MOVE);
