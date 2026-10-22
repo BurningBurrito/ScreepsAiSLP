@@ -32,6 +32,7 @@ function mainLoop(): void
 
         if (creep !== undefined)
         {
+            console.log(`[${Game.time}] main.ts checking creep ${creepName}, role: ${creep.memory.role}`);
             // Run the creep based on its role
             switch (creep.memory.role)
             {
@@ -39,6 +40,7 @@ function mainLoop(): void
                     runHarvester(creep);
                     break;
                 case "upgrader":
+                    console.log(`[${Game.time}] main.ts calling runUpgrader for ${creep.name}`);
                     runUpgrader(creep);
                     break;
                 case "builder":
