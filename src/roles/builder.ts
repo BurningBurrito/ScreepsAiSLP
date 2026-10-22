@@ -139,7 +139,17 @@ export function runBuilder(creep: Creep): void
             const result = creep.build(selectedSite);
             if (result === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(selectedSite, { ignoreCreeps: true, range: 1 });
+                const moveResult = creep.moveTo(selectedSite, { ignoreCreeps: true, range: 1 });
+                // Handle movement failures - drop energy and find a new site if path is broken
+                if (moveResult === ERR_NO_PATH || moveResult === ERR_INVALID_TARGET)
+                {
+                    // Can't reach the site, drop energy and find a new site
+                    if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0)
+                    {
+                        creep.drop(RESOURCE_ENERGY);
+                    }
+                    creep.memory.working = false;
+                }
             }
             else if (result === ERR_INVALID_TARGET)
             {
