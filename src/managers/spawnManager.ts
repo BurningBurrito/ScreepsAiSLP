@@ -278,34 +278,39 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
         // Then MOVE parts (to reduce fatigue and move efficiently)
         // Upgraders don't need CARRY parts - they upgrade using room energy
         
-        // Reserve 100 energy for at least 1 WORK part
-        const energyForWork = remainingEnergy >= 100 ? 100 : (remainingEnergy >= 50 ? 50 : 0);
-        remainingEnergy -= energyForWork;
-        if (energyForWork >= 50)
+        // Reserve energy for at least 1 WORK part (100) and 1 MOVE part (50) = 150 min
+        // If we can afford at least WORK + MOVE, create that minimum body
+        if (remainingEnergy >= 150)
         {
-            body.push(WORK);
-        }
-        
-        // Reserve 100 energy for at least 2 MOVE parts (for neutral fatigue)
-        const energyForMove = remainingEnergy >= 100 ? 100 : (remainingEnergy >= 50 ? 50 : 0);
-        remainingEnergy -= energyForMove;
-        for (let i = 0; i < energyForMove / 50; i++)
-        {
-            body.push(MOVE);
-        }
-        
-        // Add more WORK parts if we have enough energy (upgrade speed scales with WORK parts)
-        while (remainingEnergy >= 100)
-        {
+            // Full upgrader body: WORK parts first, then MOVE
             body.push(WORK);
             remainingEnergy -= 100;
+            
+            // At least 2 MOVE parts for neutral fatigue
+            while (remainingEnergy >= 100)
+            {
+                body.push(MOVE);
+                remainingEnergy -= 50;
+            }
+            
+            // Add more WORK parts if we have enough energy (upgrade speed scales with WORK parts)
+            while (remainingEnergy >= 100)
+            {
+                body.push(WORK);
+                remainingEnergy -= 100;
+            }
+            
+            // Add more MOVE if there's energy
+            while (remainingEnergy >= 50)
+            {
+                body.push(MOVE);
+                remainingEnergy -= 50;
+            }
         }
-        
-        // Add more MOVE if there's energy (1 MOVE per 2 other parts on plain terrain)
-        while (remainingEnergy >= 50)
+        else
         {
-            body.push(MOVE);
-            remainingEnergy -= 50;
+            // Can't afford WORK + MOVE, so don't spawn upgrader
+            // This ensures upgraders are only spawned when they can be useful
         }
     }
     else
