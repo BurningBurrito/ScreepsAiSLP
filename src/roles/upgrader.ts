@@ -30,9 +30,17 @@ export function runUpgrader(creep: Creep): void
     // If creep has energy, decide what to do
     if (creep.store[RESOURCE_ENERGY] > 10)
     {
-        // If we can upgrade (range <= 3), do it
-        if (rangeToController <= 3)
+        // Always try to move to controller first, regardless of store fullness
+        // This ensures upgraders reach the controller to upgrade
+        if (rangeToController > 3)
         {
+            // Move toward the controller
+            console.log(`[${tick}] ${creepName} moving to controller at ${controllerPos.x},${controllerPos.y} (range ${rangeToController})`);
+            creep.moveTo(controllerPos, { ignoreCreeps: true, reusePath: 20, range: 3 });
+        }
+        else
+        {
+            // We are at the controller (range <= 3), upgrade it
             const upgradeCode = creep.upgradeController(controller);
             if (upgradeCode !== OK)
             {
@@ -41,38 +49,12 @@ export function runUpgrader(creep: Creep): void
             else
             {
                 console.log(`[${tick}] ${creepName} upgraded controller (range ${rangeToController}, store: ${creep.store[RESOURCE_ENERGY]})`);
-            }
-        }
-        // If we have energy but can't upgrade YET, check if store has free capacity
-        // If store has free capacity, harvest to fill it before moving
-        // This prevents getting stuck moving with a partially full store
-        else if (creep.store.getFreeCapacity() > 0)
-        {
-            console.log(`[${tick}] ${creepName} harvesting (range ${rangeToController}, store: ${creep.store[RESOURCE_ENERGY]}, free: ${creep.store.getFreeCapacity()})`);
-            const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
-            if (source !== null)
-            {
-                const sourceRange = creep.pos.getRangeTo(source);
-                if (sourceRange === 1)
+                // After upgrading, if store is empty, go harvest
+                if (creep.store[RESOURCE_ENERGY] === 0)
                 {
-                    const harvestCode = creep.harvest(source);
-                    if (harvestCode !== OK)
-                    {
-                        console.log(`[${tick}] ${creepName} harvest failed: ${harvestCode} (source at ${source.pos.x},${source.pos.y})`);
-                    }
-                }
-                else
-                {
-                    creep.moveTo(source, { ignoreCreeps: true, reusePath: 5 });
+                    creep.memory.working = false;
                 }
             }
-        }
-        // Store is full and we can't upgrade - move to controller
-        else
-        {
-            // Move toward the controller
-            console.log(`[${tick}] ${creepName} moving to controller at ${controllerPos.x},${controllerPos.y} (range ${rangeToController})`);
-            creep.moveTo(controllerPos, { ignoreCreeps: true, reusePath: 5, range: 3 });
         }
     }
     else
@@ -95,7 +77,7 @@ export function runUpgrader(creep: Creep): void
             else
             {
                 console.log(`[${tick}] ${creepName} moving to source at ${source.pos.x},${source.pos.y} (range ${sourceRange})`);
-                creep.moveTo(source, { ignoreCreeps: true, reusePath: 5 });
+                creep.moveTo(source, { ignoreCreeps: true, reusePath: 20 });
             }
         }
     }

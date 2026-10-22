@@ -73,10 +73,9 @@ export function runHarvester(creep: Creep): void
             if (transferResult === ERR_NOT_IN_RANGE)
             {
                 const moveResult = creep.moveTo(spawn, { ignoreCreeps: true, reusePath: 20, range: 1, maxRooms: 1 });
-                // Only drop energy if we've been trying for a while or truly can't reach
-                if (moveResult === ERR_NO_PATH || moveResult === ERR_INVALID_TARGET)
+                // If moveTo didn't return OK, we can't reach the spawn - drop and harvest
+                if (moveResult !== OK)
                 {
-                    // Track consecutive failures to avoid dropping energy prematurely
                     creep.drop(RESOURCE_ENERGY);
                     creep.memory.working = false;
                     return;
@@ -96,109 +95,96 @@ export function runHarvester(creep: Creep): void
         const extensions = creep.room.find(FIND_STRUCTURES, {
             filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
         });
+        let deliveredToExtension = false;
         for (const extension of extensions)
         {
             const freeCapacity = (extension as StructureExtension).store.getFreeCapacity(RESOURCE_ENERGY);
             if (freeCapacity !== null && freeCapacity > 0)
             {
-                if (creep.transfer(extension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+                const transferResult = creep.transfer(extension, RESOURCE_ENERGY);
+                if (transferResult === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(extension, { ignoreCreeps: true, reusePath: 20, range: 1 });
+                    const moveResult = creep.moveTo(extension, { ignoreCreeps: true, reusePath: 20, range: 1 });
+                    // If moveTo didn't return OK, we can't reach the extension - drop and harvest
+                    if (moveResult !== OK)
+                    {
+                        creep.drop(RESOURCE_ENERGY);
+                        creep.memory.working = false;
+                        return;
+                    }
                 }
-                return;
-            }
-        }
-    }
-
-    // Try to transfer to towers (keep them filled for defense and repair)
-    const towers = creep.room.find(FIND_MY_STRUCTURES, {
-        filter: (structure) => structure.structureType === STRUCTURE_TOWER,
-    });
-    for (const tower of towers)
-    {
-        const freeCapacity = (tower as StructureTower).store.getFreeCapacity(RESOURCE_ENERGY);
-        if (freeCapacity !== null && freeCapacity > 0)
-        {
-            if (creep.transfer(tower, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-            {
-                creep.moveTo(tower, { ignoreCreeps: true, reusePath: 20, range: 1 });
-            }
-            return;
-        }
-    }
-
-    // If all spawns, extensions, and towers are full, upgrade the controller
-    const controller = creep.room.controller;
-    if (controller !== undefined && controller !== null)
-    {
-        // Check if all energy storage is full before upgrading
-        let allStorageFull = true;
-
-        // Check spawn
-        for (const spawn of spawns)
-        {
-            if (spawn.store.getFreeCapacity(RESOURCE_ENERGY) > 0)
-            {
-                allStorageFull = false;
-                break;
-            }
-        }
-
-        // Check extensions
-        const extensions = creep.room.find(FIND_STRUCTURES, {
-            filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
-        });
-        if (allStorageFull)
-        {
-            for (const ext of extensions)
-            {
-                if ((ext as StructureExtension).store.getFreeCapacity(RESOURCE_ENERGY) > 0)
+                else if (transferResult === OK)
                 {
-                    allStorageFull = false;
-                    break;
+                    deliveredToExtension = true;
                 }
+                break; // Only try one extension
             }
         }
-
-        // Check towers
-        if (allStorageFull)
+        
+        // If we couldn't deliver to extension, try tower
+        if (!deliveredToExtension)
         {
+            const towers = creep.room.find(FIND_MY_STRUCTURES, {
+                filter: (structure) => structure.structureType === STRUCTURE_TOWER,
+            });
+            let deliveredToTower = false;
             for (const tower of towers)
             {
-                if ((tower as StructureTower).store.getFreeCapacity(RESOURCE_ENERGY) > 0)
+                const freeCapacity = (tower as StructureTower).store.getFreeCapacity(RESOURCE_ENERGY);
+                if (freeCapacity !== null && freeCapacity > 0)
                 {
-                    allStorageFull = false;
-                    break;
+                    const transferResult = creep.transfer(tower, RESOURCE_ENERGY);
+                    if (transferResult === ERR_NOT_IN_RANGE)
+                    {
+                        const moveResult = creep.moveTo(tower, { ignoreCreeps: true, reusePath: 20, range: 1 });
+                        // If moveTo didn't return OK, we can't reach the tower - drop and harvest
+                        if (moveResult !== OK)
+                        {
+                            creep.drop(RESOURCE_ENERGY);
+                            creep.memory.working = false;
+                            return;
+                        }
+                    }
+                    else if (transferResult === OK)
+                    {
+                        deliveredToTower = true;
+                    }
+                    break; // Only try one tower
                 }
             }
-        }
-
-        // Only upgrade if all storage is full AND we can reach the controller
-        if (allStorageFull)
-        {
-            const upgradeResult = creep.upgradeController(controller);
-            if (upgradeResult === ERR_NOT_IN_RANGE)
+            
+            // If we couldn't deliver to tower, try controller
+            if (!deliveredToTower)
             {
-                creep.drop(RESOURCE_ENERGY);
-                creep.memory.working = false;
-            }
-            else if (upgradeResult === OK)
-            {
-                if (creep.store[RESOURCE_ENERGY] === 0)
+                const controller = creep.room.controller;
+                if (controller !== undefined && controller !== null)
                 {
+                    const upgradeResult = creep.upgradeController(controller);
+                    if (upgradeResult === ERR_NOT_IN_RANGE)
+                    {
+                        const moveResult = creep.moveTo(controller, { ignoreCreeps: true, reusePath: 20, range: 3 });
+                        // If moveTo didn't return OK, we can't reach the controller - drop and harvest
+                        if (moveResult !== OK)
+                        {
+                            creep.drop(RESOURCE_ENERGY);
+                            creep.memory.working = false;
+                            return;
+                        }
+                    }
+                    else if (upgradeResult === OK)
+                    {
+                        if (creep.store[RESOURCE_ENERGY] === 0)
+                        {
+                            creep.memory.working = false;
+                        }
+                    }
+                }
+                else
+                {
+                    creep.drop(RESOURCE_ENERGY);
                     creep.memory.working = false;
                 }
             }
         }
-        else
-        {
-            creep.drop(RESOURCE_ENERGY);
-            creep.memory.working = false;
-        }
-    }
-    else
-    {
-        creep.drop(RESOURCE_ENERGY);
-        creep.memory.working = false;
     }
 }

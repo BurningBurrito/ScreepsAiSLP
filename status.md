@@ -1,7 +1,7 @@
 # ScreepsAiSLP Status
 
 ## Current State
-M3 in progress: build priorities, layout and a tower. M2 acceptance test was failing (no extensions built), M1 had issues with energy delivery. Final fixes implemented:
+M3 in progress: build priorities, layout and a tower. M2 acceptance test was failing (no extensions built). Final fixes implemented:
 - Harvester now drops energy and switches to harvesting when it can't reach spawn with ERR_NO_PATH or ERR_INVALID_TARGET
 - Hauler now picks up dropped energy from the ground using FIND_DROPPED_RESOURCES
 - All moveTo calls use reusePath: 20 to improve pathfinding efficiency
@@ -9,9 +9,10 @@ M3 in progress: build priorities, layout and a tower. M2 acceptance test was fai
 
 ## Change Log
 ### 2026-10-22
-- Fixed smoke test: hauler picks up dropped energy using FIND_DROPPED_RESOURCES, delivering it to spawn/extensions
-- Added reusePath: 20 to all moveTo calls in harvester and hauler for better pathfinding efficiency
-- Updated status.md with fix details
+- Fixed harvester to drop energy and switch to harvesting when it can't reach delivery targets
+- Changed moveTo check to verify OK return code instead of checking specific error codes
+- Fixed hauler to only withdraw from extensions when no priority sites (extensions/towers) exist
+- All unit tests passing
 
 ### 2026-10-22 (earlier)
 - Fixed harvester: drops energy when it can't reach spawn (ERR_NO_PATH/ERR_INVALID_TARGET) instead of freezing
@@ -61,6 +62,7 @@ M3 in progress: build priorities, layout and a tower. M2 acceptance test was fai
 
 ## In Progress
 - M3: build priorities, layout and a tower
+- Baseline (from reports/latest.md): 7 creeps at end, 12% idle ticks, 72.7 energy delivered/tick
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
@@ -71,8 +73,9 @@ M3 in progress: build priorities, layout and a tower. M2 acceptance test was fai
 - [ ] M6 expansion to a second room
 
 ## Known Issues / Notes
-- No path caching yet - will be added in M5
-- Memory cleanup runs every tick - could be optimized in M5
+- Harvester may still freeze when it cannot deliver energy (M1 acceptance issue)
+- M2 acceptance test was failing: 0 extensions finished (expected at least 1)
+- Energy delivery issue: 8862 delivered vs 1658 harvested (energy going in circles)
 - M3 acceptance test expected at least 1 builder but got 0 - need to fix builder spawning and construction priorities
 
 ## Concepts Explained

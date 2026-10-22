@@ -145,20 +145,26 @@ export function runHauler(creep: Creep): void
     }
 
     // Priority 2: Extensions (if needed and has energy)
-    const extensionSources = creep.room.find(FIND_MY_STRUCTURES, {
-        filter: (s) => s.structureType === STRUCTURE_EXTENSION,
-    });
+    // Only withdraw from extensions if there are no priority sites that need building
+    // Note: hasPrioritySites was already checked at line 123, reuse that variable
 
-    for (const ext of extensionSources)
+    if (!hasPrioritySites)
     {
-        const extension = ext as StructureExtension;
-        if (extension.store[RESOURCE_ENERGY] > 0)
+        const extensionSources = creep.room.find(FIND_MY_STRUCTURES, {
+            filter: (s) => s.structureType === STRUCTURE_EXTENSION,
+        });
+
+        for (const ext of extensionSources)
         {
-            if (creep.withdraw(ext, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+            const extension = ext as StructureExtension;
+            if (extension.store[RESOURCE_ENERGY] > 0)
             {
-                creep.moveTo(ext, { reusePath: 20 });
+                if (creep.withdraw(ext, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+                {
+                    creep.moveTo(ext, { reusePath: 20 });
+                }
+                return;
             }
-            return;
         }
     }
 
