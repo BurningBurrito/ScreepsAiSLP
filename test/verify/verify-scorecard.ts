@@ -15,18 +15,21 @@ import { buildProbe, parseProbeResult, Scorecard } from "../integration/scorecar
 // ---------- a tiny fake game world ----------
 interface FakeCreep { id: string; name: string; role: string; x: number; y: number; energy: number; ttl: number; spawning: boolean; }
 
-function makeContext(time: number, creeps: FakeCreep[], events: any[], opts: { spawning: boolean; energy: number; capacity: number; level: number; progress: number; sitesOnWall: number })
+interface ContextOpts { spawning: boolean; energy: number; capacity: number; level: number; progress: number; sitesOnWall: number; hostiles?: number; safeMode?: boolean; }
+
+function makeContext(time: number, creeps: FakeCreep[], events: any[], opts: ContextOpts)
 {
     const sources = [
         { id: "s1", energy: 900, energyCapacity: 1000, ticksToRegeneration: time % 300 === 0 ? 1 : 50, pos: { x: 14, y: 18 } },
         { id: "s2", energy: 0, energyCapacity: 3000, ticksToRegeneration: 120, pos: { x: 39, y: 14 } }
     ];
-    const controller = { level: opts.level, progress: opts.progress, structureType: "controller", pos: { x: 8, y: 43 } };
+    const controller = { level: opts.level, progress: opts.progress, structureType: "controller", pos: { x: 8, y: 43 }, my: true, safeMode: opts.safeMode ? 15000 : undefined, safeModeAvailable: 1 };
     const nearTo = (a: any, b: any): boolean => Math.abs(a.x - b.pos.x) <= 1 && Math.abs(a.y - b.pos.y) <= 1;
     const site = (structureType: string, x: number, y: number) => ({ structureType, pos: { x, y, isNearTo: function (o: any) { return nearTo(this, o); } } });
     // extension site next to source 1; two road sites on wall terrain, not connected; a tower site far from the spawn
     const sites = [site("extension", 15, 18), site("road", 30, 30), site("road", 31, 31), site("tower", 30, 5)];
     const spawnPos = { x: 13, y: 20 };
+    const tower = { structureType: "tower", pos: { x: 15, y: 21 }, my: true, store: { energy: 700 } };
     const structures = [
         { structureType: "spawn", pos: spawnPos },
         { structureType: "extension", pos: { x: 16, y: 20 } },
@@ -34,9 +37,16 @@ function makeContext(time: number, creeps: FakeCreep[], events: any[], opts: { s
         { structureType: "road", pos: { x: 15, y: 20 } },   // connected
         { structureType: "road", pos: { x: 14, y: 19 } },   // connected, adjacent to source 1
         { structureType: "road", pos: { x: 40, y: 40 } },   // disconnected
+        tower,                                              // near the spawn, holds 700 energy
         { structureType: "controller", pos: controller.pos }
     ];
-    const byId: Record<string, any> = { sp1: { structureType: "spawn" }, ext1: { structureType: "extension" }, ctl: controller, site: { structureType: "road" } };
+    const hostile = { id: "inv1", my: false, pos: { x: 25, y: 25 } };
+    const byId: Record<string, any> = {
+        sp1: { structureType: "spawn", my: true }, ext1: { structureType: "extension", my: true }, ctl: controller, site: { structureType: "road" },
+        t1: tower, inv1: hostile
+    };
+    for (const c of creeps) { byId[c.id] = { id: c.id, my: true }; }
+    const hostiles = Array.from({ length: opts.hostiles || 0 }, () => hostile);
     const room = {
         name: "W0N1",
         energyAvailable: opts.energy,
@@ -49,6 +59,7 @@ function makeContext(time: number, creeps: FakeCreep[], events: any[], opts: { s
             if (kind === 112) { return [{ spawning: opts.spawning ? { name: "x" } : null, pos: spawnPos }]; }
             if (kind === 114) { return sites; }
             if (kind === 107) { return structures; }
+            if (kind === 103) { return hostiles; }
             return [];
         },
         getTerrain: () => ({ get: (x: number, y: number) => ((x === 30 && y === 30) || (x === 31 && y === 31 && opts.sitesOnWall > 1) ? 1 : 0) })
@@ -63,6 +74,7 @@ function makeContext(time: number, creeps: FakeCreep[], events: any[], opts: { s
         Game: { time, cpu: { getUsed: () => 2.5, bucket: 9000 }, rooms: { W0N1: room }, creeps: gameCreeps, getObjectById: (id: string) => byId[id] || null },
         RawMemory: { get: () => "x".repeat(2048) },
         EVENT_HARVEST: 4, EVENT_UPGRADE_CONTROLLER: 8, EVENT_BUILD: 3, EVENT_REPAIR: 7, EVENT_TRANSFER: 11,
+        EVENT_ATTACK: 1, EVENT_OBJECT_DESTROYED: 2, EVENT_HEAL: 6, FIND_HOSTILE_CREEPS: 103,
         RESOURCE_ENERGY: "energy", STRUCTURE_SPAWN: "spawn", STRUCTURE_EXTENSION: "extension", STRUCTURE_CONTROLLER: "controller",
         STRUCTURE_ROAD: "road", STRUCTURE_TOWER: "tower",
         FIND_SOURCES: 105, FIND_MY_SPAWNS: 112, FIND_MY_CONSTRUCTION_SITES: 114, FIND_STRUCTURES: 107, TERRAIN_MASK_WALL: 1
@@ -83,9 +95,15 @@ const PROBE = buildProbe("W0N1", 100);
         { event: 8, objectId: "c2", data: { targetId: "ctl", amount: 2, energySpent: 2 } },
         { event: 11, objectId: "c1", data: { targetId: "sp1", resourceType: "energy", amount: 10 } },
         { event: 11, objectId: "c1", data: { targetId: "ctl", resourceType: "energy", amount: 99 } },
-        { event: 3, objectId: "c1", data: { targetId: "site", amount: 5, energySpent: 5 } }
+        { event: 3, objectId: "c1", data: { targetId: "site", amount: 5, energySpent: 5 } },
+        { event: 1, objectId: "inv1", data: { targetId: "c1", damage: 30, attackType: 1 } },   // invader hits our creep
+        { event: 1, objectId: "t1", data: { targetId: "inv1", damage: 600, attackType: 1 } },  // our tower hits the invader
+        { event: 1, objectId: "gone1", data: { targetId: "gone2", damage: 99, attackType: 1 } }, // both destroyed this tick: skipped
+        { event: 6, objectId: "c2", data: { targetId: "c1", amount: 12, healType: 1 } },
+        { event: 2, objectId: "inv0", data: { type: "creep" } },
+        { event: 2, objectId: "road9", data: { type: "road" } }
     ];
-    const ctx = makeContext(300, creeps, events, { spawning: true, energy: 250, capacity: 300, level: 2, progress: 120, sitesOnWall: 2 });
+    const ctx = makeContext(300, creeps, events, { spawning: true, energy: 250, capacity: 300, level: 2, progress: 120, sitesOnWall: 2, hostiles: 2, safeMode: true });
     const raw = vm.runInContext(PROBE, ctx);
     assert.isString(raw, "probe returns a string");
     const rec = parseProbeResult(raw);
@@ -97,8 +115,15 @@ const PROBE = buildProbe("W0N1", 100);
     assert.equal(rec.b, 5, "build sum");
     assert.equal(rec.tr, 10, "only transfers into spawn/extension count");
     assert.deepEqual(rec.bt, { road: 5 }, "build energy attributed to the target's structure type");
+    assert.equal(rec.atk, 1, "one attack on our creep");
+    assert.equal(rec.dmgT, 30, "damage taken by our creep");
+    assert.equal(rec.dmgD, 600, "damage dealt by our tower; the attack between two destroyed objects is skipped");
+    assert.equal(rec.heal, 12);
+    assert.deepEqual(rec.ds, { creep: 1, road: 1 }, "destroyed objects by type");
+    assert.equal(rec.hc, 2, "hostile creeps present");
+    assert.equal(rec.sm, 1, "safe mode active");
     assert.equal(rec.w, 900, "energy left in a source one tick before regeneration counts as wasted");
-    assert.sameMembers(rec.act, ["c1", "c2"], "actors from the event log");
+    assert.sameMembers(rec.act, ["c1", "c2", "inv1", "t1", "gone1"], "actors from the event log, attackers included");
     assert.equal(rec.cr.length, 2);
     assert.deepEqual(rec.cr[0], ["c1", "harvester_1", "harvester", 15, 19, 20, 0, 1400]);
     assert.deepEqual(rec.sp, [1, 250, 300]);
@@ -110,7 +135,9 @@ const PROBE = buildProbe("W0N1", 100);
         assert.equal(rec.snap.onWall, 2, "two road sites on wall terrain");
         assert.equal(rec.snap.extNear, 1, "extension site next to a source; the tower does not count");
         assert.deepEqual(rec.snap.sites, { extension: 1, road: 2, tower: 1 });
-        assert.deepEqual(rec.snap.structures, { spawn: 1, extension: 1, road: 4 }, "controller excluded");
+        assert.deepEqual(rec.snap.structures, { spawn: 1, extension: 1, road: 4, tower: 1 }, "controller excluded");
+        assert.deepEqual(rec.snap.towers, { count: 1, energy: 700 }, "our tower and its energy");
+        assert.equal(rec.snap.safeModeAvailable, 1);
         assert.deepEqual(rec.snap.srcCap, [1000, 3000]);
         assert.equal(rec.snap.memKb, 2);
         assert.deepEqual(rec.snap.roads, { total: 6, onWall: 2, disconnected: 3, reachesSources: 1, sourcesTotal: 2, reachesController: false },
@@ -156,11 +183,13 @@ const PROBE = buildProbe("W0N1", 100);
                     { event: 8, objectId: "c2", data: { targetId: "ctl", amount: 1 } }
                 ];
                 if (time % 2 === 0) { events.push({ event: 11, objectId: "c1", data: { targetId: "sp1", resourceType: "energy", amount: 6 } }); }
-                // harvester moves every tick, upgrader acts, builder does nothing after tick 100 (idle)
+                // harvester moves every tick, upgrader acts, builder does nothing after tick 100 (idle) and dies at tick 250
                 creeps[0].x = 15 + (time % 3);
                 if (time <= 100) { creeps[2].x = 20 + (time % 2); }
+                const alive = time >= 250 ? creeps.slice(0, 2) : creeps;
                 const level = time >= 200 ? 2 : 1;
-                const ctx = makeContext(time, creeps, events, { spawning: time % 10 < 3, energy: time % 10 >= 3 ? 300 : 100, capacity: 300, level, progress: time, sitesOnWall: 1 });
+                const ctx = makeContext(time, alive, events, { spawning: time % 10 < 3, energy: time % 10 >= 3 ? 300 : 100, capacity: 300, level, progress: time, sitesOnWall: 1,
+                    hostiles: time >= 100 && time <= 120 ? 1 : 0 });
                 const results = pending.map((cmd) => vm.runInContext(cmd, ctx));
                 pending = [];
                 const logs = time % 50 === 0 ? ["=== CPU Summary (Tick " + time + ") ===", time === 150 ? "TypeError: boom" : "ok"] : [];
@@ -190,11 +219,20 @@ const PROBE = buildProbe("W0N1", 100);
     assert.equal(s.level, 2);
     assert.equal(s.ticksToRcl2, 199, "level 2 first seen at tick 200, run started at tick 1");
     assert.isNull(s.ticksToRcl3);
-    assert.equal(s.creepsAtEnd, 3);
-    assert.deepEqual(s.creepsByRole, { harvester: 1, upgrader: 1, builder: 1 });
+    assert.equal(s.creepsAtEnd, 2, "the builder died at tick 250");
+    assert.equal(s.peakCreeps, 3);
+    assert.deepEqual(s.creepsByRole, { harvester: 1, upgrader: 1 });
+    assert.equal(s.creepsLostEarly, 1, "the builder vanished with 1500 ticks to live");
+    assert.equal(s.hostileTicks, 21, "a hostile stood in the room on ticks 100 to 120");
+    assert.equal(s.damageTaken, 0);
+    assert.equal(s.damageDealt, 0);
+    assert.equal(s.structuresDestroyed, 0);
+    assert.equal(s.safeModeTicks, 0);
+    assert.equal(s.towerCount, 1);
+    assert.equal(s.towerEnergy, 700);
     assert.closeTo(s.spawnBusyShare, 0.3, 0.01);
     assert.closeTo(s.spawnIdleFullShare, 0.7, 0.01, "idle while energy full on 7 of 10 ticks");
-    assert.closeTo(s.creepIdleShare, 1 / 3, 0.01, "the builder is idle for the whole window, the other two are active");
+    assert.closeTo(s.creepIdleShare, 49 / 249, 0.01, "the builder is idle on its 49 window ticks; the other two are active on all 200 of theirs");
     assert.equal(s.cpuPerTick, 2.5);
     assert.equal(s.sitesOnWall, 1);
     assert.equal(s.roadBuildShare, 0, "no build events in part B");
@@ -215,6 +253,9 @@ const PROBE = buildProbe("W0N1", 100);
     assert.include(md, "| Energy harvested / tick | 4 | - |  |", "no previous run yet");
     assert.include(md, "| Road tiles: total / on wall / disconnected from the spawn network (end) | 6 / 1 / 3 | - |  |");
     assert.include(md, "| Roads reach (end): sources, controller | 1 of 2, no | - |  |");
+    assert.include(md, "| Ticks with hostile creeps in the room (whole run) | 21 | - |  |");
+    assert.include(md, "| Our creeps lost before old age / structures destroyed (whole run) | 1 / 0 | - |  |");
+    assert.include(md, "| Towers at end: count, energy held | 1, 700 | - |  |");
     assert.include(md, "Timeline, every 100 ticks");
     const creepsTxt = fs.readFileSync(path.join(dir, "verify-creeps.txt"), "utf8");
     assert.include(creepsTxt, "tick 250:");

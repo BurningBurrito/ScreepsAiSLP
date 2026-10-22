@@ -79,6 +79,9 @@ export interface Snapshot
     roads: RoadNetwork;
     /** Extensions and towers, built or sites, farther than 8 tiles from every spawn. */
     extTowerFar: number;
+    /** Our towers and the energy they hold. */
+    towers: { count: number; energy: number };
+    safeModeAvailable: number;
 }
 
 /** One probe result. Events (h, u, b, rp, tr, act) describe the previous tick; the rest is the state at tick t. */
@@ -97,6 +100,19 @@ export interface TickRecord
     act: string[];
     /** Build energy of the previous tick by target structure type ("completed" when the site finished that tick). */
     bt: Record<string, number>;
+    /** Attacks on our creeps and structures in the previous tick. */
+    atk: number;
+    /** Damage taken by our objects and dealt by our objects in the previous tick. */
+    dmgT: number;
+    dmgD: number;
+    /** Healing done in the previous tick. */
+    heal: number;
+    /** Objects destroyed in the previous tick, by type ("creep" or a structure type). */
+    ds: Record<string, number>;
+    /** Hostile creeps in the room at tick t. */
+    hc: number;
+    /** 1 while safe mode is active. */
+    sm: number;
     cr: CreepRow[];
     sp: [number, number, number];
     lvl: number;
@@ -129,6 +145,21 @@ export interface ScorecardSummary
     roadsTotal: number;
     roadsDisconnected: number;
     extensionsTowersFarFromSpawn: number;
+    /** Combat and losses, whole run (events are sparse, so no window). */
+    hostileTicks: number;
+    attacksReceived: number;
+    damageTaken: number;
+    damageDealt: number;
+    healing: number;
+    /** Our creeps that disappeared with more than one tick to live: killed, suicided or recycled. */
+    creepsLostEarly: number;
+    /** Objects destroyed in the room by type, including hostile creeps killed. */
+    destroyedByType: Record<string, number>;
+    structuresDestroyed: number;
+    safeModeTicks: number;
+    towerCount: number;
+    towerEnergy: number;
+    safeModeAvailable: number;
     repairPerTick: number;
     transferToSpawnPerTick: number;
     transferToSpawnTotal: number;
@@ -168,10 +199,15 @@ interface IdleState
 const HISTORY_COLUMNS = [
     "name", "date", "commit", "ticks", "harvestedPerTick", "wastedEnergy", "upgradePerTick", "buildPerTick",
     "roadBuildShare", "spawnIdleFullShare", "creepIdleShare", "cpuPerTick", "level", "progress", "ticksToRcl2", "creepsAtEnd",
-    "sitesOnWall", "roadsTotal", "roadsDisconnected", "extensionsTowersFarFromSpawn", "consoleErrors"
+    "sitesOnWall", "roadsTotal", "roadsDisconnected", "extensionsTowersFarFromSpawn", "hostileTicks", "damageTaken", "damageDealt",
+    "creepsLostEarly", "structuresDestroyed", "towerEnergy", "consoleErrors"
 ];
 
 const EMPTY_ROADS: RoadNetwork = { total: 0, onWall: 0, disconnected: 0, reachesSources: 0, sourcesTotal: 0, reachesController: false };
+const EMPTY_SNAPSHOT: Snapshot = {
+    sites: {}, sitesTotal: 0, onWall: 0, extNear: 0, structures: {}, srcCap: [], srcEnergy: [], bucket: 0, memKb: 0,
+    roads: EMPTY_ROADS, extTowerFar: 0, towers: { count: 0, energy: 0 }, safeModeAvailable: 0
+};
 
 /**
  * Builds the probe expression that runs inside the bot's sandbox. ES5 on purpose: it is a plain
@@ -183,9 +219,10 @@ export function buildProbe(room: string, snapshotEvery: number): string
         " var cpu0 = Game.cpu.getUsed();" +
         " var out = { __sc: 1, t: Game.time, cpu: Math.round(cpu0 * 100) / 100 };" +
         " var room = Game.rooms['" + room + "'];" +
-        " if (!room) { out.noRoom = true; out.cr = []; out.act = []; out.sp = [0, 0, 0]; out.h = 0; out.u = 0; out.b = 0; out.rp = 0; out.tr = 0; out.w = 0; out.lvl = 0; out.prog = 0; return JSON.stringify(out); }" +
+        " if (!room) { out.noRoom = true; out.cr = []; out.act = []; out.bt = {}; out.ds = {}; out.sp = [0, 0, 0]; out.h = 0; out.u = 0; out.b = 0; out.rp = 0; out.tr = 0; out.w = 0; out.lvl = 0; out.prog = 0; out.atk = 0; out.dmgT = 0; out.dmgD = 0; out.heal = 0; out.hc = 0; out.sm = 0; return JSON.stringify(out); }" +
         " var h = 0, u = 0, b = 0, rp = 0, tr = 0, i, k;" +
         " var act = {}; var bt = {};" +
+        " var atk = 0, dmgT = 0, dmgD = 0, heal = 0, ds = {};" +
         " var ev = room.getEventLog();" +
         " for (i = 0; i < ev.length; i++) {" +
         "  var e = ev[i]; var d = e.data || {};" +
@@ -197,6 +234,14 @@ export function buildProbe(room: string, snapshotEvery: number): string
         "   bt[btype] = (bt[btype] || 0) + (d.energySpent || d.amount || 0);" +
         "  }" +
         "  else if (e.event === EVENT_REPAIR) { rp += d.amount || 0; act[e.objectId] = 1; }" +
+        // Combat: damage on our objects counts as taken, damage by our objects as dealt. Objects destroyed
+        // in the same tick no longer resolve and are skipped; EVENT_OBJECT_DESTROYED counts them by type.
+        "  else if (e.event === EVENT_ATTACK) {" +
+        "   act[e.objectId] = 1; var atkr = Game.getObjectById(e.objectId); var victim = Game.getObjectById(d.targetId); var dmg = d.damage || 0;" +
+        "   if (victim && victim.my) { atk++; dmgT += dmg; } else if (atkr && atkr.my) { dmgD += dmg; }" +
+        "  }" +
+        "  else if (e.event === EVENT_HEAL) { heal += d.amount || 0; act[e.objectId] = 1; }" +
+        "  else if (e.event === EVENT_OBJECT_DESTROYED) { var dty = d.type || 'unknown'; ds[dty] = (ds[dty] || 0) + 1; }" +
         "  else if (e.event === EVENT_TRANSFER) {" +
         "   act[e.objectId] = 1;" +
         "   if (d.resourceType === RESOURCE_ENERGY) {" +
@@ -206,6 +251,9 @@ export function buildProbe(room: string, snapshotEvery: number): string
         "  }" +
         " }" +
         " out.h = h; out.u = u; out.b = b; out.rp = rp; out.tr = tr; out.act = Object.keys(act); out.bt = bt;" +
+        " out.atk = atk; out.dmgT = dmgT; out.dmgD = dmgD; out.heal = heal; out.ds = ds;" +
+        " out.hc = room.find(FIND_HOSTILE_CREEPS).length;" +
+        " out.sm = room.controller && room.controller.safeMode ? 1 : 0;" +
         " var srcs = room.find(FIND_SOURCES); var w = 0;" +
         " for (i = 0; i < srcs.length; i++) { if (srcs[i].ticksToRegeneration === 1) { w += srcs[i].energy; } }" +
         " out.w = w;" +
@@ -226,8 +274,9 @@ export function buildProbe(room: string, snapshotEvery: number): string
         "   if (terrain.get(st.pos.x, st.pos.y) === TERRAIN_MASK_WALL) { onWall++; }" +
         "   if (st.structureType === STRUCTURE_EXTENSION) { for (k = 0; k < anchors.length; k++) { if (st.pos.isNearTo(anchors[k])) { near++; break; } } }" +
         "  }" +
-        "  var str = {}; var all = room.find(FIND_STRUCTURES);" +
-        "  for (i = 0; i < all.length; i++) { if (all[i].structureType === STRUCTURE_CONTROLLER) { continue; } str[all[i].structureType] = (str[all[i].structureType] || 0) + 1; }" +
+        "  var str = {}; var all = room.find(FIND_STRUCTURES); var twc = 0, twe = 0;" +
+        "  for (i = 0; i < all.length; i++) { if (all[i].structureType === STRUCTURE_CONTROLLER) { continue; } str[all[i].structureType] = (str[all[i].structureType] || 0) + 1;" +
+        "   if (all[i].structureType === STRUCTURE_TOWER && all[i].my) { twc++; twe += (all[i].store && all[i].store[RESOURCE_ENERGY]) || 0; } }" +
         "  var caps = [], ens = []; for (i = 0; i < srcs.length; i++) { caps.push(srcs[i].energyCapacity); ens.push(srcs[i].energy); }" +
         // Road network: every road tile (built or site), then a flood fill from the tiles next to a spawn.
         "  var roadKeys = {}, roadTotal = 0, roadOnWall = 0, seenKeys = {}, queue = [], reached = 0, key, rpos, dx, dy;" +
@@ -245,7 +294,8 @@ export function buildProbe(room: string, snapshotEvery: number): string
         "   for (k = 0; k < sp.length; k++) { var dd = Math.max(Math.abs(o.pos.x - sp[k].pos.x), Math.abs(o.pos.y - sp[k].pos.y)); if (dd < best) { best = dd; } } if (sp.length > 0 && best > 8) { far++; } };" +
         "  for (i = 0; i < all.length; i++) { checkFar(all[i]); } for (i = 0; i < sites.length; i++) { checkFar(sites[i]); }" +
         "  out.snap = { sites: sc, sitesTotal: sites.length, onWall: onWall, extNear: near, structures: str, srcCap: caps, srcEnergy: ens, bucket: Game.cpu.bucket, memKb: Math.round(RawMemory.get().length / 1024)," +
-        "   roads: { total: roadTotal, onWall: roadOnWall, disconnected: roadTotal - reached, reachesSources: reachSrc, sourcesTotal: srcs.length, reachesController: reachCtl }, extTowerFar: far };" +
+        "   roads: { total: roadTotal, onWall: roadOnWall, disconnected: roadTotal - reached, reachesSources: reachSrc, sourcesTotal: srcs.length, reachesController: reachCtl }, extTowerFar: far," +
+        "   towers: { count: twc, energy: twe }, safeModeAvailable: room.controller ? (room.controller.safeModeAvailable || 0) : 0 };" +
         " }" +
         " return JSON.stringify(out);" +
         "})()";
@@ -463,7 +513,9 @@ export class Scorecard
                 name, date, commit, ticks: 0, firstTick: 0, lastTick: 0, window: 0,
                 harvestedPerTick: 0, harvestedTotal: 0, wastedEnergy: 0, wastedEnergyTotal: 0,
                 upgradePerTick: 0, upgradeTotal: 0, buildPerTick: 0, buildTotal: 0, buildByType: {}, roadBuildShare: 0,
-                roads: EMPTY_ROADS, roadsTotal: 0, roadsDisconnected: 0, extensionsTowersFarFromSpawn: 0, repairPerTick: 0,
+                roads: EMPTY_ROADS, roadsTotal: 0, roadsDisconnected: 0, extensionsTowersFarFromSpawn: 0,
+                hostileTicks: 0, attacksReceived: 0, damageTaken: 0, damageDealt: 0, healing: 0, creepsLostEarly: 0, destroyedByType: {},
+                structuresDestroyed: 0, safeModeTicks: 0, towerCount: 0, towerEnergy: 0, safeModeAvailable: 0, repairPerTick: 0,
                 transferToSpawnPerTick: 0, transferToSpawnTotal: 0, spawnIdleFullShare: 0, spawnBusyShare: 0,
                 creepIdleShare: 0, cpuPerTick: 0, cpuMax: 0, level: 0, progress: 0, ticksToRcl2: null, ticksToRcl3: null,
                 creepsAtEnd: 0, creepsByRole: {}, peakCreeps: 0, structures: {}, sites: {}, sitesTotal: 0, sitesOnWall: 0,
@@ -526,11 +578,38 @@ export class Scorecard
         const firstLevel3 = recs.find((r) => r.lvl >= 3);
         const last = recs[ticks - 1];
         const lastSnap = recs.slice().reverse().find((r) => r.snap !== undefined);
-        const snap: Snapshot = lastSnap !== undefined && lastSnap.snap !== undefined ? lastSnap.snap : {
-            sites: {}, sitesTotal: 0, onWall: 0, extNear: 0, structures: {}, srcCap: [], srcEnergy: [], bucket: 0, memKb: 0,
-            roads: EMPTY_ROADS, extTowerFar: 0
-        };
+        const snap: Snapshot = lastSnap !== undefined && lastSnap.snap !== undefined ? lastSnap.snap : EMPTY_SNAPSHOT;
         const roads: RoadNetwork = snap.roads || EMPTY_ROADS;
+        const towers = snap.towers || { count: 0, energy: 0 };
+
+        // Our creeps that vanished between two consecutive records with more than one tick left to live.
+        let creepsLostEarly = 0;
+        for (let i = 1; i < recs.length; i++)
+        {
+            const prev = recs[i - 1];
+            const cur = recs[i];
+            if (cur.t !== prev.t + 1)
+            {
+                continue;
+            }
+            const alive = new Set(cur.cr.map((row) => row[0]));
+            for (const row of prev.cr)
+            {
+                if (!alive.has(row[0]) && row[6] === 0 && row[7] > 1)
+                {
+                    creepsLostEarly += 1;
+                }
+            }
+        }
+        const destroyedByType: Record<string, number> = {};
+        for (const r of recs)
+        {
+            for (const type of Object.keys(r.ds || {}))
+            {
+                destroyedByType[type] = (destroyedByType[type] || 0) + r.ds[type];
+            }
+        }
+        const structuresDestroyed = Object.keys(destroyedByType).filter((type) => type !== "creep").reduce((acc, type) => acc + destroyedByType[type], 0);
 
         const buildByType: Record<string, number> = {};
         for (const r of win)
@@ -565,6 +644,18 @@ export class Scorecard
             roadsTotal: roads.total,
             roadsDisconnected: roads.disconnected,
             extensionsTowersFarFromSpawn: snap.extTowerFar || 0,
+            hostileTicks: recs.filter((r) => (r.hc || 0) > 0).length,
+            attacksReceived: sum(recs, (r) => r.atk || 0),
+            damageTaken: sum(recs, (r) => r.dmgT || 0),
+            damageDealt: sum(recs, (r) => r.dmgD || 0),
+            healing: sum(recs, (r) => r.heal || 0),
+            creepsLostEarly,
+            destroyedByType,
+            structuresDestroyed,
+            safeModeTicks: recs.filter((r) => r.sm === 1).length,
+            towerCount: towers.count,
+            towerEnergy: towers.energy,
+            safeModeAvailable: snap.safeModeAvailable || 0,
             repairPerTick: round(per(win, (r) => r.rp), 2),
             transferToSpawnPerTick: round(per(win, (r) => r.tr), 2),
             transferToSpawnTotal: sum(recs, (r) => r.tr),
@@ -628,11 +719,19 @@ export class Scorecard
         lines.push(row("Construction sites on wall terrain (end)", fmt(summary.sitesOnWall), p ? fmt(p.sitesOnWall) : "-", p ? delta(summary.sitesOnWall, p.sitesOnWall, 0) : ""));
         lines.push(row("Extension sites next to a source or the controller (end)", fmt(summary.extensionSitesNearSourceOrController), p ? fmt(p.extensionSitesNearSourceOrController) : "-", p ? delta(summary.extensionSitesNearSourceOrController, p.extensionSitesNearSourceOrController, 0) : ""));
         lines.push(row("Creeps at end (peak)", summary.creepsAtEnd + " (" + summary.peakCreeps + ")", p ? p.creepsAtEnd + " (" + p.peakCreeps + ")" : "-", p ? delta(summary.creepsAtEnd, p.creepsAtEnd, 0) : ""));
+        lines.push(row("Ticks with hostile creeps in the room (whole run)", fmt(summary.hostileTicks), p ? fmt(p.hostileTicks) : "-", p ? delta(summary.hostileTicks, p.hostileTicks, 0) : ""));
+        lines.push(row("Attacks on us / damage taken / damage dealt (whole run)", summary.attacksReceived + " / " + fmt(summary.damageTaken) + " / " + fmt(summary.damageDealt),
+            p ? p.attacksReceived + " / " + fmt(p.damageTaken) + " / " + fmt(p.damageDealt) : "-", p ? delta(summary.damageTaken, p.damageTaken, 0) : ""));
+        lines.push(row("Our creeps lost before old age / structures destroyed (whole run)", summary.creepsLostEarly + " / " + summary.structuresDestroyed,
+            p ? p.creepsLostEarly + " / " + p.structuresDestroyed : "-", p ? delta(summary.creepsLostEarly, p.creepsLostEarly, 0) : ""));
+        lines.push(row("Towers at end: count, energy held", summary.towerCount + ", " + fmt(summary.towerEnergy), p ? p.towerCount + ", " + fmt(p.towerEnergy) : "-", p ? delta(summary.towerEnergy, p.towerEnergy, 0) : ""));
+        lines.push(row("Safe mode ticks (whole run), activations left", fmt(summary.safeModeTicks) + ", " + summary.safeModeAvailable, p ? fmt(p.safeModeTicks) + ", " + p.safeModeAvailable : "-", ""));
         lines.push("");
         lines.push("Creeps at end by role: " + rolesText(summary.creepsByRole) + ".");
         lines.push("Structures at end: " + recordText(summary.structures) + ". Construction sites: " + summary.sitesTotal + " (" + recordText(summary.sites) + "). Build energy in the window by target: " + recordText(summary.buildByType) + ".");
         lines.push("Room energy capacity " + summary.energyCapacity + "; source capacity " + (summary.sourceCapacity.length ? summary.sourceCapacity.join(" and ") : "unknown") +
             "; Memory " + summary.memoryKb + " KB; bucket " + summary.bucket + ".");
+        lines.push("Destroyed in the room during the run, by type: " + recordText(summary.destroyedByType) + ". Healing done: " + fmt(summary.healing) + ".");
         lines.push("Bot console: " + summary.consoleLines + " lines, " + summary.consoleErrors + " with errors (reports/" + summary.name + "-console.log). Probe results missing for " + summary.probeMisses + " ticks.");
         lines.push("");
         lines.push("Timeline, every " + this.opts.snapshotEvery + " ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu");

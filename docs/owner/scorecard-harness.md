@@ -132,3 +132,26 @@ numbers, and set the stub-world thresholds from the first two scorecards.
 - The per-creep table (`<name>-creeps.txt`) is the debug snapshot FEEDBACK asked the agent to
   write: name, role, position, energy, ticks to live, and whether it acted, moved, or stood
   still, every 50 ticks.
+
+## Combat and loss fields (added 2026-10-21)
+
+The scorecard also reports, from the same event log: ticks with hostile creeps in the room, attacks
+on our creeps and structures with damage taken and dealt (an attack counts as taken when the target
+is ours and as dealt when the attacker is ours; a hit between two objects destroyed in the same tick
+resolves neither and is skipped), healing done, objects destroyed by type, our creeps that vanished
+with more than one tick to live (killed, suicided or recycled), tower count and energy at the end,
+safe mode ticks and activations left. These are whole-run totals, because combat events are sparse.
+
+The stub world has the Invader user but no raids are expected within 3,000 ticks; the M5-style
+defence test should place a hostile creep itself through the mockup's world API, and the owner's
+M3 tower criterion can read the tower energy line directly.
+
+## Giving the agent the official documentation (optional)
+
+The type definitions already contain the whole API reference as JSDoc, with return codes, about
+33,000 words. What the agent lacks is the mechanics documentation (docs.screeps.com: controller,
+creeps, defence, invaders, resources, CPU, Memory). The documentation repository on GitHub declares
+no license, so do not vendor it into this public repo. Instead, save the pages as text or markdown
+into a root-owned folder `/etc/agent-docs/screeps/` on the server, readable by the agent; rule 01
+already tells the agent to grep that folder when it exists and to read only the file it needs. Keep
+it to the mechanics pages, not the API pages, so a search returns one page rather than fifty.

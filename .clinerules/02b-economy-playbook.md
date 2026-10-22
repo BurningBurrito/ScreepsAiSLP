@@ -93,3 +93,54 @@ not a miner.
   20 ticks.
 - `room.find` inside a per-creep loop without a cache.
 - `console.log` every tick.
+
+## Housekeeping: undoing your own mistakes
+- A misplaced construction site: `site.remove()`. Find them with `room.find(FIND_MY_CONSTRUCTION_SITES)`.
+  A player may have at most 100 sites [MAX_CONSTRUCTION_SITES]; useless sites block useful ones and
+  waste build energy.
+- A misplaced structure of your own: `structure.destroy()`, or `creep.dismantle(structure)`, which
+  removes 50 hits per WORK part per tick and returns 0.005 energy per hit, half the repair cost
+  [DISMANTLE_POWER, DISMANTLE_COST]: a way to remove, not a way to earn. Unrepaired roads and
+  containers decay on their own [ROAD_DECAY_AMOUNT, CONTAINER_DECAY].
+- A creep you no longer want: `spawn.recycleCreep(creep)` next to the spawn returns part of its body
+  cost [CREEP_CORPSE_RATE, scaled by remaining life]; `creep.suicide()` returns nothing. A spawn in
+  progress: `spawn.spawning.cancel()`.
+- Dead creeps leave tombstones and dropped energy that decay [TOMBSTONE_DECAY_PER_PART, ENERGY_DECAY]:
+  haulers `withdraw` from tombstones and `pickup` drops that lie on their way.
+- Memory entries for sites, structures and plans that no longer exist are cleaned the same way as the
+  memory of dead creeps.
+
+## Defence: what you have and when to use it
+- Invaders (NPC creeps) raid an owned room after about 100,000 energy harvested [INVADERS_ENERGY_GOAL]
+  and keep coming; on the public server other players can attack at any time.
+- Detect: `room.find(FIND_HOSTILE_CREEPS)` every tick is cheap; `room.getEventLog()` shows attacks on
+  your objects (EVENT_ATTACK with damage) and losses (EVENT_OBJECT_DESTROYED).
+- Tower (`tower.attack(creep)`, `tower.heal(creep)`, `tower.repair(structure)`): the first response,
+  from RCL 3. Full effect within 5 tiles, falling to a quarter at 20 [TOWER_OPTIMAL_RANGE,
+  TOWER_FALLOFF_RANGE, TOWER_FALLOFF]; 600 damage, 400 heal or 800 repair per action for 10 energy
+  [TOWER_POWER_ATTACK, TOWER_POWER_HEAL, TOWER_POWER_REPAIR, TOWER_ENERGY_COST]. Keep it above
+  500 energy at all times; repair only from the energy above that reserve.
+- Safe mode: `room.controller.activateSafeMode()` blocks hostile actions for 20,000 ticks
+  [SAFE_MODE_DURATION], then cools down for 50,000 [SAFE_MODE_COOLDOWN]; you start with one
+  activation. Use it when hostiles are in the room, the spawn or the tower is taking damage, and no
+  tower can stop them. Never spend it on a single invader a tower can kill.
+- Before a tower exists: keep creeps away from the hostiles' path, keep the spawn full, and let the
+  raid pass. Losing creeps is cheaper than losing the spawn.
+- Hostile structures (an invader core in a neighbouring room, another player's leftovers):
+  `creep.dismantle(structure)` or `creep.attack(structure)`; find them with `FIND_HOSTILE_STRUCTURES`.
+  Not before the home room is safe and fed.
+- Ramparts and walls: after the tower works, on the spawn, the tower and the storage first. They need
+  repair energy forever, so only where they protect something.
+
+## Being seen: how the owner and the tests watch you
+- The owner watches the room in the game client. `creep.say('text')` and `new RoomVisual(room.name)`
+  (circles, lines, text) make your plan visible: draw the planned positions of extensions, containers,
+  the tower and roads every tick while they are unbuilt. It costs little CPU and shows the owner at a
+  glance what you intend.
+- `Game.notify(text, groupInterval)` emails the owner. Use it for events that need a human (hostile
+  players, a lost structure, repeated exceptions), grouped with an interval of 60 minutes or more,
+  never every tick. `structure.notifyWhenAttacked(false)` on roads and containers prevents email
+  floods; keep it on for the spawn and the tower.
+- The scorecard (reports/latest.md) counts hostile presence, attacks, damage taken and dealt, creeps
+  lost before old age, structures destroyed, tower energy and safe mode ticks. Damage taken rising
+  while damage dealt stays flat means the tower is empty or out of range.

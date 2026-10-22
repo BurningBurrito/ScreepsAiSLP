@@ -9,7 +9,7 @@ import { CreepRow, TickRecord } from "../integration/scorecard";
 
 function rec(t: number, cr: CreepRow[], sp: [number, number, number]): TickRecord
 {
-    return { __sc: 1, t, cpu: 1, h: 0, u: 0, b: 0, rp: 0, tr: 0, w: 0, act: [], bt: {}, cr, sp, lvl: 1, prog: 0 };
+    return { __sc: 1, t, cpu: 1, h: 0, u: 0, b: 0, rp: 0, tr: 0, w: 0, act: [], bt: {}, atk: 0, dmgT: 0, dmgD: 0, heal: 0, ds: {}, hc: 0, sm: 0, cr, sp, lvl: 1, prog: 0 };
 }
 
 const sources = [{ type: "source", x: 14, y: 18, energyCapacity: 1000 }, { type: "source", x: 39, y: 14, energyCapacity: 3000 }];
