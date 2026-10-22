@@ -324,13 +324,16 @@ function cleanOldRoadSites(room: Room, validRoadPositions: RoomPosition[]): void
 }
 
 /** Place road construction sites on computed paths */
-function placeRoadSites(room: Room, roadPositions: RoomPosition[]): void
+function placeRoadSites(room: Room, roadPositions: RoomPosition[], extensionPositions?: RoomPosition[]): void
 {
     const existingRoadSites = room.find(FIND_CONSTRUCTION_SITES, {
         filter: (site) => site.structureType === STRUCTURE_ROAD,
     });
 
     const existingRoadPositions = existingRoadSites.map((site) => `${site.pos.x},${site.pos.y}`);
+
+    // Create a set of extension positions for quick lookup
+    const extensionSet = new Set(extensionPositions?.map((pos) => `${pos.x},${pos.y}`) || []);
 
     const controller = getControllerPosition(room);
     const sources = getSources(room);
@@ -359,7 +362,13 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[]): void
             continue;
         }
 
+        // Skip if this position is designated for an extension
         const key = `${pos.x},${pos.y}`;
+        if (extensionSet.has(key))
+        {
+            continue;
+        }
+
         if (!existingRoadPositions.includes(key))
         {
             room.createConstructionSite(pos, STRUCTURE_ROAD);
@@ -387,17 +396,31 @@ function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): vo
         return;
     }
 
+    // Get existing road sites for quick lookup
+    const roadSites = room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_ROAD,
+    });
+    const roadSet = new Set(roadSites.map((site) => `${site.pos.x},${site.pos.y}`));
+
     let placed = 0;
     for (let i = 0; i < extensionPositions.length && placed < remaining; i++)
     {
         const pos = extensionPositions[i];
-        
+
+        // Skip if there's already a construction site (road, tower, etc.)
         const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
         if (sites.length > 0)
         {
             continue;
         }
-        
+
+        // Skip if this position has a road construction site (roads should yield to extensions)
+        const key = `${pos.x},${pos.y}`;
+        if (roadSet.has(key))
+        {
+            continue;
+        }
+
         const result = room.createConstructionSite(pos, STRUCTURE_EXTENSION);
         if (result === OK)
         {
@@ -424,7 +447,16 @@ function placeTowerSites(room: Room, towerPositions: RoomPosition[]): void
         return;
     }
 
-    room.createConstructionSite(towerPositions[0], STRUCTURE_TOWER);
+    // Find existing construction sites at tower positions and skip occupied ones
+    for (const pos of towerPositions)
+    {
+        const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
+        if (sites.length === 0)
+        {
+            room.createConstructionSite(pos, STRUCTURE_TOWER);
+            return; // Only place one tower
+        }
+    }
 }
 
 /** Check if we should place road sites */
@@ -445,15 +477,14 @@ function shouldPlaceRoadSites(room: Room): boolean
     // If tower or extension sites exist, only place roads if sources/controller aren't connected
     if (towerSites.length > 0 || extensionSites.length > 0)
     {
-        const roadPaths = computeRoadPaths(room);
-        return !areSourcesAndControllerConnected(room, roadPaths);
+        return !areSourcesAndControllerConnected(room);
     }
     
     return towerSites.length === 0 && extensionSites.length === 0 && controllerLevel >= 2;
 }
 
 /** Check if sources and controller are connected via roads */
-function areSourcesAndControllerConnected(room: Room, roadPaths: RoomPosition[]): boolean
+function areSourcesAndControllerConnected(room: Room): boolean
 {
     const spawn = getSpawnPosition(room);
     if (spawn === null)
@@ -499,7 +530,13 @@ function areSourcesAndControllerConnected(room: Room, roadPaths: RoomPosition[])
     
     while (queue.length > 0)
     {
-        const [x, y] = queue.shift()!;
+        const item = queue.shift();
+        if (!item)
+        {
+            break;
+        }
+        const x = item[0];
+        const y = item[1];
         
         // Check all 8 neighbors
         for (let dx = -1; dx <= 1; dx++)
@@ -532,7 +569,7 @@ function areSourcesAndControllerConnected(room: Room, roadPaths: RoomPosition[])
                 if (roadTiles.has(nkey))
                 {
                     connectedTiles.add(nkey);
-                    queue.push([nx, ny]);
+                    queue.push([nx, ny] as [number, number]);
                 }
             }
         }
@@ -609,18 +646,22 @@ export function manageConstruction(room: Room): void
     // Clean up old road sites that aren't on the computed paths
     cleanOldRoadSites(room, roadPaths);
 
-    // Place road sites on computed paths (lowest priority, but always try)
-    // This ensures roads are built even when extension sites exist
-    if (shouldPlaceRoadSites(room))
-    {
-        placeRoadSites(room, roadPaths);
-    }
-
-    // Compute and place tower positions first (highest priority)
+    // Compute tower positions (highest priority)
     const towerPositions = computeTowerPositions(room);
+
+    // Compute extension positions (second priority)
+    const extensionPositions = computeExtensionPositions(room);
+
+    // Place tower sites first (highest priority)
     placeTowerSites(room, towerPositions);
 
-    // Compute and place extension positions (second priority)
-    const extensionPositions = computeExtensionPositions(room);
+    // Place extension sites (second priority)
     placeExtensionSites(room, extensionPositions);
+
+    // Place road sites on computed paths (lowest priority)
+    // Skip positions that are designated for extensions
+    if (shouldPlaceRoadSites(room))
+    {
+        placeRoadSites(room, roadPaths, extensionPositions);
+    }
 }

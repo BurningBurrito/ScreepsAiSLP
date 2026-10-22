@@ -22,7 +22,8 @@ export function runHarvester(creep: Creep): void
         creep.memory.working = true;
     }
 
-    // If not working (empty store), harvest from source
+    // If not working (empty store), go to spawn first to check if it has energy,
+    // then harvest from source if needed
     if (!creep.memory.working)
     {
         // Find the closest source to harvest from
@@ -33,9 +34,22 @@ export function runHarvester(creep: Creep): void
             return; // No sources found
         }
 
-        if (creep.harvest(source) === ERR_NOT_IN_RANGE)
+        // Try to harvest from source
+        const harvestResult = creep.harvest(source);
+
+        if (harvestResult === ERR_NOT_IN_RANGE)
         {
-            creep.moveTo(source, { ignoreCreeps: true, range: 1 });
+            // Move toward source, but stay within 3 tiles of spawn when not actively harvesting
+            // to quickly transfer energy when full
+            const spawn = creep.pos.findClosestByPath(FIND_MY_SPAWNS);
+            if (spawn !== null && creep.pos.getRangeTo(spawn) > 3)
+            {
+                creep.moveTo(spawn, { ignoreCreeps: true, range: 3 });
+            }
+            else
+            {
+                creep.moveTo(source, { ignoreCreeps: true, range: 1 });
+            }
         }
         return;
     }
@@ -52,17 +66,47 @@ export function runHarvester(creep: Creep): void
             const transferResult = creep.transfer(spawn, RESOURCE_ENERGY);
             if (transferResult === ERR_NOT_IN_RANGE)
             {
-                const moveResult = creep.moveTo(spawn, { ignoreCreeps: true, range: 1 });
+                const moveResult = creep.moveTo(spawn, { ignoreCreeps: true, range: 1, maxRooms: 1 });
+                // Only drop energy if we've been trying for a while or truly can't reach
                 if (moveResult === ERR_NO_PATH || moveResult === ERR_INVALID_TARGET)
                 {
-                    creep.drop(RESOURCE_ENERGY);
-                    creep.memory.working = false;
+                    // Track consecutive failures to avoid dropping energy prematurely
+                    const failedAttempts = creep.memory.failedTransferAttempts || 0;
+                    if (failedAttempts >= 3)
+                    {
+                        creep.drop(RESOURCE_ENERGY);
+                        creep.memory.working = false;
+                        creep.memory.failedTransferAttempts = 0;
+                    }
+                    else
+                    {
+                        creep.memory.failedTransferAttempts = failedAttempts + 1;
+                    }
+                }
+                else
+                {
+                    // Reset failure count on successful movement attempt
+                    creep.memory.failedTransferAttempts = 0;
                 }
             }
             else if (transferResult === ERR_NO_PATH)
             {
-                creep.drop(RESOURCE_ENERGY);
-                creep.memory.working = false;
+                const failedAttempts = creep.memory.failedTransferAttempts || 0;
+                if (failedAttempts >= 3)
+                {
+                    creep.drop(RESOURCE_ENERGY);
+                    creep.memory.working = false;
+                    creep.memory.failedTransferAttempts = 0;
+                }
+                else
+                {
+                    creep.memory.failedTransferAttempts = failedAttempts + 1;
+                }
+            }
+            else if (transferResult === OK)
+            {
+                // Successful transfer, reset failure count
+                creep.memory.failedTransferAttempts = 0;
             }
             return;
         }

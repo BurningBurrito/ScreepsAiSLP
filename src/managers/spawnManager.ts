@@ -68,28 +68,37 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
             }
             else if (role === "upgrader" || role === "harvester" || role === "builder")
             {
-                // Prioritize WORK parts first for these roles (they need WORK to function)
-                // Then CARRY (they need CARRY to store harvested energy)
-                // Then MOVE (they need MOVE to move to targets)
+                // Prioritize MOVE and CARRY for movement and energy storage
+                // Then WORK (needed for harvesting/upgrading/building)
+                // Order: MOVE first (can't function without movement), then CARRY, then WORK
                 
-                // First, ensure at least 1 CARRY part (required for storing energy)
-                const energyAfterCarry = energyAvailable - 50; // Reserve for 1 CARRY
-                if (energyAfterCarry > 0)
+                // First, ensure at least 1 MOVE part (required for movement)
+                const energyAfterMove = energyAvailable - 50; // Reserve for 1 MOVE
+                if (energyAfterMove > 0)
                 {
-                    // Then prioritize WORK
-                    const work = Math.min(MIN_BODY_PARTS.work, Math.floor(energyAfterCarry / 100));
-                    const energyAfterWork = energyAfterCarry - work * 100;
-                    
-                    // Then MOVE
-                    moveParts = Math.min(MIN_BODY_PARTS.move, Math.floor(energyAfterWork / 50));
-                    
-                    carryParts = 1;
-                    
-                    return work;
+                    // Then ensure at least 1 CARRY part (required for storing energy)
+                    const energyAfterCarry = energyAfterMove - 50;
+                    if (energyAfterCarry > 0)
+                    {
+                        // Then add WORK parts
+                        const work = Math.min(MIN_BODY_PARTS.work, Math.floor(energyAfterCarry / 100));
+                        
+                        moveParts = 1;
+                        carryParts = 1;
+                        
+                        return work;
+                    }
+                    else
+                    {
+                        // Can afford MOVE but not CARRY
+                        // For harvester/upgrader/builder, we need CARRY to store energy and WORK to do work
+                        // If energy is between 50 and 150, we can't spawn a useful creep
+                        return 0; // Can't spawn useful creep
+                    }
                 }
                 else
                 {
-                    // Can't even afford 1 CARRY part, can't spawn a useful creep
+                    // Can't afford even 1 MOVE part, can't spawn a useful creep
                     return 0;
                 }
             }
@@ -121,8 +130,10 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
         }
         else if (role === "upgrader")
         {
-            // Upgraders: WORK + MOVE only (no CARRY needed)
+            // Upgraders need CARRY to store energy from harvesting
+            // They also need WORK to upgrade the controller and MOVE to move
             body.push(WORK);
+            body.push(CARRY);
             body.push(MOVE);
         }
         else
@@ -310,7 +321,9 @@ function spawnCreep(role: string, room: Room): string | null
 
     // Ensure body has at least one of each: WORK, CARRY, MOVE
     // (Haulers don't need WORK parts, just CARRY and MOVE)
+    // (Harvesters can work without CARRY initially - they can harvest without CARRY parts)
     const isHauler = role === "hauler";
+    const isHarvester = role === "harvester";
     const hasWork = body.some((part) => part === WORK);
     const hasCarry = body.some((part) => part === CARRY);
     const hasMove = body.some((part) => part === MOVE);
@@ -320,16 +333,17 @@ function spawnCreep(role: string, room: Room): string | null
         // Allow spawning with partial bodies when energy is low
         // This ensures the colony can maintain minimum creep count even when energy is low
         // For harvesters, we require at least WORK and MOVE (CARRY is optional for initial harvesting)
-        if (role === "harvester" && harvesterCount === 0)
+        if (isHarvester && harvesterCount === 0)
         {
-            // For the first harvester, allow spawning with just WORK and MOVE
+            // For the first harvester, we need at least WORK and MOVE to be useful
+            // WORK is needed to harvest from sources, MOVE is needed to reach sources
             if (hasWork && hasMove)
             {
-                // Can spawn minimal harvester without CARRY
+                // Can spawn minimal harvester without CARRY (harvester will pick up from spawn)
             }
             else
             {
-                return null; // Body doesn't have WORK and MOVE
+                return null; // Body doesn't have WORK and MOVE - can't harvest
             }
         }
         else

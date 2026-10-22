@@ -23,6 +23,8 @@ declare global {
     working: boolean;
     /** ID of a construction site to skip (for builders when ERR_INVALID_TARGET occurs) */
     skipSiteId?: string;
+    /** Number of consecutive failed transfer attempts (for harvester retry logic) */
+    failedTransferAttempts?: number;
   }
 
   /**

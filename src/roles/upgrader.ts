@@ -11,10 +11,12 @@
  */
 export function runUpgrader(creep: Creep): void
 {
+    console.log(`Upgrader ${creep.name} running`);
     const controller = creep.room.controller;
 
     if (controller === undefined || controller === null)
     {
+        console.log(`Upgrader ${creep.name}: no controller`);
         return; // No controller in room
     }
 
