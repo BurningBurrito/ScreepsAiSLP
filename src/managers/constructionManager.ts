@@ -332,8 +332,32 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[]): void
 
     const existingRoadPositions = existingRoadSites.map((site) => `${site.pos.x},${site.pos.y}`);
 
+    const controller = getControllerPosition(room);
+    const sources = getSources(room);
+
     for (const pos of roadPositions)
     {
+        // Skip if too close to controller (range 1)
+        if (controller !== null && pos.getRangeTo(controller) <= 1)
+        {
+            continue;
+        }
+
+        // Skip if too close to sources (range 1) - harvester needs to be on source tile
+        let tooCloseToSource = false;
+        for (const source of sources)
+        {
+            if (pos.getRangeTo(source.pos) <= 1)
+            {
+                tooCloseToSource = true;
+                break;
+            }
+        }
+        if (tooCloseToSource)
+        {
+            continue;
+        }
+
         const key = `${pos.x},${pos.y}`;
         if (!existingRoadPositions.includes(key))
         {
@@ -497,6 +521,12 @@ function areSourcesAndControllerConnected(room: Room, roadPaths: RoomPosition[])
 /** Manages construction of extensions, roads, and towers */
 export function manageConstruction(room: Room): void
 {
+    // Compute road paths first (needed for cleanup)
+    const roadPaths = computeRoadPaths(room);
+
+    // Clean up old road sites that aren't on the computed paths
+    cleanOldRoadSites(room, roadPaths);
+
     // Compute and place tower positions first (highest priority)
     const towerPositions = computeTowerPositions(room);
     placeTowerSites(room, towerPositions);
@@ -504,12 +534,6 @@ export function manageConstruction(room: Room): void
     // Compute and place extension positions (second priority)
     const extensionPositions = computeExtensionPositions(room);
     placeExtensionSites(room, extensionPositions);
-
-    // Compute road paths
-    const roadPaths = computeRoadPaths(room);
-
-    // Clean up old road sites that aren't on the computed paths
-    cleanOldRoadSites(room, roadPaths);
 
     // Place road sites on computed paths (only when no tower/extension sites exist)
     if (shouldPlaceRoadSites(room))

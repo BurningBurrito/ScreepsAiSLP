@@ -203,7 +203,6 @@ function spawnCreep(role: string, room: Room): string | null
     const energyAvailable = getTotalEnergyAvailable(room);
 
     // Check if we have at least one MOVE part required for every creep
-    const isHarvester = role === "harvester";
     const harvesterCount = getCreepCount("harvester");
 
     // For harvester, we can spawn with less energy if none exist (emergency)
@@ -211,33 +210,6 @@ function spawnCreep(role: string, room: Room): string | null
     // For hauler, need at least 100 energy for 1 CARRY + 1 MOVE (RCL 1 has 150 capacity)
     // For upgrader, need at least 150 energy for 1 WORK + 1 CARRY + 1 MOVE
     // Otherwise, need enough energy for a useful creep
-    let minEnergyForCreep: number;
-    if (isHarvester && harvesterCount === 0)
-    {
-        minEnergyForCreep = 200; // 1 WORK (100) + 1 CARRY (50) + 1 MOVE (50)
-    }
-    else if (role === "builder")
-    {
-        // Builder needs at least 200 energy for 1 WORK + 1 CARRY + 1 MOVE
-        // This allows builders to spawn at RCL 1 with 300 energy capacity
-        // 1 WORK (100) + 1 CARRY (50) + 1 MOVE (50) = 200
-        minEnergyForCreep = 200;
-    }
-    else if (role === "hauler")
-    {
-        // Hauler needs at least 100 energy for 1 CARRY + 1 MOVE
-        minEnergyForCreep = 100;
-    }
-    else if (role === "upgrader")
-    {
-        // Upgrader needs at least 150 energy for 1 WORK + 1 CARRY + 1 MOVE
-        minEnergyForCreep = 150;
-    }
-    else
-    {
-        minEnergyForCreep = BASE_CREEP_COST / 2;
-    }
-
     // Allow spawning with any available energy (createCreepBody handles low-energy cases)
     // This ensures the colony can maintain minimum creep count even when energy is low
 

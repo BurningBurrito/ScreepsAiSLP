@@ -1,19 +1,19 @@
-# Scorecard: acceptance-m1 · 2026-10-21 22:23 · 801 ticks · commit d559b09
+# Scorecard: acceptance-m1 · 2026-10-21 22:56 · 801 ticks · commit 876cb7d
 
-| Metric (last 320 ticks unless noted) | This run | Previous run (2026-10-21 20:55, 1125a4e) | Change |
+| Metric (last 320 ticks unless noted) | This run | Previous run (2026-10-21 22:23, d559b09) | Change |
 | --- | --- | --- | --- |
-| Energy harvested / tick | 0.33 | 1.92 | -1.59 |
-| Energy wasted at source regeneration (sum) | 2,810 | 2,354 | +456 |
-| Controller progress / tick | 0.63 | 0.98 | -0.35 |
-| Construction progress / tick | 0.3 | 2.14 | -1.84 |
-| Energy delivered to spawn and extensions / tick | 22.84 | 4.68 | +18.16 |
-| Spawn idle while energy is full | 8 % | 53 % | -45 pts |
+| Energy harvested / tick | 0.33 | 0.33 | 0 |
+| Energy wasted at source regeneration (sum) | 2,810 | 2,810 | 0 |
+| Controller progress / tick | 0.63 | 0.63 | 0 |
+| Construction progress / tick | 0.3 | 0.3 | 0 |
+| Energy delivered to spawn and extensions / tick | 22.84 | 22.84 | 0 |
+| Spawn idle while energy is full | 8 % | 8 % | 0 pts |
 | Spawn busy | 0 % | 0 % | 0 pts |
-| Creep ticks idle (no action, no move for 5+ ticks) | 42 % | 40 % | +2 pts |
-| CPU / tick (average, max) | 2.03, 17.36 | 2.31, 17.28 | -0.28 |
-| RCL / progress at end (whole run) | 2 / 0 | 2 / 113 | -113 |
-| Ticks to RCL 2 / RCL 3 (whole run) | 779 / - | 633 / - | +146 |
-| Energy harvested (whole run) | 1,256 | 2,146 | -890 |
+| Creep ticks idle (no action, no move for 5+ ticks) | 42 % | 42 % | 0 pts |
+| CPU / tick (average, max) | 2, 17.25 | 2.03, 17.36 | -0.03 |
+| RCL / progress at end (whole run) | 2 / 0 | 2 / 0 | 0 |
+| Ticks to RCL 2 / RCL 3 (whole run) | 779 / - | 779 / - | 0 |
+| Energy harvested (whole run) | 1,256 | 1,256 | 0 |
 | Build energy spent on roads (share of all build energy) | 0 % | 0 % | 0 pts |
 | Road tiles: total / on wall / disconnected from the spawn network (end) | 60 / 0 / 0 | 60 / 0 / 0 | 0 |
 | Roads reach (end): sources, controller | 2 of 2, yes | 2 of 2, yes |  |
@@ -30,11 +30,11 @@ Bot console: 79 lines, 0 with errors (reports/acceptance-m1-console.log). Probe 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
       100 | harvester 1, hauler 2                    |   3.2 |     0 |    99/300 | idle | 1.2
-      200 | harvester 2, hauler 2, upgrader 1        |   3.7 |     0 |   104/300 | busy | 1.6
-      300 | builder 1, harvester 2, hauler 2, upgrader 2 |   3.5 |     0 |    70/300 | idle | 1.9
-      400 | builder 1, harvester 2, hauler 2, upgrader 2 |   0.7 |     0 |   170/300 | idle | 1.9
+      200 | harvester 2, hauler 2, upgrader 1        |   3.7 |     0 |   104/300 | busy | 1.5
+      300 | builder 1, harvester 2, hauler 2, upgrader 2 |   3.5 |     0 |    70/300 | idle | 1.8
+      400 | builder 1, harvester 2, hauler 2, upgrader 2 |   0.7 |     0 |   170/300 | idle | 1.8
       500 | builder 2, harvester 2, hauler 2, upgrader 2 |   0.3 |     0 |    94/300 | idle | 1.8
       600 | builder 2, harvester 2, hauler 2, upgrader 2 |   0.5 |   0.5 |   194/300 | idle | 1.7
-      700 | builder 2, harvester 2, hauler 2, upgrader 2 |   0.4 |   0.7 |   145/300 | idle | 2
+      700 | builder 2, harvester 2, hauler 2, upgrader 2 |   0.4 |   0.7 |   145/300 | idle | 1.9
       800 | builder 2, harvester 2, hauler 2, upgrader 2 |   0.2 |   0.8 |   259/300 | idle | 2.4
-      801 | builder 2, harvester 2, hauler 2, upgrader 2 |     0 |     0 |   260/300 | idle | 2.8
+      801 | builder 2, harvester 2, hauler 2, upgrader 2 |     0 |     0 |   260/300 | idle | 2.9

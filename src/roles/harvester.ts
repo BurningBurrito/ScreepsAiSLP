@@ -34,7 +34,7 @@ export function runHarvester(creep: Creep): void
 
         if (creep.harvest(source) === ERR_NOT_IN_RANGE)
         {
-            creep.moveTo(source);
+            creep.moveTo(source, { ignoreCreeps: true, range: 1 });
         }
         return;
     }
@@ -138,7 +138,7 @@ export function runHarvester(creep: Creep): void
         {
             if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(controller);
+                creep.moveTo(controller, { ignoreCreeps: true, range: 0 });
             }
         }
     }

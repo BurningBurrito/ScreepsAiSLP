@@ -40,14 +40,19 @@ export function runUpgrader(creep: Creep): void
 
         if (creep.harvest(source) === ERR_NOT_IN_RANGE)
         {
-            creep.moveTo(source);
+            creep.moveTo(source, { ignoreCreeps: true, range: 1 });
             return;
         }
     }
 
     // Upgrade the controller
-    if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE)
+    const controllerPos = controller.pos;
+    if (creep.pos.getRangeTo(controllerPos) > 0)
     {
-        creep.moveTo(controller);
+        creep.moveTo(controllerPos, { ignoreCreeps: true, range: 0 });
+    }
+    else
+    {
+        creep.upgradeController(controller);
     }
 }

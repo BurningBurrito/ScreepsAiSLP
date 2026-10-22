@@ -168,7 +168,7 @@ export function runHauler(creep: Creep): void
     {
         if (creep.harvest(source) === ERR_NOT_IN_RANGE)
         {
-            creep.moveTo(source, { reusePath: 20 });
+            creep.moveTo(source, { reusePath: 20, range: 1 });
         }
         return;
     }

@@ -83,7 +83,7 @@ export function runBuilder(creep: Creep): void
 
             if (creep.harvest(source) === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(source, { ignoreCreeps: true });
+                creep.moveTo(source, { ignoreCreeps: true, range: 1 });
             }
             return;
         }
@@ -239,7 +239,7 @@ export function runBuilder(creep: Creep): void
             const result = creep.upgradeController(controller);
             if (result === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(controller, { ignoreCreeps: true });
+                creep.moveTo(controller.pos, { ignoreCreeps: true, reusePath: 5, range: 0 });
             }
             else if (result === ERR_INVALID_TARGET)
             {
