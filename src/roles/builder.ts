@@ -68,7 +68,21 @@ export function runBuilder(creep: Creep): void
             }
         }
 
-        // If no energy in spawn or extensions, harvest from sources
+        // If no energy in spawn or extensions, pick up dropped energy
+        if (!pickedUp)
+        {
+            const droppedEnergy = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES);
+            if (droppedEnergy !== null)
+            {
+                if (creep.pickup(droppedEnergy) === ERR_NOT_IN_RANGE)
+                {
+                    creep.moveTo(droppedEnergy, { ignoreCreeps: true, range: 1 });
+                }
+                pickedUp = true;
+            }
+        }
+
+        // If no energy in spawn, extensions, or on ground, harvest from sources
         if (!pickedUp)
         {
             const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
