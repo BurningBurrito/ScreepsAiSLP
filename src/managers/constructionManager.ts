@@ -527,6 +527,13 @@ export function manageConstruction(room: Room): void
     // Clean up old road sites that aren't on the computed paths
     cleanOldRoadSites(room, roadPaths);
 
+    // Place road sites on computed paths (lowest priority, but always try)
+    // This ensures roads are built even when extension sites exist
+    if (shouldPlaceRoadSites(room))
+    {
+        placeRoadSites(room, roadPaths);
+    }
+
     // Compute and place tower positions first (highest priority)
     const towerPositions = computeTowerPositions(room);
     placeTowerSites(room, towerPositions);
@@ -534,10 +541,4 @@ export function manageConstruction(room: Room): void
     // Compute and place extension positions (second priority)
     const extensionPositions = computeExtensionPositions(room);
     placeExtensionSites(room, extensionPositions);
-
-    // Place road sites on computed paths (only when no tower/extension sites exist)
-    if (shouldPlaceRoadSites(room))
-    {
-        placeRoadSites(room, roadPaths);
-    }
 }
