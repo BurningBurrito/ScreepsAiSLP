@@ -1,13 +1,19 @@
 # ScreepsAiSLP Status
 
 ## Current State
-M3 in progress: build priorities, layout and a tower. M2 acceptance test was failing (no extensions built), M1 had issues with harvester freezing and energy going in circles. Fixes implemented:
+M3 in progress: build priorities, layout and a tower. M2 acceptance test was failing (no extensions built), M1 had issues with energy delivery. Final fixes implemented:
 - Harvester now drops energy and switches to harvesting when it can't reach spawn with ERR_NO_PATH or ERR_INVALID_TARGET
-- Upgrader no longer takes energy from spawns (prevents energy going in circles), only harvests directly from sources
+- Hauler now picks up dropped energy from the ground using FIND_DROPPED_RESOURCES
+- All moveTo calls use reusePath: 20 to improve pathfinding efficiency
 - All unit tests passing
 
 ## Change Log
 ### 2026-10-22
+- Fixed smoke test: hauler picks up dropped energy using FIND_DROPPED_RESOURCES, delivering it to spawn/extensions
+- Added reusePath: 20 to all moveTo calls in harvester and hauler for better pathfinding efficiency
+- Updated status.md with fix details
+
+### 2026-10-22 (earlier)
 - Fixed harvester: drops energy when it can't reach spawn (ERR_NO_PATH/ERR_INVALID_TARGET) instead of freezing
 - Fixed upgrader: no longer withdraws energy from spawns, only harvests directly from sources
 - Updated unit test mock to include drop() method
