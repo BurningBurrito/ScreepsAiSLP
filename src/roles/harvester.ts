@@ -39,16 +39,23 @@ export function runHarvester(creep: Creep): void
 
         if (harvestResult === ERR_NOT_IN_RANGE)
         {
-            // Move toward source, but stay within 3 tiles of spawn when not actively harvesting
-            // to quickly transfer energy when full
-            const spawn = creep.pos.findClosestByPath(FIND_MY_SPAWNS);
-            if (spawn !== null && creep.pos.getRangeTo(spawn) > 3)
+            // Move toward source to harvest
+            // Only move to spawn range if we're very close to the spawn already
+            // (to quickly deliver energy when full)
+            const sourceRange = creep.pos.getRangeTo(source);
+            if (sourceRange > 1)
             {
-                creep.moveTo(spawn, { ignoreCreeps: true, range: 3 });
+                creep.moveTo(source, { ignoreCreeps: true, range: 1 });
             }
             else
             {
-                creep.moveTo(source, { ignoreCreeps: true, range: 1 });
+                // Already at source, try to harvest again next tick
+                // Or if we're close to spawn, move to spawn to deliver
+                const spawn = creep.pos.findClosestByPath(FIND_MY_SPAWNS);
+                if (spawn !== null && creep.pos.getRangeTo(spawn) <= 3)
+                {
+                    creep.moveTo(spawn, { ignoreCreeps: true, range: 1 });
+                }
             }
         }
         return;

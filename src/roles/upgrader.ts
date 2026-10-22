@@ -11,12 +11,10 @@
  */
 export function runUpgrader(creep: Creep): void
 {
-    console.log(`Upgrader ${creep.name} running`);
     const controller = creep.room.controller;
 
     if (controller === undefined || controller === null)
     {
-        console.log(`Upgrader ${creep.name}: no controller`);
         return; // No controller in room
     }
 
@@ -50,13 +48,7 @@ export function runUpgrader(creep: Creep): void
     // Upgrade the controller
     const controllerPos = controller.pos;
     const rangeToController = creep.pos.getRangeTo(controllerPos);
-    
-    // Log debug info every 100 ticks
-    if (Game.time % 100 === 0)
-    {
-        console.log(`Upgrader ${creep.name}: range=${rangeToController}, working=${String(creep.memory.working)}, store=${creep.store[RESOURCE_ENERGY]}/50, pos=(${creep.pos.x},${creep.pos.y})`);
-    }
-    
+
     if (rangeToController > 3)
     {
         const moveResult = creep.moveTo(controllerPos, { ignoreCreeps: true, range: 3 });
@@ -69,10 +61,6 @@ export function runUpgrader(creep: Creep): void
     }
     else
     {
-        const upgradeResult = creep.upgradeController(controller);
-        if (Game.time % 100 === 0)
-        {
-            console.log(`Upgrader ${creep.name}: upgradeResult=${upgradeResult}`);
-        }
+        creep.upgradeController(controller);
     }
 }
