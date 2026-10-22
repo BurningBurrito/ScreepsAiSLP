@@ -1,19 +1,19 @@
-# Scorecard: smoke · 2026-10-22 00:30 · 500 ticks · commit 876cb7d
+# Scorecard: smoke · 2026-10-22 00:55 · 500 ticks · commit 8818ed8
 
-| Metric (last 200 ticks unless noted) | This run | Previous run (2026-10-21 21:26, 1125a4e) | Change |
+| Metric (last 200 ticks unless noted) | This run | Previous run (2026-10-22 00:47, 8818ed8) | Change |
 | --- | --- | --- | --- |
-| Energy harvested / tick | 3.04 | 2.5 | +0.54 |
-| Energy wasted at source regeneration (sum) | 950 | 900 | +50 |
-| Controller progress / tick | 0.5 | 0.03 | +0.47 |
+| Energy harvested / tick | 3.97 | 3.04 | +0.93 |
+| Energy wasted at source regeneration (sum) | 910 | 950 | -40 |
+| Controller progress / tick | 0.5 | 0.5 | 0 |
 | Construction progress / tick | 0 | 0 | 0 |
-| Energy delivered to spawn and extensions / tick | 18.1 | 15.61 | +2.49 |
-| Spawn idle while energy is full | 40 % | 6 % | +34 pts |
-| Spawn busy | 4 % | 11 % | -7 pts |
-| Creep ticks idle (no action, no move for 5+ ticks) | 33 % | 48 % | -15 pts |
-| CPU / tick (average, max) | 1.87, 6.16 | 1.87, 6.06 | 0 |
-| RCL / progress at end (whole run) | 1 / 100 | 1 / 5 | +95 |
+| Energy delivered to spawn and extensions / tick | 21.1 | 18.1 | +3 |
+| Spawn idle while energy is full | 24 % | 40 % | -16 pts |
+| Spawn busy | 4 % | 4 % | 0 pts |
+| Creep ticks idle (no action, no move for 5+ ticks) | 39 % | 33 % | +6 pts |
+| CPU / tick (average, max) | 2.15, 5.8 | 1.87, 7.31 | +0.28 |
+| RCL / progress at end (whole run) | 1 / 100 | 1 / 100 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
-| Energy harvested (whole run) | 1,658 | 1,600 | +58 |
+| Energy harvested (whole run) | 1,882 | 1,658 | +224 |
 | Build energy spent on roads (share of all build energy) | 0 % | 0 % | 0 pts |
 | Road tiles: total / on wall / disconnected from the spawn network (end) | 0 / 0 / 0 | 0 / 0 / 0 | 0 |
 | Roads reach (end): sources, controller | 0 of 2, no | 0 of 2, no |  |
@@ -31,6 +31,6 @@ Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tic
 
       100 | harvester 1, hauler 2                    |   3.2 |     0 |    99/300 | idle | 1.2
       200 | harvester 2, hauler 2, upgrader 1        |   3.7 |     0 |   104/300 | busy | 1.6
-      300 | builder 1, harvester 2, hauler 2, upgrader 2 |   3.5 |     0 |    70/300 | idle | 1.9
-      400 | builder 2, harvester 2, hauler 2, upgrader 2 |   4.4 |   0.4 |   296/300 | idle | 2
-      500 | builder 2, harvester 2, hauler 2, upgrader 2 |   1.7 |   0.6 |   300/300 | idle | 1.8
+      300 | builder 1, harvester 2, hauler 2, upgrader 2 |   3.9 |     0 |    70/300 | idle | 1.9
+      400 | builder 2, harvester 2, hauler 2, upgrader 2 |   4.3 |   0.4 |   146/300 | idle | 2
+      500 | builder 2, harvester 2, hauler 2, upgrader 2 |   3.7 |   0.6 |   280/300 | idle | 2.3
