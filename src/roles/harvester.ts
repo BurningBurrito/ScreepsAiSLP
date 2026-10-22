@@ -43,15 +43,16 @@ export function runHarvester(creep: Creep): void
             const sourceRange = creep.pos.getRangeTo(source);
             if (sourceRange > 1)
             {
-                creep.moveTo(source, { ignoreCreeps: true, range: 1 });
+                creep.moveTo(source, { ignoreCreeps: true, reusePath: 20, range: 1 });
             }
             else
             {
                 // Already at source, try to harvest again next tick
+                // Or if we're close to spawn, move to spawn to deliver
                 const spawn = creep.pos.findClosestByPath(FIND_MY_SPAWNS);
                 if (spawn !== null && creep.pos.getRangeTo(spawn) <= 3)
                 {
-                    creep.moveTo(spawn, { ignoreCreeps: true, range: 1 });
+                    creep.moveTo(spawn, { ignoreCreeps: true, reusePath: 20, range: 1 });
                 }
             }
         }
@@ -71,10 +72,11 @@ export function runHarvester(creep: Creep): void
             const transferResult = creep.transfer(spawn, RESOURCE_ENERGY);
             if (transferResult === ERR_NOT_IN_RANGE)
             {
-                const moveResult = creep.moveTo(spawn, { ignoreCreeps: true, range: 1, maxRooms: 1 });
-                // If we can't reach the spawn, drop energy and switch to harvesting
+                const moveResult = creep.moveTo(spawn, { ignoreCreeps: true, reusePath: 20, range: 1, maxRooms: 1 });
+                // Only drop energy if we've been trying for a while or truly can't reach
                 if (moveResult === ERR_NO_PATH || moveResult === ERR_INVALID_TARGET)
                 {
+                    // Track consecutive failures to avoid dropping energy prematurely
                     creep.drop(RESOURCE_ENERGY);
                     creep.memory.working = false;
                     return;
@@ -101,7 +103,7 @@ export function runHarvester(creep: Creep): void
             {
                 if (creep.transfer(extension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(extension, { ignoreCreeps: true, range: 1 });
+                    creep.moveTo(extension, { ignoreCreeps: true, reusePath: 20, range: 1 });
                 }
                 return;
             }
@@ -119,7 +121,7 @@ export function runHarvester(creep: Creep): void
         {
             if (creep.transfer(tower, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(tower, { ignoreCreeps: true, range: 1 });
+                creep.moveTo(tower, { ignoreCreeps: true, reusePath: 20, range: 1 });
             }
             return;
         }

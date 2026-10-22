@@ -162,6 +162,17 @@ export function runHauler(creep: Creep): void
         }
     }
 
+    // Priority 3: Dropped energy on the ground
+    const droppedResources = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES);
+    if (droppedResources !== null && droppedResources.resourceType === RESOURCE_ENERGY && droppedResources.amount > 0)
+    {
+        if (creep.pickup(droppedResources) === ERR_NOT_IN_RANGE)
+        {
+            creep.moveTo(droppedResources, { reusePath: 20, range: 1 });
+        }
+        return;
+    }
+
     // If still no energy, harvest directly from sources
     const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
     if (source !== null)
