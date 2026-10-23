@@ -619,6 +619,10 @@ export function checkAndSpawn(room: Room): void
         if (role === "builder")
         {
             const constructionSites = room.find(FIND_CONSTRUCTION_SITES);
+            // Count tower and extension sites (priority construction)
+            const prioritySites = constructionSites.filter((site) =>
+                site.structureType === STRUCTURE_TOWER || site.structureType === STRUCTURE_EXTENSION
+            ).length;
             // Spawn builder if sites exist and no builder exists (priority over harvester)
             if (constructionSites.length > 0 && count === 0)
             {
@@ -627,6 +631,26 @@ export function checkAndSpawn(room: Room): void
                 if (spawnedName !== null)
                 {
                     return; // Spawned one, stop checking
+                }
+            }
+            // If we have priority construction sites (tower or extensions), spawn a second builder
+            // to ensure both tower and extensions get built
+            if (prioritySites > 0 && count === 1)
+            {
+                const spawnedName = spawnCreep(role, room);
+                if (spawnedName !== null)
+                {
+                    return; // Spawned second builder, stop checking
+                }
+            }
+            // If we still have priority construction sites, spawn a third builder
+            // to ensure faster construction of both tower and extensions
+            if (prioritySites > 0 && count === 2)
+            {
+                const spawnedName = spawnCreep(role, room);
+                if (spawnedName !== null)
+                {
+                    return; // Spawned third builder, stop checking
                 }
             }
             // If count >= minimum and no sites, skip

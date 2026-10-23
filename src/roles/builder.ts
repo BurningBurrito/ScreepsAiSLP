@@ -130,12 +130,12 @@ export function runBuilder(creep: Creep): void
         return;
     }
 
-    // Find construction sites, prioritizing tower > extension > roads
+    // Find construction sites, prioritizing tower first (critical for defense), then extensions, then roads
     const constructionSites = creep.room.find(FIND_CONSTRUCTION_SITES);
 
     if (constructionSites.length > 0)
     {
-        // Sort sites by priority: tower first, then extension, then roads
+        // Sort sites by priority: tower first (critical), then extensions, then roads
         const towerSites: ConstructionSite[] = [];
         const extensionSites: ConstructionSite[] = [];
         const roadSites: ConstructionSite[] = [];
@@ -166,24 +166,29 @@ export function runBuilder(creep: Creep): void
         const extensionsPlaced = extensionsBuilt + extensionSites.length;
         const roadsNeeded = extensionsBuilt >= 3 && extensionsPlaced >= 10;
 
-        // If we have tower sites, only build those
+        // Build priority: tower first (critical for defense, needs 5000 energy),
+        // then extensions (for energy capacity, need 5+ for 450),
+        // then roads (for movement efficiency)
+        // The tower is critical for defense and requires the most energy (5000).
+        // Once the tower is built, extensions can be built to increase energy capacity.
         let selectedSite: ConstructionSite | null = null;
         if (towerSites.length > 0)
         {
-            // Get the closest tower site
+            // Tower site exists - prioritize it
+            // The tower needs 5000 energy and is critical for defense
             selectedSite = creep.pos.findClosestByPath(towerSites);
-        }
-        else if (roadSites.length > 0 && roadsNeeded)
-        {
-            // Build roads when we have enough extensions and roads need building
-            // Roads are needed for creep movement efficiency and energy delivery
-            selectedSite = creep.pos.findClosestByPath(roadSites);
         }
         else if (extensionSites.length > 0)
         {
             // Prioritize extensions for energy capacity
             // Extensions are needed to increase room capacity and spawn larger creeps
             selectedSite = creep.pos.findClosestByPath(extensionSites);
+        }
+        else if (roadSites.length > 0 && roadsNeeded)
+        {
+            // Build roads when we have enough extensions and roads need building
+            // Roads are needed for creep movement efficiency and energy delivery
+            selectedSite = creep.pos.findClosestByPath(roadSites);
         }
 
         if (selectedSite !== null)
