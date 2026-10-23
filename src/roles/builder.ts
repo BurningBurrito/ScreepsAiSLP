@@ -82,12 +82,6 @@ export function runBuilder(creep: Creep): void
     // Find construction sites, prioritizing tower first (critical for defense), then extensions, then roads
     const constructionSites = creep.room.find(FIND_CONSTRUCTION_SITES);
 
-    // Debug: log construction sites every 100 ticks
-    if (Game.time % 100 === 0)
-    {
-        console.log(`[Builder] ${creep.name}: ${constructionSites.length} sites, tower: ${constructionSites.filter(s => s.structureType === STRUCTURE_TOWER).length}, ext: ${constructionSites.filter(s => s.structureType === STRUCTURE_EXTENSION).length}, road: ${constructionSites.filter(s => s.structureType === STRUCTURE_ROAD).length}`);
-    }
-
     if (constructionSites.length > 0)
     {
         // Sort sites by priority: tower first (critical), then extensions, then roads
@@ -159,12 +153,6 @@ export function runBuilder(creep: Creep): void
             {
                 selectedSite = creep.pos.findClosestByRange(roadSites);
             }
-        }
-
-        // Debug: log if no site selected
-        if (selectedSite === null && constructionSites.length > 0)
-        {
-            console.log(`[Builder] ${creep.name}: No site selected, ${constructionSites.length} sites available`);
         }
 
         if (selectedSite !== null)

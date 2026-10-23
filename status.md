@@ -1,9 +1,16 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Fixed 5 economy bugs identified by the owner. M3 in progress: build priorities, layout and a tower.
+Fixed 5 economy bugs identified by the owner. M3 in progress: build priorities, layout and a tower. All console.log calls removed from per-creep code.
 
 ## Change Log
+### 2026-10-23
+- **upgrader.ts**: Removed fallbackMoveTo function and all console.log calls that ran every 100 ticks. Simplified movement logic - uses moveTo with ignoreCreeps and reusePath.
+- **M3 status**: Build priorities and layout fixed in previous run. Now testing tower construction and extension placement.
+- All unit tests passing (6 tests)
+- Lint passes with no errors
+- Build succeeds
+
 ### 2026-10-22
 - **Bug 1 - hauler.ts**: Removed withdrawal from spawn and extensions that caused energy to go in circles. Haulers now only pick up from dropped energy and containers (when they exist). Set hauler minimum to 0.
 - **Bug 2 - harvester.ts**: Fixed moveTo error handling. Now only treats ERR_NO_PATH as "cannot reach"; ERR_TIRED/ERR_BUSY/other return codes mean "try again next tick" instead of dropping energy.

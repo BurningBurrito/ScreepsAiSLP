@@ -172,11 +172,35 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
                 else
                 {
                     // Can't afford the minimal upgrader body [WORK, CARRY, MOVE] = 200 energy
+                    // Try to create a minimal body with available energy
+                    // The minimal body for upgrader is [WORK, MOVE] = 150 (no CARRY, picks up from ground)
+                    // But upgraders need WORK to upgrade, so we require at least 1 WORK
                     if (role === "upgrader")
                     {
-                        moveParts = 0;
-                        carryParts = 0;
-                        workParts = 0;
+                        // Try to create a minimal body with at least 1 WORK and 1 MOVE
+                        // If we can't afford CARRY, the creep harvests and drops energy on ground
+                        const energyAfterMove = energyAvailable - 50; // 1 MOVE
+                        if (energyAfterMove >= 150)
+                        {
+                            // Can afford [MOVE, CARRY, WORK] = 200
+                            moveParts = 1;
+                            carryParts = 1;
+                            workParts = 1;
+                        }
+                        else if (energyAfterMove >= 100)
+                        {
+                            // Can afford [MOVE, WORK] = 150 (no CARRY, will pick up from ground)
+                            moveParts = 1;
+                            carryParts = 0;
+                            workParts = 1;
+                        }
+                        else
+                        {
+                            // Can't afford WORK part, can't spawn a useful upgrader
+                            moveParts = 0;
+                            carryParts = 0;
+                            workParts = 0;
+                        }
                     }
                     else
                     {
@@ -355,16 +379,13 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
         // With no CARRY parts, harvested energy is dropped on the ground (not stored)
         // For better performance, we want at least 2 WORK parts
 
-        // Reserve energy for at least 2 WORK (200), 1 CARRY (50), 2 MOVE (100) = 350 min
+        // Reserve energy for at least 2 WORK (200), 1 CARRY (50), 2 MOVE (100) = 200 min
         // If we can afford at least 2 WORK + CARRY + MOVE, create that body
-        if (remainingEnergy >= 350)
+        if (remainingEnergy >= 200)
         {
-            // Full upgrader body: WORK parts first, then CARRY, then MOVE
+            // Smallest upgrader body: WORK parts first, then CARRY, then MOVE
             body.push(WORK);
             remainingEnergy -= 100;
-            body.push(WORK);
-            remainingEnergy -= 100;
-
             // Add CARRY parts for energy capacity (each CARRY provides 50 capacity)
             while (remainingEnergy >= 50 && body.length < 50)
             {
@@ -390,33 +411,6 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
                     body.push(MOVE);
                     remainingEnergy -= 50;
                 }
-            }
-        }
-        else if (remainingEnergy >= 300)
-        {
-            // At least 2 WORK, 1 CARRY, 1 MOVE = 300
-            // This is the minimum for decent upgrade performance with RCL 1 capacity
-            body.push(WORK);
-            remainingEnergy -= 100;
-            body.push(WORK);
-            remainingEnergy -= 100;
-            body.push(CARRY);
-            remainingEnergy -= 50;
-            body.push(MOVE);
-            remainingEnergy -= 50;
-
-            // Add more parts if we have enough energy
-            // Add MOVE parts for movement efficiency
-            while (remainingEnergy >= 50 && body.length < 50)
-            {
-                body.push(MOVE);
-                remainingEnergy -= 50;
-            }
-            // Add more WORK parts if we have enough energy
-            while (remainingEnergy >= 100 && body.length < 50)
-            {
-                body.push(WORK);
-                remainingEnergy -= 100;
             }
         }
         else if (remainingEnergy >= 250)
@@ -552,6 +546,7 @@ function spawnCreep(role: string, room: Room): string | null
         {
             // Upgraders need CARRY parts to hold harvested energy
             // They harvest directly from sources and need CARRY to upgrade
+            // Without CARRY, the creep can't store energy, so it can't upgrade
             if (hasWork && hasCarry && hasMove)
             {
                 // Can spawn upgrader with WORK, CARRY, and MOVE
@@ -672,6 +667,88 @@ export function checkAndSpawn(room: Room): void
             if (spawnedName !== null)
             {
                 return; // Spawned one, stop checking
+            }
+        }
+    }
+
+    // Use idle energy to spawn extra creeps if available
+    const spawns = room.find(FIND_MY_SPAWNS);
+    if (spawns.length > 0 && spawns[0].spawning === null)
+    {
+        const spawnEnergy = spawns[0].store[RESOURCE_ENERGY];
+        const bodyCost = BASE_CREEP_COST;
+        
+        if (spawnEnergy >= bodyCost)
+        {
+            const harvesterCount = getCreepCount("harvester");
+            const upgraderCount = getCreepCount("upgrader");
+            const builderCount = getCreepCount("builder");
+            const haulerCount = getCreepCount("hauler");
+            const minimum = MIN_CREEPS_PER_ROLE;
+
+            // Priority: builder (if missing) > upgrader > harvester > hauler
+            // If builder is missing and sites exist, spawn builder first
+            if (builderCount < minimum.builder)
+            {
+                const constructionSites = room.find(FIND_CONSTRUCTION_SITES);
+                if (constructionSites.length > 0)
+                {
+                    const spawnedName = spawnCreep("builder", room);
+                    if (spawnedName !== null)
+                    {
+                        return;
+                    }
+                }
+            }
+            
+            if (upgraderCount >= minimum.upgrader)
+            {
+                const spawnedName = spawnCreep("upgrader", room);
+                if (spawnedName !== null)
+                {
+                    return;
+                }
+            }
+
+            if (harvesterCount >= minimum.harvester)
+            {
+                const sources = room.find(FIND_SOURCES);
+                if (sources.length > harvesterCount)
+                {
+                    const spawnedName = spawnCreep("harvester", room);
+                    if (spawnedName !== null)
+                    {
+                        return;
+                    }
+                }
+            }
+
+            if (builderCount >= minimum.builder)
+            {
+                const constructionSites = room.find(FIND_CONSTRUCTION_SITES);
+                if (constructionSites.length > 0 && builderCount < 3)
+                {
+                    const spawnedName = spawnCreep("builder", room);
+                    if (spawnedName !== null)
+                    {
+                        return;
+                    }
+                }
+            }
+
+            if (haulerCount >= minimum.hauler)
+            {
+                const containerCount = room.find(FIND_STRUCTURES, {
+                    filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+                }).length;
+                if (containerCount > haulerCount && haulerCount < 3)
+                {
+                    const spawnedName = spawnCreep("hauler", room);
+                    if (spawnedName !== null)
+                    {
+                        return;
+                    }
+                }
             }
         }
     }
