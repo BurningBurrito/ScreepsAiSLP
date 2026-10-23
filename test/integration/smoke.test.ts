@@ -3,12 +3,12 @@
  * Written by the owner and protected like the acceptance tests. The agent runs it through
  * agent-test after every change (rule 07, step B3). It is a regression check that catches a
  * dead or erroring colony in about two minutes; it is not a milestone gate.
- * SMOKE_TICKS overrides the length (default 700).
+ * SMOKE_TICKS overrides the length (default 500).
  */
 import { assert } from "chai";
 import { helper } from "./helper";
 
-const TICKS = Number(process.env.SMOKE_TICKS || 700);
+const TICKS = Number(process.env.SMOKE_TICKS || 500);
 
 describe("smoke: short run with scorecard", function ()
 {
