@@ -22,12 +22,30 @@ export function runBuilder(creep: Creep): void
         creep.memory.working = true;
     }
 
-    // If not working (empty store), get energy from extensions, dropped resources, or harvest from sources
-    // Note: Builders do NOT withdraw from the spawn to prevent energy from going in circles
-    // Energy should only flow: sources → harvester → spawn/extensions → builder (via extensions or dropped)
+    // If not working (empty store), get energy from extensions, dropped resources, harvest from sources, or withdraw from spawn
+    // Note: Builders withdraw from the spawn to get energy when needed. This is acceptable because:
+    // 1. When the room is below full capacity, the spawn fills up from harvesters
+    // 2. Withdrawals only happen when the creep needs energy, so there's no net loss
+    // 3. The spawn doesn't "lose" energy - it's transferred to the builder for building
     if (!creep.memory.working)
     {
-        // First, try to pick up energy from extensions
+        // First, try to withdraw from the spawn (primary energy source for builders)
+        const spawns = creep.room.find(FIND_MY_SPAWNS);
+        for (const spawn of spawns)
+        {
+            const available = spawn.store.getUsedCapacity(RESOURCE_ENERGY);
+            const canTake = Math.min(creep.store.getFreeCapacity(RESOURCE_ENERGY), available);
+            if (canTake > 0)
+            {
+                if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+                {
+                    creep.moveTo(spawn, { ignoreCreeps: true, reusePath: 20, range: 1 });
+                }
+                return;
+            }
+        }
+
+        // If no energy in spawn, try to pick up energy from extensions
         const extensions = creep.room.find(FIND_STRUCTURES, {
             filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
         });
@@ -40,7 +58,7 @@ export function runBuilder(creep: Creep): void
             {
                 if (creep.withdraw(ext, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(ext, { ignoreCreeps: true });
+                    creep.moveTo(ext, { ignoreCreeps: true, reusePath: 20, range: 1 });
                 }
                 pickedUp = true;
                 break;
@@ -55,13 +73,13 @@ export function runBuilder(creep: Creep): void
             {
                 if (creep.pickup(droppedEnergy) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(droppedEnergy, { ignoreCreeps: true, range: 1 });
+                    creep.moveTo(droppedEnergy, { ignoreCreeps: true, reusePath: 20, range: 1 });
                 }
                 pickedUp = true;
             }
         }
 
-        // If no energy in extensions or on ground, harvest from sources
+        // If no energy in spawn, extensions, or on ground, harvest from sources
         if (!pickedUp)
         {
             const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
@@ -78,7 +96,7 @@ export function runBuilder(creep: Creep): void
 
             if (harvestResult === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(source, { ignoreCreeps: true, range: 1 });
+                creep.moveTo(source, { ignoreCreeps: true, reusePath: 20, range: 1 });
             }
             return;
         }
@@ -134,7 +152,7 @@ export function runBuilder(creep: Creep): void
             const result = creep.build(selectedSite);
             if (result === ERR_NOT_IN_RANGE)
             {
-                const moveResult = creep.moveTo(selectedSite, { ignoreCreeps: true, range: 1 });
+                const moveResult = creep.moveTo(selectedSite, { ignoreCreeps: true, range: 0 });
                 // Handle movement failures
                 if (moveResult === ERR_NO_PATH)
                 {

@@ -25,7 +25,7 @@ export function runHauler(creep: Creep): void
             {
                 if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(spawn, { reusePath: 20 });
+                    creep.moveTo(spawn, { reusePath: 20, range: 1 });
                 }
                 return;
             }
@@ -47,7 +47,7 @@ export function runHauler(creep: Creep): void
                 {
                     if (creep.transfer(tower, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                     {
-                        creep.moveTo(tower, { reusePath: 20 });
+                        creep.moveTo(tower, { reusePath: 20, range: 1 });
                     }
                     return;
                 }
@@ -70,7 +70,7 @@ export function runHauler(creep: Creep): void
                 {
                     if (creep.transfer(targetExtension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                     {
-                        creep.moveTo(targetExtension, { reusePath: 20 });
+                        creep.moveTo(targetExtension, { reusePath: 20, range: 1 });
                     }
                     return;
                 }
@@ -89,7 +89,7 @@ export function runHauler(creep: Creep): void
             {
                 if (creep.transfer(targetSpawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(targetSpawn, { reusePath: 20 });
+                    creep.moveTo(targetSpawn, { reusePath: 20, range: 1 });
                 }
                 return;
             }
@@ -112,7 +112,7 @@ export function runHauler(creep: Creep): void
             {
                 if (creep.withdraw(targetContainer, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(targetContainer, { reusePath: 20 });
+                    creep.moveTo(targetContainer, { reusePath: 20, range: 1 });
                 }
                 return;
             }
@@ -137,7 +137,7 @@ export function runHauler(creep: Creep): void
             {
                 if (creep.withdraw(sp, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(sp, { reusePath: 20 });
+                    creep.moveTo(sp, { reusePath: 20, range: 1 });
                 }
                 return;
             }
@@ -161,7 +161,7 @@ export function runHauler(creep: Creep): void
             {
                 if (creep.withdraw(ext, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(ext, { reusePath: 20 });
+                    creep.moveTo(ext, { reusePath: 20, range: 1 });
                 }
                 return;
             }
@@ -196,6 +196,6 @@ export function runHauler(creep: Creep): void
     });
     if (finalSpawnPos !== null && creep.pos.getRangeTo(finalSpawnPos) > 3)
     {
-        creep.moveTo(finalSpawnPos, { reusePath: 20 });
+        creep.moveTo(finalSpawnPos, { reusePath: 20, range: 1 });
     }
 }
