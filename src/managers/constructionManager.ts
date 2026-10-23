@@ -655,6 +655,11 @@ function areSourcesAndControllerConnected(room: Room): boolean
 /** Manages construction of extensions, roads, and towers */
 export function manageConstruction(room: Room): void
 {
+    // Debug: log room state
+    const spawn = getSpawnPosition(room);
+    const controller = getControllerPosition(room);
+    const controllerLevel = getControllerLevel(room);
+    
     // Compute road paths first (needed for cleanup)
     const roadPaths = computeRoadPaths(room);
 
@@ -667,6 +672,12 @@ export function manageConstruction(room: Room): void
     // Compute extension positions (second priority)
     const extensionPositions = computeExtensionPositions(room);
 
+    // Debug: log positions
+    if (extensionPositions.length === 0)
+    {
+        console.log(`[Construction] No extension positions available (spawn=${spawn !== null}, controllerLevel=${controllerLevel})`);
+    }
+    
     // Place tower sites first (highest priority)
     placeTowerSites(room, towerPositions);
 

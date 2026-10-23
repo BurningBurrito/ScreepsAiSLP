@@ -251,9 +251,18 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
             body.push(CARRY);
             body.push(MOVE);
         }
+        else if (role === "builder")
+        {
+            // Builders: WORK + WORK + CARRY + MOVE = 300
+            // This is a special base body with more WORK parts for efficient building
+            body.push(WORK);
+            body.push(WORK);
+            body.push(CARRY);
+            body.push(MOVE);
+        }
         else
         {
-            // Harvesters, builders: WORK + CARRY + MOVE
+            // Harvesters: WORK + CARRY + MOVE
             body.push(WORK);
             body.push(CARRY);
             body.push(MOVE);
@@ -261,33 +270,22 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     }
 
     // Use remaining energy to add parts
-    let remainingEnergy = energyAvailable - maxSets * BASE_CREEP_COST;
+    // For builders, the base body is 300 (WORK, WORK, CARRY, MOVE)
+    const builderBaseCost = 300;
+    let remainingEnergy = role === "builder" 
+        ? energyAvailable - maxSets * builderBaseCost 
+        : energyAvailable - maxSets * BASE_CREEP_COST;
 
-    // For builders, prioritize WORK parts first (for efficient building)
+    // For builders, use remaining energy to add WORK parts
     if (role === "builder")
     {
-        // For builders, use a base body with more WORK parts
-        // The minimal useful builder body is [WORK, WORK, CARRY, MOVE] = 300
-        // With 2 WORK parts, the builder can build at 60 energy/tick
-        for (let i = 0; i < maxSets; i++)
-        {
-            // Builder base: [WORK, WORK, CARRY, MOVE] = 300
-            body.push(WORK);
-            body.push(WORK);
-            body.push(CARRY);
-            body.push(MOVE);
-        }
-
-        // Use remaining energy to add parts, prioritizing WORK
-        remainingEnergy = energyAvailable - maxSets * 300;
-        
         // Add WORK parts first (for efficient building)
         while (remainingEnergy >= 100)
         {
             body.push(WORK);
             remainingEnergy -= 100;
         }
-        
+
         // Add CARRY parts (for energy transport)
         while (remainingEnergy >= 50)
         {
@@ -597,9 +595,8 @@ function spawnCreep(role: string, room: Room): string | null
 export function checkAndSpawn(room: Room): void
 {
     // Check each role and spawn if below minimum
-    // Priority order: harvesters first, then builders while construction sites exist,
-    // then upgraders, then haulers (only when container exists)
-    const roles: string[] = ["harvester", "builder", "upgrader", "hauler"];
+    // Priority order: builders (when sites exist), then harvesters, then upgraders, then haulers
+    const roles: string[] = ["builder", "harvester", "upgrader", "hauler"];
 
     for (const role of roles)
     {
@@ -618,17 +615,27 @@ export function checkAndSpawn(room: Room): void
         const count = getCreepCount(role);
         const minimum = MIN_CREEPS_PER_ROLE[role as keyof typeof MIN_CREEPS_PER_ROLE];
 
-        // Special case: builders spawn when construction sites exist
+        // Special case: builders spawn when construction sites exist, even if minimum is 0
         if (role === "builder")
         {
             const constructionSites = room.find(FIND_CONSTRUCTION_SITES);
-            // Spawn builder if sites exist or if count < minimum
-            if (constructionSites.length === 0 && count >= minimum)
+            // Spawn builder if sites exist and no builder exists (priority over harvester)
+            if (constructionSites.length > 0 && count === 0)
             {
-                continue; // Skip builders when no sites and minimum reached
+                // Builder is needed immediately for construction sites
+                const spawnedName = spawnCreep(role, room);
+                if (spawnedName !== null)
+                {
+                    return; // Spawned one, stop checking
+                }
+            }
+            // If count >= minimum and no sites, skip
+            if (count >= minimum && constructionSites.length === 0)
+            {
+                continue;
             }
             // If count >= minimum but sites exist, we still need a builder
-            // The minimum check below will handle this if we set minimum > 0
+            // Fall through to the general check below
         }
 
         if (count < minimum)
@@ -638,20 +645,6 @@ export function checkAndSpawn(room: Room): void
             if (spawnedName !== null)
             {
                 return; // Spawned one, stop checking
-            }
-        }
-        // Special case: if builder minimum is 0 but construction sites exist, spawn one
-        else if (role === "builder" && minimum === 0)
-        {
-            const constructionSites = room.find(FIND_CONSTRUCTION_SITES);
-            if (constructionSites.length > 0 && count === 0)
-            {
-                // No builder exists but sites exist, spawn one
-                const spawnedName = spawnCreep(role, room);
-                if (spawnedName !== null)
-                {
-                    return; // Spawned one, stop checking
-                }
             }
         }
     }
