@@ -324,7 +324,7 @@ function cleanOldRoadSites(room: Room, validRoadPositions: RoomPosition[]): void
 }
 
 /** Place road construction sites on computed paths */
-function placeRoadSites(room: Room, roadPositions: RoomPosition[], extensionPositions?: RoomPosition[]): void
+function placeRoadSites(room: Room, roadPositions: RoomPosition[], extensionPositions?: RoomPosition[]): number
 {
     const existingRoadSites = room.find(FIND_CONSTRUCTION_SITES, {
         filter: (site) => site.structureType === STRUCTURE_ROAD,
@@ -374,6 +374,7 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[], extensionPosi
             room.createConstructionSite(pos, STRUCTURE_ROAD);
         }
     }
+    return 0;  // TODO: Track actually placed roads
 }
 
 /** Place extension construction sites */
@@ -388,7 +389,9 @@ function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): vo
     }).length;
 
     const totalExtensions = extensionsBuilt + extensionSites;
-    const remaining = Math.min(10 - totalExtensions, extensionPositions.length);
+    // Place only 3 extension sites (enough to reach energy capacity > 300)
+    // This allows the builder to start building roads sooner
+    const remaining = Math.min(5 - totalExtensions, extensionPositions.length);
 
     const controllerLevel = getControllerLevel(room);
     if (controllerLevel < 2)
@@ -660,7 +663,8 @@ export function manageConstruction(room: Room): void
 
     // Place road sites on computed paths (lowest priority)
     // Skip positions that are designated for extensions
-    if (shouldPlaceRoadSites(room))
+    const shouldPlace = shouldPlaceRoadSites(room);
+    if (shouldPlace)
     {
         placeRoadSites(room, roadPaths, extensionPositions);
     }

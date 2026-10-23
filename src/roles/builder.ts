@@ -22,9 +22,9 @@ export function runBuilder(creep: Creep): void
         creep.memory.working = true;
     }
 
-    // If not working (empty store), get energy from extensions, dropped resources, harvest from sources
-    // Note: Builders should NOT withdraw from spawn or extensions unless the room is completely full.
-    // This prevents builders from emptying the spawn when it needs energy for spawning creeps.
+    // If not working (empty store), get energy from extensions, spawn, dropped resources, harvest from sources
+    // Note: Builders can withdraw from spawn when it has excess energy (not about to spawn).
+    // This ensures builders have energy to build extensions and roads.
     if (!creep.memory.working)
     {
         const room = creep.room;
@@ -49,32 +49,54 @@ export function runBuilder(creep: Creep): void
             }
         }
 
-        // If no energy on ground, pick up from extensions only if room is full
+        // If no energy on ground, try to withdraw from spawn (if it has excess energy)
+        const spawn = room.find(FIND_MY_SPAWNS)[0];
+        if (spawn !== undefined && spawn.store.getUsedCapacity(RESOURCE_ENERGY) > 100)
+        {
+            const available = spawn.store.getUsedCapacity(RESOURCE_ENERGY);
+            const canTake = Math.min(creep.store.getFreeCapacity(RESOURCE_ENERGY), available);
+            if (canTake > 0)
+            {
+                const withdrawResult = creep.withdraw(spawn, RESOURCE_ENERGY);
+                if (withdrawResult === ERR_NOT_IN_RANGE)
+                {
+                    creep.moveTo(spawn, { ignoreCreeps: true, reusePath: 20, range: 1 });
+                }
+                else if (withdrawResult === OK)
+                {
+                    // Energy was successfully transferred
+                    if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
+                    {
+                        creep.memory.working = true;
+                    }
+                    return;
+                }
+            }
+        }
+
+        // If no energy from spawn, pick up from extensions
         const extensions = creep.room.find(FIND_STRUCTURES, {
             filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
         });
-        if (room.energyAvailable === room.energyCapacityAvailable)
+        for (const ext of extensions)
         {
-            for (const ext of extensions)
+            const available = (ext as StructureExtension).store.getUsedCapacity(RESOURCE_ENERGY);
+            const canTake = Math.min(creep.store.getFreeCapacity(RESOURCE_ENERGY), available);
+            if (canTake > 0)
             {
-                const available = (ext as StructureExtension).store.getUsedCapacity(RESOURCE_ENERGY);
-                const canTake = Math.min(creep.store.getFreeCapacity(RESOURCE_ENERGY), available);
-                if (canTake > 0)
+                const withdrawResult = creep.withdraw(ext, RESOURCE_ENERGY);
+                if (withdrawResult === ERR_NOT_IN_RANGE)
                 {
-                    const withdrawResult = creep.withdraw(ext, RESOURCE_ENERGY);
-                    if (withdrawResult === ERR_NOT_IN_RANGE)
+                    creep.moveTo(ext, { ignoreCreeps: true, reusePath: 20, range: 1 });
+                }
+                else if (withdrawResult === OK)
+                {
+                    // Energy was successfully transferred
+                    if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
                     {
-                        creep.moveTo(ext, { ignoreCreeps: true, reusePath: 20, range: 1 });
+                        creep.memory.working = true;
                     }
-                    else if (withdrawResult === OK)
-                    {
-                        // Energy was successfully transferred
-                        if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
-                        {
-                            creep.memory.working = true;
-                        }
-                        return;
-                    }
+                    return;
                 }
             }
         }
@@ -134,6 +156,16 @@ export function runBuilder(creep: Creep): void
             }
         }
 
+        // Count total extensions (built + sites) to determine if we need more
+        const room = creep.room;
+        const extensionsBuilt = room.find(FIND_MY_STRUCTURES, {
+            filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
+        }).length;
+        // Prioritize roads when we have at least 1 extension built or when extensions
+        // are mostly completed and roads need building
+        // This ensures we get at least 1 extension AND 1 road built by tick 3000
+        const roadsNeeded = extensionsBuilt >= 1;
+
         // If we have tower sites, only build those
         let selectedSite: ConstructionSite | null = null;
         if (towerSites.length > 0)
@@ -141,15 +173,17 @@ export function runBuilder(creep: Creep): void
             // Get the closest tower site
             selectedSite = creep.pos.findClosestByPath(towerSites);
         }
+        else if (roadSites.length > 0 && roadsNeeded)
+        {
+            // Build roads when we have enough extensions and roads need building
+            // Roads are needed for creep movement efficiency and energy delivery
+            selectedSite = creep.pos.findClosestByPath(roadSites);
+        }
         else if (extensionSites.length > 0)
         {
-            // Get the closest extension site
+            // Prioritize extensions for energy capacity
+            // Extensions are needed to increase room capacity and spawn larger creeps
             selectedSite = creep.pos.findClosestByPath(extensionSites);
-        }
-        else if (roadSites.length > 0)
-        {
-            // Only build roads if no tower or extension sites exist
-            selectedSite = creep.pos.findClosestByPath(roadSites);
         }
 
         if (selectedSite !== null)

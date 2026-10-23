@@ -159,40 +159,13 @@ export function runHarvester(creep: Creep): void
                     break; // Only try one tower
                 }
             }
-            
-            // If we couldn't deliver to tower, try controller
+            // If we could not deliver to tower, drop energy on ground for other creeps to pick up
+            // This ensures energy is available for building when spawns/extensions are full
             if (!deliveredToTower)
             {
-                const controller = creep.room.controller;
-                if (controller !== undefined && controller !== null)
-                {
-                    const upgradeResult = creep.upgradeController(controller);
-                    if (upgradeResult === ERR_NOT_IN_RANGE)
-                    {
-                        const moveResult = creep.moveTo(controller, { ignoreCreeps: true, reusePath: 20, range: 3 });
-                        // Only ERR_NO_PATH means "cannot reach"; ERR_TIRED/ERR_BUSY/other means try again next tick
-                        if (moveResult === ERR_NO_PATH)
-                        {
-                            creep.drop(RESOURCE_ENERGY);
-                            creep.memory.working = false;
-                            return;
-                        }
-                        // If moveTo returned anything else, try again next tick
-                        return;
-                    }
-                    else if (upgradeResult === OK)
-                    {
-                        if (creep.store[RESOURCE_ENERGY] === 0)
-                        {
-                            creep.memory.working = false;
-                        }
-                    }
-                }
-                else
-                {
-                    creep.drop(RESOURCE_ENERGY);
-                    creep.memory.working = false;
-                }
+                creep.drop(RESOURCE_ENERGY);
+                creep.memory.working = false;
+                return;
             }
         }
     }

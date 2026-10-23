@@ -96,13 +96,15 @@ describe("harvester", () => {
       upgradeController: () => { upgradeControllerCallCount++; return OK; },
       transfer: (target: any, resourceType: ResourceConstant) => { transferCallCount++; return ERR_NOT_IN_RANGE; },
       harvest: () => ERR_NOT_IN_RANGE,
+      drop: () => {},
     };
 
     runHarvester(creep);
 
-    // With partial energy but spawn full, should call upgradeController
+    // With partial energy but spawn full, should call drop on ground
     assert.equal(transferCallCount, 0, "transfer should not be called when spawn is full");
-    assert.equal(upgradeControllerCallCount, 1, "upgradeController should be called when spawn is full");
+    assert.equal(upgradeControllerCallCount, 0, "upgradeController should not be called when tower is unavailable");
+    assert.isFalse(creep.memory.working, "creep should stop working after dropping energy");
   });
 
   it("harvests from source when store is empty", () => {
