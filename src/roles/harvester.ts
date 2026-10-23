@@ -73,13 +73,16 @@ export function runHarvester(creep: Creep): void
             if (transferResult === ERR_NOT_IN_RANGE)
             {
                 const moveResult = creep.moveTo(spawn, { ignoreCreeps: true, reusePath: 20, range: 1, maxRooms: 1 });
-                // If moveTo didn't return OK, we can't reach the spawn - drop and harvest
-                if (moveResult !== OK)
+                // Only ERR_NO_PATH means "cannot reach"; ERR_TIRED/ERR_BUSY/other means try again next tick
+                if (moveResult === ERR_NO_PATH)
                 {
                     creep.drop(RESOURCE_ENERGY);
                     creep.memory.working = false;
                     return;
                 }
+                // If moveTo returned anything else (OK, ERR_TIRED, ERR_BUSY, or undefined),
+                // try again next tick - don't drop energy or continue to next target
+                return;
             }
             else if (transferResult === OK)
             {
@@ -105,13 +108,15 @@ export function runHarvester(creep: Creep): void
                 if (transferResult === ERR_NOT_IN_RANGE)
                 {
                     const moveResult = creep.moveTo(extension, { ignoreCreeps: true, reusePath: 20, range: 1 });
-                    // If moveTo didn't return OK, we can't reach the extension - drop and harvest
-                    if (moveResult !== OK)
+                    // Only ERR_NO_PATH means "cannot reach"; ERR_TIRED/ERR_BUSY/other means try again next tick
+                    if (moveResult === ERR_NO_PATH)
                     {
                         creep.drop(RESOURCE_ENERGY);
                         creep.memory.working = false;
                         return;
                     }
+                    // If moveTo returned anything else, try again next tick
+                    return;
                 }
                 else if (transferResult === OK)
                 {
@@ -137,13 +142,15 @@ export function runHarvester(creep: Creep): void
                     if (transferResult === ERR_NOT_IN_RANGE)
                     {
                         const moveResult = creep.moveTo(tower, { ignoreCreeps: true, reusePath: 20, range: 1 });
-                        // If moveTo didn't return OK, we can't reach the tower - drop and harvest
-                        if (moveResult !== OK)
+                        // Only ERR_NO_PATH means "cannot reach"; ERR_TIRED/ERR_BUSY/other means try again next tick
+                        if (moveResult === ERR_NO_PATH)
                         {
                             creep.drop(RESOURCE_ENERGY);
                             creep.memory.working = false;
                             return;
                         }
+                        // If moveTo returned anything else, try again next tick
+                        return;
                     }
                     else if (transferResult === OK)
                     {
@@ -163,13 +170,15 @@ export function runHarvester(creep: Creep): void
                     if (upgradeResult === ERR_NOT_IN_RANGE)
                     {
                         const moveResult = creep.moveTo(controller, { ignoreCreeps: true, reusePath: 20, range: 3 });
-                        // If moveTo didn't return OK, we can't reach the controller - drop and harvest
-                        if (moveResult !== OK)
+                        // Only ERR_NO_PATH means "cannot reach"; ERR_TIRED/ERR_BUSY/other means try again next tick
+                        if (moveResult === ERR_NO_PATH)
                         {
                             creep.drop(RESOURCE_ENERGY);
                             creep.memory.working = false;
                             return;
                         }
+                        // If moveTo returned anything else, try again next tick
+                        return;
                     }
                     else if (upgradeResult === OK)
                     {

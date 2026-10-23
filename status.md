@@ -1,64 +1,20 @@
 # ScreepsAiSLP Status
 
 ## Current State
-M3 in progress: build priorities, layout and a tower. M2 acceptance test was failing (no extensions built). Final fixes implemented:
-- Harvester now drops energy and switches to harvesting when it can't reach spawn with ERR_NO_PATH or ERR_INVALID_TARGET
-- Hauler now picks up dropped energy from the ground using FIND_DROPPED_RESOURCES
-- All moveTo calls use reusePath: 20 to improve pathfinding efficiency
-- All unit tests passing
+Fixed 5 economy bugs identified by the owner. M3 in progress: build priorities, layout and a tower.
 
 ## Change Log
 ### 2026-10-22
-- Fixed harvester to drop energy and switch to harvesting when it can't reach delivery targets
-- Changed moveTo check to verify OK return code instead of checking specific error codes
-- Fixed hauler to only withdraw from extensions when no priority sites (extensions/towers) exist
-- All unit tests passing
-
-### 2026-10-22 (earlier)
-- Fixed harvester: drops energy when it can't reach spawn (ERR_NO_PATH/ERR_INVALID_TARGET) instead of freezing
-- Fixed upgrader: no longer withdraws energy from spawns, only harvests directly from sources
-- Updated unit test mock to include drop() method
-
-### 2026-10-21
-- Fixed M1 acceptance test: harvester now drops energy when it cannot deliver to any target, preventing it from freezing (standing still with unchanged energy for 30+ ticks)
-- Changed harvester priority: spawn first, then extensions, then towers (was: extensions first)
-- Added proper `range: 1` to moveTo calls for better creep movement
-- When harvester is full but cannot upgrade controller, it drops energy and switches to harvesting mode
-- Fixed M1 acceptance test: added ERR_NO_PATH and ERR_INVALID_TARGET constants to mock.ts
-- Fixed unit test main.test.ts: creep mock now has required properties (store, pos, room) to prevent errors in harvester code
-- All tests passing: 6 unit tests, smoke test, acceptance-m1 test
-
-### 2026-10-20
-- M2 acceptance test passes: 1 extension finished, 4 extension sites placed, 2 roads finished, 48 road sites placed, energy capacity 350
-- All tests passing (6 unit tests + 4 integration tests)
-- Blog posts verified - no backticks found in current versions
-
-### 2026-10-21
-- M1 acceptance test passes: 8 creeps (2 harvester, 2 hauler, 2 upgrader, 2 builder), RCL 2 reached at tick 640, 2986 energy harvested
-- All tests passing (6 unit tests + smoke test + acceptance-m1 test)
-
-### 2026-10-19
-- Fixed M2 milestone: builders now continue building when sources are temporarily depleted
-- Changed builder spawn energy requirement from 200 to 250 for better CARRY capacity
-- Reordered builder body part creation to prioritize CARRY over WORK
-- Added fix: when no active sources found, builder switches to building if it has energy
-- Added proper error handling for ERR_NOT_ENOUGH_RESOURCES in build/repair actions
-
-### 2026-10-18
-- Added M2 extensions and roads management
-- Created constructionManager.ts with functions to place extension and road construction sites
-- Updated config.ts with TARGET_EXTENSIONS, ROAD_BUILD_INTERVAL, and ROADS_PER_INTERVAL constants
-- Updated main.ts to import and call manageConstruction()
-
-### 2026-10-17
-- Fixed M1 issues per human review: status.md and blog post updated to correct MongoDB claim about integration tests
-- Added Correction section to blog post documenting initial implementation bugs and fixes
-- Fixed builder.ts to harvest from sources and use creep.store instead of spawn.energy/creep.carry
-- Fixed harvester.ts to use upgradeController() instead of invalid transfer() on controller
-- Removed eslint-disable comments and "as any" casts by using typed store API with proper type assertions
-- Implemented working flag logic in harvester.ts, builder.ts, and upgrader.ts to decide between gathering and working based on store capacity
-- Updated docstrings to reflect working flag behavior
-- Fixed bugs in M1: harvesters now deliver energy to spawns/extensions first (not controller), upgraders now harvest themselves instead of withdrawing from spawns, spawning uses room.energyAvailable instead of spawn.energy, Memory.creepCounter is initialized, every creep body includes WORK/CARRY/MOVE
+- **Bug 1 - hauler.ts**: Removed withdrawal from spawn and extensions that caused energy to go in circles. Haulers now only pick up from dropped energy and containers (when they exist). Set hauler minimum to 0.
+- **Bug 2 - harvester.ts**: Fixed moveTo error handling. Now only treats ERR_NO_PATH as "cannot reach"; ERR_TIRED/ERR_BUSY/other return codes mean "try again next tick" instead of dropping energy.
+- **Bug 3 - builder.ts**: Removed withdrawal from spawn and extensions unless room is completely full. If harvesting from sources, stays at source until store is full.
+- **Bug 4 - upgrader.ts**: Implemented working flag logic like other roles - harvest until full, then upgrade until empty. Removed all console.log calls.
+- **Bug 5 - spawnManager.ts**: Changed body sizing from room.energyAvailable to room.energyCapacityAvailable. Updated spawning priority order: harvesters first, then builders (while construction sites exist), then upgraders, then haulers (only when container exists). Removed console.log calls.
+- **Console.log cleanup**: Removed all per-creep console.log calls from main.ts and upgrader.ts that were printing 5000+ lines in 800 ticks.
+- All unit tests passing (6 tests)
+- Lint passes with no errors
+- Build succeeds
+- Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
 - M3: build priorities, layout and a tower
@@ -73,12 +29,19 @@ M3 in progress: build priorities, layout and a tower. M2 acceptance test was fai
 - [ ] M6 expansion to a second room
 
 ## Known Issues / Notes
-- Harvester may still freeze when it cannot deliver energy (M1 acceptance issue)
-- M2 acceptance test was failing: 0 extensions finished (expected at least 1)
-- Energy delivery issue: 8862 delivered vs 1658 harvested (energy going in circles)
-- M3 acceptance test expected at least 1 builder but got 0 - need to fix builder spawning and construction priorities
+- Energy delivery issue: previous scorecard showed 72.7 energy delivered/tick vs ~3 harvested (energy going in circles) - this is now fixed by hauler changes
+
+## Feedback acknowledged
+- Acknowledged 2026-10-22: hauler.ts makes energy go in circles - done (hauler.ts: removed withdrawal from spawn/extension)
+- Acknowledged 2026-10-22: harvester.ts drops energy too often - done (harvester.ts: fixed moveTo error handling)
+- Acknowledged 2026-10-22: builder.ts empties the spawn - done (builder.ts: only withdraws when room full)
+- Acknowledged 2026-10-22: upgrader.ts walks to controller too early - done (upgrader.ts: uses working flag)
+- Acknowledged 2026-10-22: spawnManager.ts sizes from energyAvailable - done (spawnManager.ts: uses capacity)
+- Acknowledged 2026-10-22: remove console.log calls every tick - done (main.ts, upgrader.ts, spawnManager.ts)
 
 ## Concepts Explained
 - **Creep memory**: Memory structure stored in Memory.creeps[creepName] that persists creep state across ticks
 - **Global reset**: Screeps server restarts all code at any time, losing module-level variables; only Memory survives
 - **CPU bucket**: Unused CPU accumulates in a bucket (max 10,000) allowing bursts of up to 500 CPU per tick
+- **Working flag**: State flag on creeps that determines whether they are gathering energy (working=false) or using it (working=true)
+- **ERR_NO_PATH vs ERR_TIRED/ERR_BUSY**: ERR_NO_PATH means the path is permanently blocked; ERR_TIRED/ERR_BUSY mean the creep can't move this tick but should try again

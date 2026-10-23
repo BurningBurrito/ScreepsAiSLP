@@ -34,7 +34,7 @@ function getCreepCount(role: string): number
  */
 function getTotalEnergyAvailable(room: Room): number
 {
-    return room.energyAvailable;
+    return room.energyCapacityAvailable;
 }
 
 /**
@@ -531,11 +531,9 @@ function spawnCreep(role: string, room: Room): string | null
 
     if (result === OK)
     {
-        console.log(`Spawned new ${role}: ${creepName}`);
         return creepName;
     }
 
-    console.log(`Failed to spawn ${creepName}: ${result}`);
     return null;
 }
 
@@ -547,12 +545,36 @@ function spawnCreep(role: string, room: Room): string | null
 export function checkAndSpawn(room: Room): void
 {
     // Check each role and spawn if below minimum
-    const roles: string[] = ["harvester", "upgrader", "builder", "hauler"];
+    // Priority order: harvesters first, then builders while construction sites exist,
+    // then upgraders, then haulers (only when container exists)
+    const roles: string[] = ["harvester", "builder", "upgrader", "hauler"];
 
     for (const role of roles)
     {
+        // Special case: haulers only spawn if container exists
+        if (role === "hauler")
+        {
+            const containerCount = room.find(FIND_STRUCTURES, {
+                filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+            }).length;
+            if (containerCount === 0)
+            {
+                continue; // Skip haulers until containers exist
+            }
+        }
+
         const count = getCreepCount(role);
         const minimum = MIN_CREEPS_PER_ROLE[role as keyof typeof MIN_CREEPS_PER_ROLE];
+
+        // Special case: builders only spawn when construction sites exist
+        if (role === "builder")
+        {
+            const constructionSites = room.find(FIND_CONSTRUCTION_SITES);
+            if (constructionSites.length === 0 && count >= minimum)
+            {
+                continue; // Skip builders when no sites and minimum reached
+            }
+        }
 
         if (count < minimum)
         {

@@ -119,55 +119,6 @@ export function runHauler(creep: Creep): void
         }
     }
 
-    // Priority 1: Spawn (if needed and has energy)
-    const hasPrioritySites = creep.room.find(FIND_MY_CONSTRUCTION_SITES, {
-        filter: (s) => s.structureType === STRUCTURE_TOWER || s.structureType === STRUCTURE_EXTENSION,
-    }).length > 0;
-
-    if (!hasPrioritySites)
-    {
-        const spawnSources = creep.room.find(FIND_MY_STRUCTURES, {
-            filter: (s) => s.structureType === STRUCTURE_SPAWN,
-        });
-
-        for (const sp of spawnSources)
-        {
-            const spawn = sp as StructureSpawn;
-            if (spawn.store[RESOURCE_ENERGY] >= 200)
-            {
-                if (creep.withdraw(sp, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-                {
-                    creep.moveTo(sp, { reusePath: 20, range: 1 });
-                }
-                return;
-            }
-        }
-    }
-
-    // Priority 2: Extensions (if needed and has energy)
-    // Only withdraw from extensions if there are no priority sites that need building
-    // Note: hasPrioritySites was already checked at line 123, reuse that variable
-
-    if (!hasPrioritySites)
-    {
-        const extensionSources = creep.room.find(FIND_MY_STRUCTURES, {
-            filter: (s) => s.structureType === STRUCTURE_EXTENSION,
-        });
-
-        for (const ext of extensionSources)
-        {
-            const extension = ext as StructureExtension;
-            if (extension.store[RESOURCE_ENERGY] > 0)
-            {
-                if (creep.withdraw(ext, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-                {
-                    creep.moveTo(ext, { reusePath: 20, range: 1 });
-                }
-                return;
-            }
-        }
-    }
-
     // Priority 3: Dropped energy on the ground
     const droppedResources = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES);
     if (droppedResources !== null && droppedResources.resourceType === RESOURCE_ENERGY && droppedResources.amount > 0)
@@ -179,18 +130,28 @@ export function runHauler(creep: Creep): void
         return;
     }
 
-    // If still no energy, harvest directly from sources
-    const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
-    if (source !== null)
+    // If still no energy and a container exists, withdraw from it
+    const containerList = creep.room.find(FIND_STRUCTURES, {
+        filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+    });
+
+    if (containerList.length > 0)
     {
-        if (creep.harvest(source) === ERR_NOT_IN_RANGE)
+        const targetContainer = creep.pos.findClosestByPath(containerList) as StructureContainer;
+        if (targetContainer !== null)
         {
-            creep.moveTo(source, { reusePath: 20, range: 1 });
+            if (targetContainer.store.getUsedCapacity(RESOURCE_ENERGY) > 0)
+            {
+                if (creep.withdraw(targetContainer, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+                {
+                    creep.moveTo(targetContainer, { reusePath: 20, range: 1 });
+                }
+                return;
+            }
         }
-        return;
     }
 
-    // No energy sources found, park near spawn
+    // If still no energy, park near spawn
     const finalSpawnPos = creep.pos.findClosestByPath(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_SPAWN,
     });

@@ -6,9 +6,9 @@
 /** Minimum number of creeps to maintain per role */
 export const MIN_CREEPS_PER_ROLE = {
   harvester: 2,
-  upgrader: 2,
-  builder: 2,
-  hauler: 2,
+  upgrader: 1,
+  builder: 1,
+  hauler: 0,
 };
 
 /** Minimum body parts for basic creep functionality */
