@@ -7,7 +7,7 @@
 export const MIN_CREEPS_PER_ROLE = {
   harvester: 2,
   upgrader: 1,
-  builder: 1,  // Builder spawns when construction sites exist
+  builder: 0,  // Builder spawns when construction sites exist
   hauler: 1,
 };
 

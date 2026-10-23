@@ -28,16 +28,6 @@ function getCreepCount(role: string): number
 }
 
 /**
- * Gets the total energy available for spawning (from room energy)
- * @param room The room to check
- * @returns Total energy available
- */
-function getTotalEnergyAvailable(room: Room): number
-{
-    return room.energyCapacityAvailable;
-}
-
-/**
  * Creates a creep body based on available energy
  * @param energyAvailable Available energy for the body
  * @returns Array of body parts
@@ -276,26 +266,36 @@ function createCreepBody(energyAvailable: number, role: string): BodyPartConstan
     // For builders, prioritize WORK parts first (for efficient building)
     if (role === "builder")
     {
-        // Add extra WORK parts first (builders need WORK for efficient building)
-        // But ensure at least 1 MOVE part first
-        const energyForMove = remainingEnergy >= 50 ? 50 : 0;
-        remainingEnergy -= energyForMove;
-        body.push(MOVE);
+        // For builders, use a base body with more WORK parts
+        // The minimal useful builder body is [WORK, WORK, CARRY, MOVE] = 300
+        // With 2 WORK parts, the builder can build at 60 energy/tick
+        for (let i = 0; i < maxSets; i++)
+        {
+            // Builder base: [WORK, WORK, CARRY, MOVE] = 300
+            body.push(WORK);
+            body.push(WORK);
+            body.push(CARRY);
+            body.push(MOVE);
+        }
+
+        // Use remaining energy to add parts, prioritizing WORK
+        remainingEnergy = energyAvailable - maxSets * 300;
         
+        // Add WORK parts first (for efficient building)
         while (remainingEnergy >= 100)
         {
             body.push(WORK);
             remainingEnergy -= 100;
         }
-
-        // Then add extra CARRY parts (for energy transport)
+        
+        // Add CARRY parts (for energy transport)
         while (remainingEnergy >= 50)
         {
             body.push(CARRY);
             remainingEnergy -= 50;
         }
 
-        // Finally add more MOVE parts
+        // Add MOVE parts (for movement)
         while (remainingEnergy >= 50)
         {
             body.push(MOVE);
@@ -498,27 +498,18 @@ function spawnCreep(role: string, room: Room): string | null
         return null; // Spawn is busy
     }
 
-    // Use actual spawn energy for body creation, not room capacity
-    // This ensures we create a body that can actually be spawned
+    // Use actual energy available for spawning (from spawn + extensions)
+    // room.energyAvailable is the energy that can actually be used for spawning
     const spawnEnergy = spawns[0].store[RESOURCE_ENERGY];
-    const energyAvailable = getTotalEnergyAvailable(room);
+    const energyAvailable = room.energyAvailable;
 
     // Check if we have at least one MOVE part required for every creep
-    const harvesterCount = getCreepCount("harvester");
-
-    // For harvester, we can spawn with less energy if none exist (emergency)
-    // For builder, need enough energy for a body with WORK, CARRY, MOVE
-    // For hauler, need at least 100 energy for 1 CARRY + 1 MOVE (RCL 1 has 150 capacity)
-    // For upgrader, need at least 300 energy for 2 WORK + 1 CARRY + 2 MOVE (RCL 1 capacity)
-    // Otherwise, need enough energy for a useful creep
-    // Allow spawning with any available energy (createCreepBody handles low-energy cases)
-    // This ensures the colony can maintain minimum creep count even when energy is low
 
     const creepName = `${role}_${Game.time}_${Memory.creepCounter}`;
     Memory.creepCounter++;
 
-    // Create body based on actual spawn energy (not room capacity)
-    // If spawn has less energy than room capacity, use spawn energy
+    // Create body based on available energy (not room capacity)
+    // Use the lesser of actual available energy or capacity to ensure we don't over-spawn
     const bodyEnergy = Math.min(spawnEnergy, energyAvailable);
     const body = createCreepBody(bodyEnergy, role);
 

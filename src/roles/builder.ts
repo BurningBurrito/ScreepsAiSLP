@@ -161,10 +161,10 @@ export function runBuilder(creep: Creep): void
         const extensionsBuilt = room.find(FIND_MY_STRUCTURES, {
             filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
         }).length;
-        // Prioritize roads when we have at least 1 extension built or when extensions
-        // are mostly completed and roads need building
-        // This ensures we get at least 1 extension AND 1 road built by tick 3000
-        const roadsNeeded = extensionsBuilt >= 1;
+        // Prioritize roads when we have at least 3 extensions built AND at least 10 extension sites
+        // This ensures we build enough extensions (and energy capacity) before building roads
+        const extensionsPlaced = extensionsBuilt + extensionSites.length;
+        const roadsNeeded = extensionsBuilt >= 3 && extensionsPlaced >= 10;
 
         // If we have tower sites, only build those
         let selectedSite: ConstructionSite | null = null;
@@ -191,7 +191,7 @@ export function runBuilder(creep: Creep): void
             const result = creep.build(selectedSite);
             if (result === ERR_NOT_IN_RANGE)
             {
-                const moveResult = creep.moveTo(selectedSite, { ignoreCreeps: true, range: 0 });
+                const moveResult = creep.moveTo(selectedSite, { ignoreCreeps: true, range: 1 });
                 // Handle movement failures
                 if (moveResult === ERR_NO_PATH)
                 {

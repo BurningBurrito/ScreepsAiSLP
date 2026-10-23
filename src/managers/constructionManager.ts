@@ -208,6 +208,12 @@ function computeExtensionPositions(room: Room): RoomPosition[]
         }
     }
 
+    // Debug: log if no positions were computed
+    if (positions.length === 0)
+    {
+        console.log(`[Construction] No extension positions computed`);
+    }
+
     return positions;
 }
 
@@ -380,18 +386,13 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[], extensionPosi
 /** Place extension construction sites */
 function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): void
 {
-    const extensionsBuilt = room.find(FIND_MY_STRUCTURES, {
-        filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
-    }).length;
-
     const extensionSites = room.find(FIND_CONSTRUCTION_SITES, {
         filter: (site) => site.structureType === STRUCTURE_EXTENSION,
     }).length;
 
-    const totalExtensions = extensionsBuilt + extensionSites;
-    // Place only 3 extension sites (enough to reach energy capacity > 300)
-    // This allows the builder to start building roads sooner
-    const remaining = Math.min(5 - totalExtensions, extensionPositions.length);
+    // Place up to 10 extension sites (RCL 3 max)
+    // Count only sites (not built extensions) to determine how many more to place
+    const remaining = Math.min(10 - extensionSites, extensionPositions.length);
 
     const controllerLevel = getControllerLevel(room);
     if (controllerLevel < 2)
@@ -404,6 +405,12 @@ function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): vo
         filter: (site) => site.structureType === STRUCTURE_ROAD,
     });
     const roadSet = new Set(roadSites.map((site) => `${site.pos.x},${site.pos.y}`));
+
+    // Debug: log if no positions available
+    if (extensionPositions.length === 0)
+    {
+        console.log(`[Construction] No extension positions available (controllerLevel=${controllerLevel})`);
+    }
 
     let placed = 0;
     for (let i = 0; i < extensionPositions.length && placed < remaining; i++)
@@ -429,6 +436,11 @@ function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): vo
         {
             placed++;
         }
+    }
+    
+    if (placed > 0)
+    {
+        console.log(`[Construction] Placed ${placed} extension sites`);
     }
 }
 
