@@ -34,7 +34,9 @@ function getControllerLevel(room: Room): number
 {
     if (room.controller === undefined || room.controller === null)
     {
-        return 0;
+        // If the controller Game object isn't available, assume the room is at RCL 1
+        // (the starting level). The controller should become available after the room is scoped.
+        return 1;
     }
     return room.controller.level;
 }
@@ -474,6 +476,171 @@ function placeTowerSites(room: Room, towerPositions: RoomPosition[]): void
     }
 }
 
+/** Compute container positions for each source */
+function computeContainerPositions(room: Room): RoomPosition[]
+{
+    const positions: RoomPosition[] = [];
+    const spawn = getSpawnPosition(room);
+    if (spawn === null)
+    {
+        console.log(`[Construction] No spawn found for container position computation`);
+        return positions;
+    }
+
+    const sources = getSources(room);
+    console.log(`[Construction] Computing container positions for ${sources.length} sources`);
+    
+    // First, check which sources already have container sites or containers
+    const existingContainerPositions: Set<string> = new Set();
+    
+    // Check existing containers
+    const containers = room.find(FIND_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
+    });
+    for (const container of containers)
+    {
+        existingContainerPositions.add(`${container.pos.x},${container.pos.y}`);
+    }
+    
+    // Check existing container sites
+    const containerSites = room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_CONTAINER,
+    });
+    for (const site of containerSites)
+    {
+        existingContainerPositions.add(`${site.pos.x},${site.pos.y}`);
+    }
+    
+    console.log(`[Construction] Existing container positions/sites: ${existingContainerPositions.size}`);
+    
+    for (const source of sources)
+    {
+        console.log(`[Construction] Source ${source.id} at ${source.pos.x},${source.pos.y}`);
+        
+        // Check if this source already has a container or site
+        let hasContainer = false;
+        for (let dx = -1; dx <= 1; dx++)
+        {
+            for (let dy = -1; dy <= 1; dy++)
+            {
+                if (dx === 0 && dy === 0)
+                {
+                    continue;
+                }
+                
+                const posStr = `${source.pos.x + dx},${source.pos.y + dy}`;
+                if (existingContainerPositions.has(posStr))
+                {
+                    hasContainer = true;
+                    break;
+                }
+            }
+            if (hasContainer)
+            {
+                break;
+            }
+        }
+        
+        if (hasContainer)
+        {
+            console.log(`[Construction] Source ${source.id} already has container/site, skipping`);
+            continue;
+        }
+        
+        // Place container on the tile next to the source that's closest to the spawn
+        // We'll try all 8 adjacent tiles and find the one closest to spawn
+        let bestPos: RoomPosition | null = null;
+        let bestDistance = 1000;
+        
+        for (let dx = -1; dx <= 1; dx++)
+        {
+            for (let dy = -1; dy <= 1; dy++)
+            {
+                if (dx === 0 && dy === 0)
+                {
+                    continue; // Skip source tile itself
+                }
+                
+                const containerPos = new RoomPosition(source.pos.x + dx, source.pos.y + dy, room.name);
+                
+                // Skip if out of bounds
+                if (containerPos.x < 0 || containerPos.x >= 49 || containerPos.y < 0 || containerPos.y >= 49)
+                {
+                    continue;
+                }
+                
+                // Skip if on wall terrain
+                if (isWallPosition(containerPos, room))
+                {
+                    continue;
+                }
+                
+                // Check if occupied by structure or site
+                const structures = containerPos.lookFor(LOOK_STRUCTURES);
+                const sites = containerPos.lookFor(LOOK_CONSTRUCTION_SITES);
+                
+                if (structures.length > 0 || sites.length > 0)
+                {
+                    continue;
+                }
+                
+                // Calculate distance to spawn
+                const distance = containerPos.getRangeTo(spawn);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestPos = containerPos;
+                }
+            }
+        }
+        
+        if (bestPos !== null)
+        {
+            positions.push(bestPos);
+            console.log(`[Construction] Container position for source ${source.id}: ${bestPos.x},${bestPos.y} (dist=${bestDistance})`);
+        }
+        else
+        {
+            console.log(`[Construction] No valid container position found for source ${source.id}`);
+        }
+    }
+
+    console.log(`[Construction] Computed ${positions.length} container positions`);
+    return positions;
+}
+
+/** Place container construction sites */
+function placeContainerSites(room: Room, containerPositions: RoomPosition[]): void
+{
+    const containersBuilt = room.find(FIND_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
+    }).length;
+
+    const containerLimit = 5; // Maximum containers per room
+    if (containersBuilt >= containerLimit || containerPositions.length === 0)
+    {
+        return;
+    }
+
+    // Place container sites for sources that don't have containers or sites
+    for (const pos of containerPositions)
+    {
+        // Check if there's already a container or site at this position
+        const structures = pos.lookFor(LOOK_STRUCTURES);
+        const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
+
+        const hasContainer = structures.some((s) => s.structureType === STRUCTURE_CONTAINER);
+        const hasSite = sites.some((s) => s.structureType === STRUCTURE_CONTAINER);
+
+        if (!hasContainer && !hasSite)
+        {
+            room.createConstructionSite(pos, STRUCTURE_CONTAINER);
+            console.log(`[Construction] Placed container site at (${pos.x}, ${pos.y})`);
+            return; // Only place one container at a time
+        }
+    }
+}
+
 /** Check if we should place road sites */
 function shouldPlaceRoadSites(room: Room): boolean
 {
@@ -652,12 +819,14 @@ function areSourcesAndControllerConnected(room: Room): boolean
     return true;
 }
 
-/** Manages construction of extensions, roads, and towers */
+/** Manages construction of extensions, roads, towers, and containers */
 export function manageConstruction(room: Room): void
 {
-    // Debug: log room state
-    const spawn = getSpawnPosition(room);
     const controllerLevel = getControllerLevel(room);
+    
+    // Debug: log room state
+    console.log(`[Construction] manageConstruction called, controllerLevel=${controllerLevel}`);
+    const spawn = getSpawnPosition(room);
     
     // Compute road paths first (needed for cleanup)
     const roadPaths = computeRoadPaths(room);
@@ -671,6 +840,9 @@ export function manageConstruction(room: Room): void
     // Compute extension positions (second priority)
     const extensionPositions = computeExtensionPositions(room);
 
+    // Compute container positions (third priority)
+    const containerPositions = computeContainerPositions(room);
+
     // Debug: log positions
     if (extensionPositions.length === 0)
     {
@@ -682,6 +854,9 @@ export function manageConstruction(room: Room): void
 
     // Place extension sites (second priority)
     placeExtensionSites(room, extensionPositions);
+
+    // Place container sites (third priority)
+    placeContainerSites(room, containerPositions);
 
     // Place road sites on computed paths (lowest priority)
     // Skip positions that are designated for extensions

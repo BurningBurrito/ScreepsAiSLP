@@ -2,12 +2,16 @@
  * Builds and repairs structures in the room.
  * If no construction sites exist, upgrades the controller instead.
  * Prioritizes tower and extension sites over roads.
+ *
+ * Energy handling: builders ONLY harvest from sources (like harvesters do).
+ * They do NOT withdraw from spawn or extensions - those are destinations for energy.
+ * This prevents energy from going in circles.
  */
 
 /**
  * Runs the builder creep behavior.
  * Builds construction sites, repairs structures, and upgrades controller when idle.
- * Prioritizes picking up energy from spawn when available to reduce wait time.
+ * Harvests from sources only - never withdraws from spawn or extensions.
  * @param creep The builder creep to run
  */
 export function runBuilder(creep: Creep): void
@@ -22,13 +26,10 @@ export function runBuilder(creep: Creep): void
         creep.memory.working = true;
     }
 
-    // If not working (empty store), get energy from extensions, spawn, dropped resources, harvest from sources
-    // Note: Builders can withdraw from spawn when it has excess energy (not about to spawn).
-    // This ensures builders have energy to build extensions and roads.
+    // If not working (empty store), harvest from sources
+    // Builders never withdraw from spawn or extensions - that's what harvesters do
     if (!creep.memory.working)
     {
-        const room = creep.room;
-
         // First, try to pick up dropped energy
         const droppedEnergy = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES);
         if (droppedEnergy !== null)
@@ -49,59 +50,7 @@ export function runBuilder(creep: Creep): void
             }
         }
 
-        // If no energy on ground, try to withdraw from spawn (if it has excess energy)
-        const spawn = room.find(FIND_MY_SPAWNS)[0];
-        if (spawn !== undefined && spawn.store.getUsedCapacity(RESOURCE_ENERGY) > 100)
-        {
-            const available = spawn.store.getUsedCapacity(RESOURCE_ENERGY);
-            const canTake = Math.min(creep.store.getFreeCapacity(RESOURCE_ENERGY), available);
-            if (canTake > 0)
-            {
-                const withdrawResult = creep.withdraw(spawn, RESOURCE_ENERGY);
-                if (withdrawResult === ERR_NOT_IN_RANGE)
-                {
-                    creep.moveTo(spawn, { ignoreCreeps: true, reusePath: 20, range: 1 });
-                }
-                else if (withdrawResult === OK)
-                {
-                    // Energy was successfully transferred
-                    if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
-                    {
-                        creep.memory.working = true;
-                    }
-                    return;
-                }
-            }
-        }
-
-        // If no energy from spawn, pick up from extensions
-        const extensions = creep.room.find(FIND_STRUCTURES, {
-            filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
-        });
-        for (const ext of extensions)
-        {
-            const available = (ext as StructureExtension).store.getUsedCapacity(RESOURCE_ENERGY);
-            const canTake = Math.min(creep.store.getFreeCapacity(RESOURCE_ENERGY), available);
-            if (canTake > 0)
-            {
-                const withdrawResult = creep.withdraw(ext, RESOURCE_ENERGY);
-                if (withdrawResult === ERR_NOT_IN_RANGE)
-                {
-                    creep.moveTo(ext, { ignoreCreeps: true, reusePath: 20, range: 1 });
-                }
-                else if (withdrawResult === OK)
-                {
-                    // Energy was successfully transferred
-                    if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
-                    {
-                        creep.memory.working = true;
-                    }
-                    return;
-                }
-            }
-        }
-
-        // If no energy in spawn, extensions, or on ground, harvest from sources
+        // If no energy on ground, harvest from sources
         // A builder that harvests must stay at the source until its store is full
         const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
 
@@ -132,6 +81,12 @@ export function runBuilder(creep: Creep): void
 
     // Find construction sites, prioritizing tower first (critical for defense), then extensions, then roads
     const constructionSites = creep.room.find(FIND_CONSTRUCTION_SITES);
+
+    // Debug: log construction sites every 100 ticks
+    if (Game.time % 100 === 0)
+    {
+        console.log(`[Builder] ${creep.name}: ${constructionSites.length} sites, tower: ${constructionSites.filter(s => s.structureType === STRUCTURE_TOWER).length}, ext: ${constructionSites.filter(s => s.structureType === STRUCTURE_EXTENSION).length}, road: ${constructionSites.filter(s => s.structureType === STRUCTURE_ROAD).length}`);
+    }
 
     if (constructionSites.length > 0)
     {
@@ -177,18 +132,39 @@ export function runBuilder(creep: Creep): void
             // Tower site exists - prioritize it
             // The tower needs 5000 energy and is critical for defense
             selectedSite = creep.pos.findClosestByPath(towerSites);
+            // Fallback to range-based selection if path-based fails
+            if (selectedSite === null)
+            {
+                selectedSite = creep.pos.findClosestByRange(towerSites);
+            }
         }
         else if (extensionSites.length > 0)
         {
             // Prioritize extensions for energy capacity
             // Extensions are needed to increase room capacity and spawn larger creeps
             selectedSite = creep.pos.findClosestByPath(extensionSites);
+            // Fallback to range-based selection if path-based fails
+            if (selectedSite === null)
+            {
+                selectedSite = creep.pos.findClosestByRange(extensionSites);
+            }
         }
         else if (roadSites.length > 0 && roadsNeeded)
         {
             // Build roads when we have enough extensions and roads need building
             // Roads are needed for creep movement efficiency and energy delivery
             selectedSite = creep.pos.findClosestByPath(roadSites);
+            // Fallback to range-based selection if path-based fails
+            if (selectedSite === null)
+            {
+                selectedSite = creep.pos.findClosestByRange(roadSites);
+            }
+        }
+
+        // Debug: log if no site selected
+        if (selectedSite === null && constructionSites.length > 0)
+        {
+            console.log(`[Builder] ${creep.name}: No site selected, ${constructionSites.length} sites available`);
         }
 
         if (selectedSite !== null)
@@ -213,25 +189,17 @@ export function runBuilder(creep: Creep): void
                     // Just call build again in the next tick
                     // Don't move away - we're already in position
                 }
+                else if (moveResult === OK)
+                {
+                    // Successfully started moving to the site
+                    // Build again on the next tick when we're in range
+                }
             }
             else if (result === ERR_INVALID_TARGET)
             {
                 // Creep is on top of the construction site (range 0)
                 // Move away from the site to unblock the path
                 moveAwayFromSite(creep);
-            }
-            else if (result === ERR_NOT_OWNER)
-            {
-                // This should never happen - the creep is a my creep
-                // Just log and continue
-            }
-            else if (result === ERR_BUSY)
-            {
-                // Spawn is still building something else
-            }
-            else if (result === ERR_RCL_NOT_ENOUGH)
-            {
-                // Room controller level too low to build this
             }
             else if (result === OK || result === ERR_NOT_ENOUGH_ENERGY)
             {

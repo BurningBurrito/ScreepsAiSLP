@@ -2,11 +2,13 @@
  * Hauler creep role - Stage 2 economy: moves energy from sources to consumers.
  *
  * At RCL 3+, we have containers near sources and a tower that needs energy.
- * Haulers withdraw energy from containers/spawns/extensions and deliver to:
+ * Haulers withdraw energy from containers and deliver to:
  * 1. Tower (priority: repair/attack)
  * 2. Extensions (priority: spawn creeps)
- * 3. Spawn (priority: spawn creeps)
- * 4. Upgraders (if carrying, they can pick up directly)
+ * 3. Upgraders (if carrying, they can pick up directly)
+ *
+ * IMPORTANT: Haulers NEVER withdraw from spawn or extensions. Those are
+ * destinations, not sources. This prevents energy from going in circles.
  */
 
 export function runHauler(creep: Creep): void
@@ -14,23 +16,6 @@ export function runHauler(creep: Creep): void
     // If creep is full, deliver energy to targets
     if (creep.store.getUsedCapacity() === creep.store.getCapacity())
     {
-        // Priority 0: Spawn - if low on energy, prioritize filling it for spawning
-        const spawns = creep.room.find(FIND_MY_SPAWNS);
-        for (const spawn of spawns)
-        {
-            const spawnEnergy = spawn.store[RESOURCE_ENERGY];
-            const spawnCapacity = spawn.store.getCapacity(RESOURCE_ENERGY);
-            // Deliver to spawn when it has free capacity (spawn needs 300 for spawning)
-            if (spawnEnergy < spawnCapacity - 50)
-            {
-                if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-                {
-                    creep.moveTo(spawn, { reusePath: 20, range: 1 });
-                }
-                return;
-            }
-        }
-
         // Priority 1: Tower - needs energy for repairs and attacks
         const towers = creep.room.find(FIND_MY_STRUCTURES, {
             filter: (s) => s.structureType === STRUCTURE_TOWER,
@@ -77,7 +62,7 @@ export function runHauler(creep: Creep): void
             }
         }
 
-        // Priority 3: Spawn - if spawn is full enough, transfer to it anyway
+        // Priority 3: Spawn - if still has energy after tower and extensions
         const spawnTargets = creep.room.find(FIND_MY_STRUCTURES, {
             filter: (s) => s.structureType === STRUCTURE_SPAWN,
         });
@@ -98,6 +83,7 @@ export function runHauler(creep: Creep): void
     }
 
     // If creep is not full, pick up energy from sources
+    // Only use containers and dropped energy - NEVER withdraw from spawn or extensions
     // Priority 0: Containers (if they have energy)
     const containers = creep.room.find(FIND_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_CONTAINER,
@@ -119,7 +105,7 @@ export function runHauler(creep: Creep): void
         }
     }
 
-    // Priority 3: Dropped energy on the ground
+    // Priority 1: Dropped energy on the ground
     const droppedResources = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES);
     if (droppedResources !== null && droppedResources.resourceType === RESOURCE_ENERGY && droppedResources.amount > 0)
     {
@@ -130,7 +116,7 @@ export function runHauler(creep: Creep): void
         return;
     }
 
-    // If still no energy and a container exists, withdraw from it
+    // If still no energy and a container exists, check again (in case we missed it)
     const containerList = creep.room.find(FIND_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_CONTAINER,
     });

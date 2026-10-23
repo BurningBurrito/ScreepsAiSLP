@@ -600,15 +600,18 @@ export function checkAndSpawn(room: Room): void
 
     for (const role of roles)
     {
-        // Special case: haulers only spawn if container exists
+        // Special case: haulers only spawn if container exists or is being built
         if (role === "hauler")
         {
             const containerCount = room.find(FIND_STRUCTURES, {
                 filter: (s) => s.structureType === STRUCTURE_CONTAINER,
             }).length;
-            if (containerCount === 0)
+            const containerSiteCount = room.find(FIND_CONSTRUCTION_SITES, {
+                filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+            }).length;
+            if (containerCount + containerSiteCount === 0)
             {
-                continue; // Skip haulers until containers exist
+                continue; // Skip haulers until containers exist or are being built
             }
         }
 
