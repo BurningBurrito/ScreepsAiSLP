@@ -1,86 +1,71 @@
-/** 
- * Upgrader Role
- * Upgrades the controller to increase colony level.
- * Upgraders harvest directly from sources only - they do NOT take energy from spawns.
- * This prevents energy from going in circles (spawn -> upgrader -> controller).
+/**
+ * Upgrader creep role.
+ *
+ * Strictly two-phase (owner rule #4): harvest from a source until the store
+ * is full, then upgrade the controller until the store is empty. An upgrader
+ * never withdraws from the spawn or an extension - doing so would steal the
+ * energy the harvesters just delivered and starve creep respawns. It also
+ * never walks to the controller while empty: an empty upgrader standing at
+ * the controller does nothing, and an idle creep is a bug.
  */
 
 /**
- * Runs the upgrader creep behavior.
- * Harvests directly from sources, then upgrades the controller.
- * Never takes energy from spawns - that's the harvester's job.
+ * Runs the upgrader role for one tick.
+ *
+ * Order of checks:
+ *   1. Carrying energy: upgrade the controller (walk towards it when out of
+ *      range; the upgrader stays within range 3 and rarely needs to move).
+ *   2. Empty store: harvest from a source and stay there until the store is
+ *      full, so the upgrader always upgrades with energy it harvested itself.
  * @param creep The upgrader creep to run
  */
 export function runUpgrader(creep: Creep): void
 {
-    const controller = creep.room.controller;
+    const room = creep.room;
+    const energy = creep.store[RESOURCE_ENERGY] ?? 0;
 
-    if (controller === undefined || controller === null)
-    {
-        return; // No controller in room
-    }
-
-    const controllerPos = controller.pos;
-    const rangeToController = creep.pos.getRangeTo(controllerPos);
-    if (creep.memory.working && creep.store[RESOURCE_ENERGY] === 0)
-    {
-        creep.memory.working = false;
-    }
-    else if (!creep.memory.working && creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
+    // --- Phase 1: carry energy -> upgrade the controller ---
+    if (energy > 0)
     {
         creep.memory.working = true;
-    }
 
-    if (creep.memory.working)
-    {
-        // Upgrade the controller
-        if (rangeToController > 3)
+        const controller = room.controller;
+        if (controller !== undefined && controller.my)
         {
-            // Move toward the controller (range 3 means we can upgrade from this position)
-            creep.moveTo(controllerPos, { ignoreCreeps: true, reusePath: 15, range: 3 });
-            // After moveTo, we'll be at range <= 3 and upgrade next tick
-        }
-        else
-        {
-            // We are at the controller (range <= 3), upgrade it
-            const upgradeCode = creep.upgradeController(controller);
-            if (upgradeCode !== OK)
+            const upgradeResult = creep.upgradeController(controller);
+            if (upgradeResult === OK)
             {
-                // Upgrade failed (e.g., controller is already at max level)
-                // Switch to harvesting
-                creep.memory.working = false;
+                return;
             }
-            else
+
+            if (upgradeResult === ERR_NOT_IN_RANGE)
             {
-                // After upgrading, if store is empty, go harvest
-                if (creep.store[RESOURCE_ENERGY] === 0)
-                {
-                    creep.memory.working = false;
-                }
+                creep.moveTo(controller, { reusePath: 20, range: 3 });
+                return;
             }
+
+            // ERR_NOT_ENOUGH_RESOURCES (store below one upgrade tick's cost)
+            // or ERR_INVALID_TARGET: fall through and harvest more.
         }
     }
     else
     {
-        // Creep is empty or nearly empty - harvest directly from sources
-        // Do NOT take energy from spawns (that's the harvester's job)
-        // This prevents energy from going in circles
-        const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
+        // Empty store: switch back to harvesting. This also fixes the old
+        // state where an upgrader that used its last energy with
+        // working=true still set idled forever (nothing reset the flag).
+        creep.memory.working = false;
+    }
+
+    // --- Phase 2: harvest from a source, stay until the store is full ---
+    const sources = room.find(FIND_SOURCES_ACTIVE);
+    if (sources.length > 0)
+    {
+        const source = creep.pos.findClosestByPath(sources);
         if (source !== null)
         {
-            const sourceRange = creep.pos.getRangeTo(source);
-            if (sourceRange === 1)
+            if (creep.harvest(source) === ERR_NOT_IN_RANGE)
             {
-                const harvestCode = creep.harvest(source);
-                if (harvestCode !== OK)
-                {
-                    // Harvest failed - try again next tick
-                }
-            }
-            else
-            {
-                creep.moveTo(source, { ignoreCreeps: true, reusePath: 15, range: 1 });
-                // If moveTo failed, try fallback movement
+                creep.moveTo(source, { reusePath: 20 });
             }
         }
     }

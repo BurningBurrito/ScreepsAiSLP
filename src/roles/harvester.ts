@@ -3,6 +3,8 @@
  * Harvests energy from sources and transfers it to spawns, extensions, towers, and upgrades controller.
  */
 
+import { MAX_DELIVERY_ATTEMPTS } from "config";
+
 /**
  * Runs the harvester creep behavior.
  * Harvests from assigned sources and delivers energy to spawns/extensions/tower.
@@ -88,7 +90,7 @@ export function runHarvester(creep: Creep): void
                 // Increment delivery attempts for tracking
                 creep.memory.deliveryAttempts = deliveryAttempts + 1;
                 // If we've been trying for too long, drop energy and reset
-                if (deliveryAttempts >= 10)
+                if (deliveryAttempts >= MAX_DELIVERY_ATTEMPTS)
                 {
                     creep.drop(RESOURCE_ENERGY);
                     creep.memory.working = false;
@@ -143,7 +145,7 @@ export function runHarvester(creep: Creep): void
                     // Increment delivery attempts for tracking
                     creep.memory.deliveryAttempts = deliveryAttempts + 1;
                     // If we've been trying for too long, drop energy and reset
-                    if (deliveryAttempts >= 10)
+                    if (deliveryAttempts >= MAX_DELIVERY_ATTEMPTS)
                     {
                         creep.drop(RESOURCE_ENERGY);
                         creep.memory.working = false;
@@ -189,7 +191,7 @@ export function runHarvester(creep: Creep): void
                         // Increment delivery attempts for tracking
                         creep.memory.deliveryAttempts = deliveryAttempts + 1;
                         // If we've been trying for too long, drop energy and reset
-                        if (deliveryAttempts >= 10)
+                        if (deliveryAttempts >= MAX_DELIVERY_ATTEMPTS)
                         {
                             creep.drop(RESOURCE_ENERGY);
                             creep.memory.working = false;

@@ -50,12 +50,10 @@ function getSources(room: Room): Source[]
 /** Compute road paths from spawn to each source and to the controller */
 function computeRoadPaths(room: Room): RoomPosition[]
 {
-    console.log(`[Construction] computeRoadPaths called`);
     const paths: RoomPosition[] = [];
     const spawn = getSpawnPosition(room);
     if (spawn === null)
     {
-        console.log(`[Construction] No spawn found for road paths`);
         return paths;
     }
 
@@ -67,7 +65,6 @@ function computeRoadPaths(room: Room): RoomPosition[]
             ignoreCreeps: true,
             range: 1,
         });
-        console.log(`[Construction] Path to source ${source.id}: ${path.length} steps`);
         for (const pos of path)
         {
             paths.push(new RoomPosition(pos.x, pos.y, room.name));
@@ -82,14 +79,12 @@ function computeRoadPaths(room: Room): RoomPosition[]
             ignoreCreeps: true,
             range: 3,
         });
-        console.log(`[Construction] Path to controller: ${path.length} steps`);
         for (const pos of path)
         {
             paths.push(new RoomPosition(pos.x, pos.y, room.name));
         }
     }
 
-    console.log(`[Construction] Total road paths: ${paths.length} tiles`);
     return paths;
 }
 
@@ -674,11 +669,7 @@ function shouldPlaceRoadSites(room: Room): boolean
     {
         // Place roads even at RCL 1 if they're missing
         // This ensures upgrader can upgrade efficiently
-        const connected = areSourcesAndControllerConnected(room);
-        const connectedStr = connected ? "true" : "false";
-        const shouldPlaceStr = connected ? "false" : "true";
-        console.log(`[Construction] RCL 1, sources/controller connected: ${connectedStr}, should place roads: ${shouldPlaceStr}`);
-        return !connected;
+        return !areSourcesAndControllerConnected(room);
     }
     
     return towerSites.length === 0 && extensionSites.length === 0;
@@ -841,14 +832,8 @@ function areSourcesAndControllerConnected(room: Room): boolean
 /** Manages construction of extensions, roads, towers, and containers */
 export function manageConstruction(room: Room): void
 {
-    // Get controller level and spawn position for potential future use
-    // const controllerLevel = getControllerLevel(room);
-    // const spawn = getSpawnPosition(room);
-    
-    console.log(`[Construction] About to compute road paths`);
     // Compute road paths first (needed for cleanup)
     const roadPaths = computeRoadPaths(room);
-    console.log(`[Construction] computeRoadPaths returned ${roadPaths.length} paths`);
 
     // Clean up old road sites that aren't on the computed paths
     cleanOldRoadSites(room, roadPaths);
@@ -862,12 +847,6 @@ export function manageConstruction(room: Room): void
     // Compute container positions (third priority)
     const containerPositions = computeContainerPositions(room);
 
-    // Debug: log positions
-    if (extensionPositions.length === 0)
-    {
-        // console.log(`[Construction] No extension positions available (spawn exists: ${spawn !== null ? 'yes' : 'no'}, controllerLevel: ${controllerLevel})`);
-    }
-    
     // Place tower sites first (highest priority)
     placeTowerSites(room, towerPositions);
 
@@ -882,7 +861,6 @@ export function manageConstruction(room: Room): void
     const shouldPlace = shouldPlaceRoadSites(room);
     if (shouldPlace)
     {
-        console.log(`[Construction] Should place roads, roadPaths length: ${roadPaths.length}`);
         placeRoadSites(room, roadPaths, extensionPositions);
     }
 }
