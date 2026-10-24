@@ -9,10 +9,12 @@
  *   carry capacity empties it and blocks every creep respawn.
  *
  * Build priority (M3):
- *   Tower sites first, then extension sites, then container sites. Road sites
- *   are only considered once no tower or extension site exists anymore, so
- *   builders never spend energy on roads while the priority structures are
- *   still unfinished.
+ *   Tower and extension sites form one priority class (the M3 spec: while
+ *   either exists, builders work on them, closest site wins within the
+ *   class). Then container sites. Road sites are only considered once no
+ *   tower, extension or container site exists anymore, so builders never
+ *   spend energy on roads while the priority structures are still
+ *   unfinished.
  *
  * With no sites left, a builder upgrades the controller instead of idling
  * (an idle creep is a bug).
@@ -21,9 +23,9 @@
 /**
  * Selects the next construction site for a builder.
  *
- * Priority: tower, extension, container, and only then roads. Within a
- * priority class the closest site (by path) wins, so distance is a
- * tie-breaker, never the first choice.
+ * Priority: tower and extension sites together (one class), then container,
+ * and only then roads. Within a priority class the closest site (by path)
+ * wins, so distance is a tie-breaker, never the first choice.
  * @param creep The builder that needs a target (used for pathing)
  * @param room The room to search
  * @returns The selected site, or null when nothing is under construction
@@ -35,16 +37,18 @@ function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
             filter: (site) => site.structureType === type,
         });
 
-    const towerSites = sitesOf(STRUCTURE_TOWER);
-    if (towerSites.length > 0)
+    // Tower and extension sites form one priority class (M3 spec: "while any
+    // tower or extension site exists, builders work on those; choose by
+    // priority first, distance second"). Building them in parallel instead of
+    // tower-then-extensions is what lets the M3 acceptance test finish the
+    // tower and all three extensions inside its tick limit.
+    const prioritySites = [
+        ...sitesOf(STRUCTURE_TOWER),
+        ...sitesOf(STRUCTURE_EXTENSION),
+    ];
+    if (prioritySites.length > 0)
     {
-        return creep.pos.findClosestByPath<ConstructionSite>(towerSites);
-    }
-
-    const extensionSites = sitesOf(STRUCTURE_EXTENSION);
-    if (extensionSites.length > 0)
-    {
-        return creep.pos.findClosestByPath<ConstructionSite>(extensionSites);
+        return creep.pos.findClosestByPath<ConstructionSite>(prioritySites);
     }
 
     const containerSites = sitesOf(STRUCTURE_CONTAINER);

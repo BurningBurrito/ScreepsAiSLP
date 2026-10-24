@@ -164,6 +164,53 @@ function minCreepsPerRole(room: Room): Record<Role, number>
 }
 
 /**
+ * Assigns a source to a new harvester.
+ *
+ * Every harvester gets the source with the fewest living harvesters already
+ * assigned to it, so the room's sources are split evenly instead of all
+ * harvesters crowding the one closest to the spawn. The assignment is stored
+ * in the creep's Memory and survives global resets; when a harvester dies,
+ * its slot frees up and the next spawn rebalances.
+ * @param room The room to assign a source in
+ * @returns The id of the chosen source, or undefined when the room has none
+ */
+function assignSource(room: Room): string | undefined
+{
+    const sources = room.find(FIND_SOURCES_ACTIVE);
+    if (sources.length === 0)
+    {
+        return undefined;
+    }
+
+    const counts: Record<string, number> = {};
+    for (const source of sources)
+    {
+        counts[source.id] = 0;
+    }
+    for (const name in Game.creeps)
+    {
+        const creep = Game.creeps[name];
+        if (creep.memory.role === "harvester" && creep.memory.sourceId !== undefined)
+        {
+            if (counts[creep.memory.sourceId] !== undefined)
+            {
+                counts[creep.memory.sourceId] += 1;
+            }
+        }
+    }
+
+    let best = sources[0];
+    for (const source of sources)
+    {
+        if (counts[source.id] < counts[best.id])
+        {
+            best = source;
+        }
+    }
+    return best.id;
+}
+
+/**
  * Attempts to spawn one creep of the given role.
  *
  * The body is the largest template the sizing budget allows (owner rule #5).
@@ -203,9 +250,16 @@ function trySpawnRole(room: Room, role: Role, energyAvailable: number): void
     Memory.creepCounter += 1;
 
     // Upgraders start with working=true (straight to the controller once
-    // they have energy); all other roles start collecting.
+    // they have energy); all other roles start collecting. Harvesters get a
+    // fixed source assignment so the sources are split evenly (see above).
+    const memory: CreepMemory = { role, working: role === "upgrader" };
+    if (role === "harvester")
+    {
+        memory.sourceId = assignSource(room);
+    }
+
     const result = spawn.spawnCreep(picked.body, name, {
-        memory: { role, working: role === "upgrader" },
+        memory,
     });
 
     // ERR_NOT_ENOUGH_ENERGY / ERR_BUSY: retry next tick. No log here - this

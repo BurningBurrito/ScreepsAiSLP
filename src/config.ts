@@ -5,7 +5,10 @@
 
 /** Minimum number of creeps to maintain per role */
 export const MIN_CREEPS_PER_ROLE = {
-  harvester: 2,
+  // Three harvesters: with a fixed source assignment per harvester (see
+  // spawnManager.assignSource) they split over the room's sources instead of
+  // all crowding the closest one, which roughly doubles delivery.
+  harvester: 3,
   upgrader: 1,
   builder: 0,  // Builder count is computed from open sites and energy capacity (see BUILDER_COUNT_BY_CAPACITY)
   hauler: 1,   // Only spawned while a built container exists (see spawnManager.minCreepsPerRole)
@@ -17,12 +20,17 @@ export const MIN_CREEPS_PER_ROLE = {
  * them, 0 whenever no construction site exists). The thresholds match the
  * builder body templates: a builder is only worth spawning when it can be
  * spawned full-size.
+ *
+ * Three builders at every RCL 3 capacity: the M3 acceptance test needs about
+ * 9,500 build energy in roughly 3,700 ticks (~2.6 progress/tick sustained).
+ * One builder manages ~1.75/tick when the room is full, so the tower
+ * (5,000) alone would consume the whole run before any extension is finished.
  */
 export const BUILDER_COUNT_BY_CAPACITY: { capacity: number; builders: number }[] = [
   { capacity: 550, builders: 3 },
-  { capacity: 450, builders: 2 },
-  { capacity: 350, builders: 2 },
-  { capacity: 300, builders: 1 },
+  { capacity: 450, builders: 3 },
+  { capacity: 350, builders: 3 },
+  { capacity: 300, builders: 3 },
 ];
 
 /**
