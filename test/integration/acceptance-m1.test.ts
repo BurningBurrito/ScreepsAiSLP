@@ -50,8 +50,7 @@ const SNAPSHOT =
     "  level: room && room.controller ? room.controller.level : 0," +
     "  progress: room && room.controller ? room.controller.progress : 0" +
     " };" +
-    " console.log('SNAPSHOT at tick ' + Game.time + ': creeps=' + creeps.length + ', roles=' + JSON.stringify(Memory.acceptanceSnapshot.roles));" +
-    "})();";
+    "})()";
 
 describe("M1 acceptance: core economy", function ()
 {
