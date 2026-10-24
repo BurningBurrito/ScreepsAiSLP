@@ -226,7 +226,7 @@ function assignSource(room: Room): string | undefined
  * @returns True if a spawn intent was started (no other role may then attempt
  * a spawn this tick), false if this role could not start a spawn this tick
  */
-function trySpawnRole(room: Room, spawn: Spawn, role: Role, energyAvailable: number): boolean
+function trySpawnRole(room: Room, spawn: StructureSpawn, role: Role, energyAvailable: number): boolean
 {
     const coldBoot = role === "harvester" && getCreepCount(role) === 0;
     const sizingBudget = coldBoot ? energyAvailable : room.energyCapacityAvailable;
