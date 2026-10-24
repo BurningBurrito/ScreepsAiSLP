@@ -25,7 +25,9 @@ Fixed 5 economy bugs identified by the owner. M3 in progress: build priorities, 
 
 ## In Progress
 - M3: build priorities, layout and a tower
-- Baseline (from reports/latest.md): 7 creeps at end, 12% idle ticks, 72.7 energy delivered/tick
+- **Root cause found (road disconnection)**: `placeRoadSites` skipped every tile in the computed *extension position list*, not just tiles that actually hold an extension. On W0N1 the 5th computed extension position is (14,21) - the shared trunk tile of the road network - so its road site was never created at any RCL (58 sites, 57 disconnected). A direct probe `createConstructionSite(14,21)` at tick 2 returned OK and the network became 59/0/0 (both sources + controller connected), confirming the tile itself is placeable.
+- **Fix applied** (constructionManager.ts): the road network is now computed once per tick and passed as an exclusion set to `computeExtensionPositions`, `computeTowerPositions` and `computeContainerPositions`, so no structure is ever placed on a road tile. `placeRoadSites` no longer takes the extension list; it only skips tiles that actually hold a site or non-road structure, and re-attempts missing tiles every tick while the network is incomplete. `placeExtensionSites` now caps total extensions (built + sites) at 10. All temporary debug logging removed.
+- Next: smoke test to confirm 59/0/0 connectivity, then the M3 acceptance test (4000 ticks) to check tower energy and build throughput.
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)

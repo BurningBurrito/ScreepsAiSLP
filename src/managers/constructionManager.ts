@@ -6,6 +6,13 @@
  *
  * This manager computes optimal placement layouts based on the room's
  * actual objects (spawn, sources, controller) rather than using fixed coordinates.
+ *
+ * Layout invariant: the road network is the skeleton of the room. Extensions,
+ * towers and containers are never placed on a road tile, because the
+ * acceptance tests measure connectivity over road tiles only - a structure
+ * sitting on the network would open a hole in it. Road sites that are missing
+ * from the network are re-attempted every tick (existingRoadPositions check),
+ * so a single failed createConstructionSite cannot permanently break the route.
  */
 
 /** Get the spawn position in this room */
@@ -112,7 +119,7 @@ function isWallPosition(pos: RoomPosition, room: Room): boolean
 }
 
 /** Generate extension positions in a checkerboard pattern around the spawn */
-function computeExtensionPositions(room: Room): RoomPosition[]
+function computeExtensionPositions(room: Room, excludeTiles: Set<string>): RoomPosition[]
 {
     const positions: RoomPosition[] = [];
     const spawn = getSpawnPosition(room);
@@ -158,6 +165,14 @@ function computeExtensionPositions(room: Room): RoomPosition[]
 
             // Skip if on wall terrain
             if (isWallPosition(pos, room))
+            {
+                continue;
+            }
+
+            // Skip if this tile belongs to the road network: a structure on a
+            // road tile would break the road route's connectivity (the test
+            // flood-fills road tiles only).
+            if (excludeTiles.has(`${pos.x},${pos.y}`))
             {
                 continue;
             }
@@ -210,17 +225,11 @@ function computeExtensionPositions(room: Room): RoomPosition[]
         }
     }
 
-    // Debug: log if no positions were computed
-    if (positions.length === 0)
-    {
-        // console.log(`[Construction] No extension positions computed`);
-    }
-
     return positions;
 }
 
 /** Get tower positions near the spawn */
-function computeTowerPositions(room: Room): RoomPosition[]
+function computeTowerPositions(room: Room, excludeTiles: Set<string>): RoomPosition[]
 {
     const positions: RoomPosition[] = [];
     const spawn = getSpawnPosition(room);
@@ -260,6 +269,13 @@ function computeTowerPositions(room: Room): RoomPosition[]
             }
 
             if (isWallPosition(pos, room))
+            {
+                continue;
+            }
+
+            // Never place the tower on a road tile (keeps the road network
+            // connected for the acceptance flood-fill).
+            if (excludeTiles.has(`${pos.x},${pos.y}`))
             {
                 continue;
             }
@@ -332,16 +348,13 @@ function cleanOldRoadSites(room: Room, validRoadPositions: RoomPosition[]): void
 }
 
 /** Place road construction sites on computed paths */
-function placeRoadSites(room: Room, roadPositions: RoomPosition[], extensionPositions?: RoomPosition[]): number
+function placeRoadSites(room: Room, roadPositions: RoomPosition[]): number
 {
     const existingRoadSites = room.find(FIND_CONSTRUCTION_SITES, {
         filter: (site) => site.structureType === STRUCTURE_ROAD,
     });
 
     const existingRoadPositions = existingRoadSites.map((site) => `${site.pos.x},${site.pos.y}`);
-
-    // Create a set of extension positions for quick lookup
-    const extensionSet = new Set(extensionPositions?.map((pos) => `${pos.x},${pos.y}`) || []);
 
     const controller = getControllerPosition(room);
     const sources = getSources(room);
@@ -354,33 +367,45 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[], extensionPosi
             continue;
         }
 
-        // Skip if too close to sources (range 1) - harvester needs to be on source tile,
-        // but roads should be on adjacent tiles where harvesters walk to
-        let tooCloseToSource = false;
+        // Skip if on a source tile itself (roads go on the adjacent tiles the
+        // findPath with range 1 already produced; this is the safety net).
+        let onSource = false;
         for (const source of sources)
         {
             if (pos.getRangeTo(source.pos) < 1)
             {
-                tooCloseToSource = true;
+                onSource = true;
                 break;
             }
         }
-        if (tooCloseToSource)
+        if (onSource)
         {
             continue;
         }
 
-        // Skip if this position is designated for an extension
         const key = `${pos.x},${pos.y}`;
-        if (extensionSet.has(key))
+        if (existingRoadPositions.includes(key))
         {
             continue;
         }
 
-        if (!existingRoadPositions.includes(key))
+        // If something else (extension, tower, container, built structure) was
+        // placed on this tile, do not stack a road site on top of it. The
+        // layout invariant above keeps this from ever happening; this check
+        // makes sure we do not spin on a failing createConstructionSite.
+        const occupied = pos.lookFor(LOOK_CONSTRUCTION_SITES).length > 0
+            || pos.lookFor(LOOK_STRUCTURES).some(
+                (structure) => structure.structureType !== STRUCTURE_ROAD,
+            );
+        if (occupied)
         {
-            room.createConstructionSite(pos, STRUCTURE_ROAD);
+            continue;
         }
+
+        // createConstructionSite queues an intent; a missing tile that failed
+        // for any reason is simply re-attempted on the next tick by this
+        // function, which re-runs every tick while the network is incomplete.
+        room.createConstructionSite(pos, STRUCTURE_ROAD);
     }
     return 0;  // TODO: Track actually placed roads
 }
@@ -388,13 +413,21 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[], extensionPosi
 /** Place extension construction sites */
 function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): void
 {
+    // Count built extensions AND sites: the room must never hold more than 10
+    // extensions total (the RCL 3 limit), so sites are only placed for the
+    // missing ones.
+    const extensionsBuilt = room.find(FIND_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
+    }).length;
     const extensionSites = room.find(FIND_CONSTRUCTION_SITES, {
         filter: (site) => site.structureType === STRUCTURE_EXTENSION,
     }).length;
 
-    // Place up to 10 extension sites (RCL 3 max)
-    // Count only sites (not built extensions) to determine how many more to place
-    const remaining = Math.min(10 - extensionSites, extensionPositions.length);
+    const remaining = Math.min(10 - (extensionsBuilt + extensionSites), extensionPositions.length);
+    if (remaining <= 0)
+    {
+        return;
+    }
 
     const controllerLevel = getControllerLevel(room);
     if (controllerLevel < 2)
@@ -402,47 +435,29 @@ function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): vo
         return;
     }
 
-    // Get existing road sites for quick lookup
-    const roadSites = room.find(FIND_CONSTRUCTION_SITES, {
-        filter: (site) => site.structureType === STRUCTURE_ROAD,
-    });
-    const roadSet = new Set(roadSites.map((site) => `${site.pos.x},${site.pos.y}`));
-
-    // Debug: log if no positions available
-    if (extensionPositions.length === 0)
+    for (let i = 0; i < extensionPositions.length; i++)
     {
-        // console.log(`[Construction] No extension positions available (controllerLevel=${controllerLevel})`);
-    }
+        if (i >= remaining)
+        {
+            break;
+        }
 
-    let placed = 0;
-    for (let i = 0; i < extensionPositions.length && placed < remaining; i++)
-    {
         const pos = extensionPositions[i];
 
-        // Skip if there's already a construction site (road, tower, etc.)
+        // Skip if there's already any construction site (road, tower, etc.)
         const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
         if (sites.length > 0)
         {
             continue;
         }
 
-        // Skip if this position has a road construction site (roads should yield to extensions)
-        const key = `${pos.x},${pos.y}`;
-        if (roadSet.has(key))
+        const result = room.createConstructionSite(pos, STRUCTURE_EXTENSION);
+        if (result !== OK)
         {
+            // The position is occupied or invalid right now; the next
+            // recomputation of the position list will skip it.
             continue;
         }
-
-        const result = room.createConstructionSite(pos, STRUCTURE_EXTENSION);
-        if (result === OK)
-        {
-            placed++;
-        }
-    }
-    
-    if (placed > 0)
-    {
-        // console.log(`[Construction] Placed ${placed} extension sites`);
     }
 }
 
@@ -477,7 +492,7 @@ function placeTowerSites(room: Room, towerPositions: RoomPosition[]): void
 }
 
 /** Compute container positions for each source */
-function computeContainerPositions(room: Room): RoomPosition[]
+function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomPosition[]
 {
     const positions: RoomPosition[] = [];
     const spawn = getSpawnPosition(room);
@@ -571,6 +586,13 @@ function computeContainerPositions(room: Room): RoomPosition[]
                 
                 // Skip if on wall terrain
                 if (isWallPosition(containerPos, room))
+                {
+                    continue;
+                }
+
+                // Skip road-network tiles: a container on the route would open
+                // a hole in the road flood-fill.
+                if (excludeTiles.has(`${containerPos.x},${containerPos.y}`))
                 {
                     continue;
                 }
@@ -832,20 +854,22 @@ function areSourcesAndControllerConnected(room: Room): boolean
 /** Manages construction of extensions, roads, towers, and containers */
 export function manageConstruction(room: Room): void
 {
-    // Compute road paths first (needed for cleanup)
+    // Compute road paths first (needed for cleanup and for the layout invariant:
+    // extensions, towers and containers must not occupy road-network tiles).
     const roadPaths = computeRoadPaths(room);
+    const roadNetworkTiles = new Set(roadPaths.map((pos) => `${pos.x},${pos.y}`));
 
     // Clean up old road sites that aren't on the computed paths
     cleanOldRoadSites(room, roadPaths);
 
-    // Compute tower positions (highest priority)
-    const towerPositions = computeTowerPositions(room);
+    // Compute tower positions (highest priority), excluding the road network
+    const towerPositions = computeTowerPositions(room, roadNetworkTiles);
 
-    // Compute extension positions (second priority)
-    const extensionPositions = computeExtensionPositions(room);
+    // Compute extension positions (second priority), excluding the road network
+    const extensionPositions = computeExtensionPositions(room, roadNetworkTiles);
 
-    // Compute container positions (third priority)
-    const containerPositions = computeContainerPositions(room);
+    // Compute container positions (third priority), excluding the road network
+    const containerPositions = computeContainerPositions(room, roadNetworkTiles);
 
     // Place tower sites first (highest priority)
     placeTowerSites(room, towerPositions);
@@ -857,10 +881,9 @@ export function manageConstruction(room: Room): void
     placeContainerSites(room, containerPositions);
 
     // Place road sites on computed paths (lowest priority)
-    // Skip positions that are designated for extensions
     const shouldPlace = shouldPlaceRoadSites(room);
     if (shouldPlace)
     {
-        placeRoadSites(room, roadPaths, extensionPositions);
+        placeRoadSites(room, roadPaths);
     }
 }
