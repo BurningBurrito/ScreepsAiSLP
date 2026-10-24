@@ -108,6 +108,11 @@ describe("harvester", () => {
   });
 
   it("harvests from source when store is empty", () => {
+    // Setup: empty store and one active source; the creep has no stored
+    // source assignment, so it falls back to the closest source.
+    let harvestCallCount = 0;
+    const source: any = { id: "source-1" };
+
     const creep: any = {
       memory: { working: false, role: "harvester" },
       store: {
@@ -115,17 +120,21 @@ describe("harvester", () => {
         getFreeCapacity: (resourceType: ResourceConstant) => 50,
         getCapacity: (resourceType: ResourceConstant) => 50,
       },
-      pos: { findClosestByPath: () => null },
-      room: { controller: null },
+      pos: { findClosestByPath: () => source },
+      room: {
+        find: (type: number) => (type === FIND_SOURCES_ACTIVE ? [source] : []),
+        controller: null,
+      },
       moveTo: () => {},
       upgradeController: () => OK,
       transfer: () => ERR_NOT_IN_RANGE,
-      harvest: () => OK,
+      harvest: () => { harvestCallCount++; return OK; },
     };
 
     runHarvester(creep);
 
     // When not working and store is empty, the creep should be harvesting
+    assert.equal(harvestCallCount, 1, "harvest should be called when the store is empty");
     assert.isFalse(creep.memory.working, "creep should be in gathering mode when store is empty");
   });
 });
