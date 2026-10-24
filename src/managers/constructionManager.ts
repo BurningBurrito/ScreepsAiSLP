@@ -675,7 +675,9 @@ function shouldPlaceRoadSites(room: Room): boolean
         // Place roads even at RCL 1 if they're missing
         // This ensures upgrader can upgrade efficiently
         const connected = areSourcesAndControllerConnected(room);
-        console.log(`[Construction] RCL 1, sources/controller connected: ${connected}, should place roads: ${!connected}`);
+        const connectedStr = connected ? "true" : "false";
+        const shouldPlaceStr = connected ? "false" : "true";
+        console.log(`[Construction] RCL 1, sources/controller connected: ${connectedStr}, should place roads: ${shouldPlaceStr}`);
         return !connected;
     }
     

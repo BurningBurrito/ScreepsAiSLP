@@ -561,11 +561,11 @@ function spawnCreep(role: string, room: Room): string | null
             return null; // Body must have at least CARRY and MOVE; haulers don't need WORK
         }
     }
-    // Check if spawn has enough energy to create this body
+    // Check if there's enough energy to create this body
     const bodyCost = body.reduce((total, part) => total + BODYPART_COST[part], 0);
-    if (spawnEnergy < bodyCost)
+    if (energyAvailable < bodyCost)
     {
-        return null; // Not enough energy in spawn
+        return null; // Not enough energy for this body
     }
 
 
@@ -687,21 +687,38 @@ export function checkAndSpawn(room: Room): void
             const minimum = MIN_CREEPS_PER_ROLE;
 
             // Priority: builder (if missing) > upgrader > harvester > hauler
-            // If builder is missing and sites exist, spawn builder first
-            if (builderCount < minimum.builder)
+            // If builder is missing and sites exist, try to spawn builder first
+            // But only if we have enough energy to spawn a builder (300 energy)
+            // This prevents wasting energy on extra upgraders when we need a builder
+            let skipExtraUpgraders = false;
+            if (builderCount === 0)
             {
                 const constructionSites = room.find(FIND_CONSTRUCTION_SITES);
                 if (constructionSites.length > 0)
                 {
-                    const spawnedName = spawnCreep("builder", room);
-                    if (spawnedName !== null)
+                    // Only try to spawn builder if we have enough energy (300 for WORK+WORK+CARRY+MOVE)
+                    // or if we already have enough energy accumulated in the spawn/extensions
+                    const builderBodyCost = 300;
+                    if (spawnEnergy >= builderBodyCost)
                     {
-                        return;
+                        const spawnedName = spawnCreep("builder", room);
+                        if (spawnedName !== null)
+                        {
+                            return;
+                        }
+                    }
+                    // If we don't have enough energy for a builder, don't spawn extra upgraders
+                    // Instead, wait for more energy to accumulate
+                    else
+                    {
+                        // Skip extra upgraders to save energy for builder
+                        skipExtraUpgraders = true;
                     }
                 }
             }
             
-            if (upgraderCount >= minimum.upgrader)
+            // Only spawn extra upgraders if we have enough energy or if builder is not needed
+            if (!skipExtraUpgraders && upgraderCount >= minimum.upgrader)
             {
                 const spawnedName = spawnCreep("upgrader", room);
                 if (spawnedName !== null)

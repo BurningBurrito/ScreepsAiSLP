@@ -64,6 +64,10 @@ export function runHarvester(creep: Creep): void
     // Try to transfer to spawns first
     const spawns = creep.room.find(FIND_MY_SPAWNS);
     let deliveredToSpawn = false;
+    
+    // Track delivery attempts to prevent frozen harvester
+    const deliveryAttempts = creep.memory.deliveryAttempts || 0;
+    
     for (const spawn of spawns)
     {
         const freeCapacity = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
@@ -78,6 +82,17 @@ export function runHarvester(creep: Creep): void
                 {
                     creep.drop(RESOURCE_ENERGY);
                     creep.memory.working = false;
+                    creep.memory.deliveryAttempts = 0;
+                    return;
+                }
+                // Increment delivery attempts for tracking
+                creep.memory.deliveryAttempts = deliveryAttempts + 1;
+                // If we've been trying for too long, drop energy and reset
+                if (deliveryAttempts >= 10)
+                {
+                    creep.drop(RESOURCE_ENERGY);
+                    creep.memory.working = false;
+                    creep.memory.deliveryAttempts = 0;
                     return;
                 }
                 // If moveTo returned anything else (OK, ERR_TIRED, ERR_BUSY, or undefined),
@@ -87,9 +102,18 @@ export function runHarvester(creep: Creep): void
             else if (transferResult === OK)
             {
                 deliveredToSpawn = true;
+                creep.memory.deliveryAttempts = 0; // Reset on success
             }
+            // If ERR_FULL, the spawn is full but we're in range - this shouldn't happen if freeCapacity > 0
+            // But handle it just in case
             break; // Only try one spawn
         }
+    }
+    
+    // Reset delivery attempts if we successfully delivered
+    if (deliveredToSpawn)
+    {
+        creep.memory.deliveryAttempts = 0;
     }
     
     // If we couldn't deliver to spawn (no free capacity or couldn't reach), try extensions
@@ -113,6 +137,17 @@ export function runHarvester(creep: Creep): void
                     {
                         creep.drop(RESOURCE_ENERGY);
                         creep.memory.working = false;
+                        creep.memory.deliveryAttempts = 0;
+                        return;
+                    }
+                    // Increment delivery attempts for tracking
+                    creep.memory.deliveryAttempts = deliveryAttempts + 1;
+                    // If we've been trying for too long, drop energy and reset
+                    if (deliveryAttempts >= 10)
+                    {
+                        creep.drop(RESOURCE_ENERGY);
+                        creep.memory.working = false;
+                        creep.memory.deliveryAttempts = 0;
                         return;
                     }
                     // If moveTo returned anything else, try again next tick
@@ -121,6 +156,7 @@ export function runHarvester(creep: Creep): void
                 else if (transferResult === OK)
                 {
                     deliveredToExtension = true;
+                    creep.memory.deliveryAttempts = 0; // Reset on success
                 }
                 break; // Only try one extension
             }
@@ -147,6 +183,17 @@ export function runHarvester(creep: Creep): void
                         {
                             creep.drop(RESOURCE_ENERGY);
                             creep.memory.working = false;
+                            creep.memory.deliveryAttempts = 0;
+                            return;
+                        }
+                        // Increment delivery attempts for tracking
+                        creep.memory.deliveryAttempts = deliveryAttempts + 1;
+                        // If we've been trying for too long, drop energy and reset
+                        if (deliveryAttempts >= 10)
+                        {
+                            creep.drop(RESOURCE_ENERGY);
+                            creep.memory.working = false;
+                            creep.memory.deliveryAttempts = 0;
                             return;
                         }
                         // If moveTo returned anything else, try again next tick
@@ -155,6 +202,7 @@ export function runHarvester(creep: Creep): void
                     else if (transferResult === OK)
                     {
                         deliveredToTower = true;
+                        creep.memory.deliveryAttempts = 0; // Reset on success
                     }
                     break; // Only try one tower
                 }
@@ -165,8 +213,14 @@ export function runHarvester(creep: Creep): void
             {
                 creep.drop(RESOURCE_ENERGY);
                 creep.memory.working = false;
+                creep.memory.deliveryAttempts = 0;
                 return;
             }
         }
+    }
+    else
+    {
+        // Reset delivery attempts if we're not in working mode
+        creep.memory.deliveryAttempts = 0;
     }
 }

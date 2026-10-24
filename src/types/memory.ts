@@ -25,6 +25,8 @@ declare global {
     skipSiteId?: string;
     /** Number of consecutive failed transfer attempts (for harvester retry logic) */
     failedTransferAttempts?: number;
+    /** Number of consecutive delivery attempts (for frozen harvester prevention) */
+    deliveryAttempts?: number;
   }
 
   /**
