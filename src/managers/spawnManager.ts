@@ -12,10 +12,12 @@
  *   holds right now - otherwise nothing would ever be spawned.
  *
  * Spawn order (owner rule #5): harvester, then builder, then upgrader, then
- * hauler - at most one spawn attempt per role per tick (the spawn is busy
- * for three ticks per body part anyway). Each role is kept at its minimum
- * only - no extra upgraders: idle energy belongs to the controller, not to
- * a seventh upgrader standing next to the other six.
+ * hauler. At most ONE spawn is started per tick: a spawnCreep call is stored
+ * as an engine "intent" that only resolves at the end of the tick, and the
+ * engine keeps at most one createCreep intent per spawn - a second spawnCreep
+ * call in the same tick overwrites the first one and the first creep is
+ * silently never spawned. The remaining roles are picked up from the next
+ * tick onward (the spawn is busy for three ticks per body part anyway).
  */
 
 import { BUILDER_COUNT_BY_CAPACITY, MIN_CREEPS_PER_ROLE } from "config";
@@ -211,38 +213,35 @@ function assignSource(room: Room): string | undefined
 }
 
 /**
- * Attempts to spawn one creep of the given role.
+ * Attempts to start one spawn of the given role on a known-free spawn.
  *
  * The body is the largest template the sizing budget allows (owner rule #5).
  * The spawn only starts when the room can actually pay for the body, except
  * on a cold boot - when no harvester is alive, the budget is the store
  * itself and the first harvester is sized down to it.
  * @param room The room to spawn in
+ * @param spawn The free spawn to use
  * @param role The role to spawn
  * @param energyAvailable room.energyAvailable at the start of this tick
+ * @returns True if a spawn intent was started (no other role may then attempt
+ * a spawn this tick), false if this role could not start a spawn this tick
  */
-function trySpawnRole(room: Room, role: Role, energyAvailable: number): void
+function trySpawnRole(room: Room, spawn: Spawn, role: Role, energyAvailable: number): boolean
 {
-    const spawn = room.find(FIND_MY_SPAWNS)[0];
-    if (spawn === undefined || spawn.spawning !== null)
-    {
-        return; // No spawn, or the spawn is busy with another creep
-    }
-
     const coldBoot = role === "harvester" && getCreepCount(role) === 0;
     const sizingBudget = coldBoot ? energyAvailable : room.energyCapacityAvailable;
 
     const picked = pickBody(role, sizingBudget);
     if (picked === null)
     {
-        return; // Nothing affordable - not even a minimal body
+        return false; // Nothing affordable - not even a minimal body
     }
 
     if (energyAvailable < picked.cost)
     {
         // Wait until the room can pay for the full-size body. A shrunken
         // creep is permanently smaller, so waiting is always worth it.
-        return;
+        return false;
     }
 
     ensureCreepCounter();
@@ -267,18 +266,34 @@ function trySpawnRole(room: Room, role: Role, energyAvailable: number): void
     if (result !== OK)
     {
         // Name is simply unused; gaps in the counter are fine.
+        return false;
     }
+
+    console.log("Spawned " + name + " (" + picked.body.join(",") + ") for " + room.name);
+    return true;
 }
 
 /**
  * Spawns creeps for one room so every role stays at its minimum.
  *
  * Roles are checked in the order harvester -> builder -> upgrader -> hauler
- * (owner rule #5) and at most one spawn is attempted per role per tick.
+ * (owner rule #5). At most one spawn is started per tick: the engine resolves
+ * spawnCreep calls as intents at the end of the tick and keeps only the last
+ * intent per spawn, so a second call in the same tick would silently drop the
+ * first creep. The spawn must therefore be checked once up front, and the loop
+ * stops after the first role that actually started a spawn - the remaining
+ * roles are picked up from the next tick (the spawn is busy for three ticks
+ * per body part anyway).
  * @param room The room to spawn for
  */
 export function checkAndSpawn(room: Room): void
 {
+    const spawn = room.find(FIND_MY_SPAWNS)[0];
+    if (spawn === undefined || spawn.spawning !== null)
+    {
+        return; // No spawn yet, or the spawn is busy with another creep
+    }
+
     const minimums = minCreepsPerRole(room);
     const energyAvailable = room.energyAvailable;
 
@@ -295,6 +310,9 @@ export function checkAndSpawn(room: Room): void
             continue; // At minimum, do not over-spawn
         }
 
-        trySpawnRole(room, role, energyAvailable);
+        if (trySpawnRole(room, spawn, role, energyAvailable))
+        {
+            break; // One spawn intent per tick - the rest wait for the next tick
+        }
     }
 }

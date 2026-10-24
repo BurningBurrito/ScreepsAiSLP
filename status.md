@@ -1,9 +1,17 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Fixed 5 economy bugs identified by the owner. M3 in progress: build priorities, layout and a tower. All console.log calls removed from per-creep code.
+M3 in progress: layout, road network and build priorities are done and measured (roads 59/0/0,
+tower built and full in the last M3 run). The M3 economy (3 source-assigned harvesters + 3
+builders, sized from capacity, tower+extensions as one priority class) was implemented in the
+previous run. This run: fixed the gate-failing unit test, then re-running smoke and the M3
+acceptance test to verify the economy finishes 3 extensions + the tower in 4000 ticks.
 
 ## Change Log
+### 2026-10-24
+- **Gate fix (test/unit/harvester.test.ts)**: the "harvests from source when store is empty" unit test failed the gate because its creep mock predated the source-assignment code (runHarvester now calls room.find(FIND_SOURCES_ACTIVE)). Updated the mock to provide one active source and asserted harvest is actually called. Unit tests: 6 passing.
+- Running smoke (500 ticks) with the M3 economy from the previous run; then the M3 acceptance test (4000 ticks).
+
 ### 2026-10-23
 - **upgrader.ts**: Removed fallbackMoveTo function and all console.log calls that ran every 100 ticks. Simplified movement logic - uses moveTo with ignoreCreeps and reusePath.
 - **M3 status**: Build priorities and layout fixed in previous run. Now testing tower construction and extension placement.
@@ -25,11 +33,10 @@ Fixed 5 economy bugs identified by the owner. M3 in progress: build priorities, 
 
 ## In Progress
 - M3: build priorities, layout and a tower
-- **Root cause found (road disconnection)**: `placeRoadSites` skipped every tile in the computed *extension position list*, not just tiles that actually hold an extension. On W0N1 the 5th computed extension position is (14,21) - the shared trunk tile of the road network - so its road site was never created at any RCL (58 sites, 57 disconnected). A direct probe `createConstructionSite(14,21)` at tick 2 returned OK and the network became 59/0/0 (both sources + controller connected), confirming the tile itself is placeable.
-- **Fix applied** (constructionManager.ts): the road network is now computed once per tick and passed as an exclusion set to `computeExtensionPositions`, `computeTowerPositions` and `computeContainerPositions`, so no structure is ever placed on a road tile. `placeRoadSites` no longer takes the extension list; it only skips tiles that actually hold a site or non-road structure, and re-attempts missing tiles every tick while the network is incomplete. `placeExtensionSites` now caps total extensions (built + sites) at 10. All temporary debug logging removed.
-- Next: smoke test to confirm 59/0/0 connectivity, then the M3 acceptance test (4000 ticks) to check tower energy and build throughput.
-- **M3 baseline (this run, 4000 ticks)**: towersBuilt 1, maxTowerEnergy 1000, roadShare 0, roads 59/0/0, sources 2/2, controller connected, farthest 6 - all layout/road/tower criteria pass. FAILS: extensionsBuilt 1 (need 3), energyCapacity 350 (need 450). Cause: with one builder (~1.75 progress/tick, spawn-fed) the tower (5000) consumed ~3450 ticks before extensions could start.
-- **Economy plan for M3** (implement next): 3 builders and 3 harvesters from capacity 300 (config), harvesters get a fixed source assignment (fewest-assigned source at spawn, stored in creep memory) so source B is harvested too, and tower+extension sites become one priority class (closest wins, per the M3 spec wording). Owner rule #3 (builder withdraws only when room is completely full) stays as-is for this attempt: the sawtooth analysis says 3 builders + 3 harvesters pass even with it (builder duty ~25 % spawn-fed + 75 % self-harvest ~ 2.8-3.6 progress/tick). The 100-energy buffer relaxation stays as a documented fallback only if the measured run shows spawn starvation or a failing criterion.
+- **Baseline 2026-10-24** (smoke, 500 ticks, reports/latest.md): build energy to roads 0 %; roads 59 / 0 on wall / 0 disconnected; roads reach sources 2 of 2 and controller; extensions/towers farther than 8 tiles: 0; sites on wall terrain: 0; harvested 3.62/tick, delivered 1.92/tick, construction 1.74/tick; RCL 1/8.
+- **Last M3 acceptance run (4000 ticks, 1-builder economy)**: tower built and full (maxTowerEnergy 1000), but extensionsBuilt 1 (need 3), energyCapacity 350 (need 450) - build throughput was the only failing part.
+- M3 economy now in place (previous run): MIN_CREEPS_PER_ROLE.harvester = 3 with assignSource() in spawnManager.ts splitting harvesters over the room's sources; BUILDER_COUNT_BY_CAPACITY gives 3 builders at capacity >= 300; selectBuildSite() in builder.ts treats tower+extension sites as one priority class (closest wins), roads last; bodies sized from energyCapacityAvailable (owner rule #5).
+- Next: smoke ramp check (3 harvesters + 3 builders alive by tick 500, delivered/tick up vs 1.92 baseline), then M3 acceptance (4000 ticks). If extensionsBuilt < 3 again, the documented fallback is the 100-energy buffer withdrawal rule for builders.
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
