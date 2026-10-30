@@ -1,78 +1,104 @@
-/** 
- * Harvester Role
- * Harvests energy from sources and transfers it to spawns, extensions, towers, and upgrades controller.
+/**
+ * Harvester role: mine energy from sources and deliver it to structures.
+ *
+ * Two phases, selected by the store and the source state:
+ *  1. Harvest phase: harvest the source assigned at spawn. The assignment
+ *     stays stable even when the source depletes - a stable target is what
+ *     lets the engine's path cache work, and re-targeting every tick would
+ *     re-run expensive pathfinding. When the assigned source runs dry, the
+ *     harvester flips to the closest active source (position-based, no
+ *     pathfinding) so the room keeps its income; when both are dry it waits
+ *     at the assigned source, which refills on the 300-tick cycle.
+ *  2. Delivery phase (store full, or a partial load at a dry source): fill
+ *     the spawn first (creeps must stay alive), then the tower (kept topped
+ *     while it exists - the M3 acceptance test measures its energy and the
+ *     tower manager does not top it up itself, see towerManager.ts), then
+ *     extensions, and as a last resort drop on the ground so the hauler or a
+ *     builder can pick it up.
+ *
+ * Every move goes through utils/moveToToward, which drops the creep's cached
+ * path (memory._move) when it keeps replaying a blocked one. The role does
+ * NOT pass ignoreCreeps: true to pathfinding: with creeps as obstacles, a
+ * recomputed path routes around a parked creep instead of re-targeting the
+ * tile it occupies - that combination is what froze the RCL1 harvester on
+ * the builder's tile.
  */
 
-import { MAX_DELIVERY_ATTEMPTS } from "config";
+import {
+    MAX_DELIVERY_ATTEMPTS,
+    PARTIAL_DELIVERY_FRACTION
+} from "config";
+import { moveToToward } from "utils/movement";
+import { pickSourceClosestTo } from "utils/pickSource";
 
 /**
- * Runs the harvester creep behavior.
- * Harvests from the source assigned at spawn and delivers energy.
- * Priority: spawns > tower > extensions > drop on the ground
+ * Runs the harvester creep behavior for one tick.
  * @param creep The harvester creep to run
  */
-
 export function runHarvester(creep: Creep): void
 {
-    // Update working state based on store capacity
-    if (creep.memory.working && creep.store[RESOURCE_ENERGY] === 0)
+    const room = creep.room;
+    const energy = creep.store[RESOURCE_ENERGY] ?? 0;
+    const capacity = creep.store.getCapacity(RESOURCE_ENERGY);
+
+    // Pick the harvest target once per tick: one room.find, reused for the
+    // assignment lookup and the active-source fallback. (The old code ran
+    // findClosestByPath - full pathfinding - every tick for unassigned
+    // creeps to make the same decision.)
+    const sources = room.find(FIND_SOURCES);
+    const assignedSource = creep.memory.sourceId !== undefined
+        ? sources.find((candidate) => candidate.id === creep.memory.sourceId)
+        : undefined;
+    const activeSources = sources.filter((candidate) => candidate.energy > 0);
+    const source = (assignedSource !== undefined && assignedSource.energy > 0)
+        ? assignedSource
+        : (activeSources.length > 0
+            ? pickSourceClosestTo(activeSources, creep.pos)
+            : (assignedSource ?? null));
+
+    // Keep the assignment in memory so the creep does not flip between
+    // sources when one runs dry or the code is restarted (global reset):
+    // the next tick must resolve the same source from its id alone. The
+    // assignment is only written for the source the creep already owns (or
+    // for a first assignment): while the owned source is dry the creep works
+    // the other one temporarily and must not claim it.
+    if (source !== null && (assignedSource === undefined || source.id === assignedSource.id))
     {
-        creep.memory.working = false;
+        creep.memory.sourceId = source.id;
     }
-    else if (!creep.memory.working && creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0)
+
+    // Phase switch. Deliver when full, or when the source ran dry and the
+    // load is worth carrying (PARTIAL_DELIVERY_FRACTION): idling here with a
+    // half-full store until the refill wastes the round trip either way.
+    // A null source (no sources at all) can never be dry, so it is ignored
+    // here; a carried load still reaches the delivery phase below.
+    const sourceDry = source !== null && source.energy === 0;
+    const partialWorthDelivering =
+        sourceDry && energy >= capacity * PARTIAL_DELIVERY_FRACTION;
+    if (!creep.memory.working && (energy >= capacity || partialWorthDelivering))
     {
         creep.memory.working = true;
     }
+    else if (creep.memory.working && energy === 0)
+    {
+        creep.memory.working = false;
+    }
 
-    // Collect energy from this creep's assigned source (chosen at spawn so
-    // the room's sources are split evenly between harvesters).
     if (!creep.memory.working)
     {
-        // Match the assignment by id against the room's active sources
-        // (avoids Game.getObjectById, whose generic return type is the
-        // union of all game objects and does not narrow for harvest()).
-        // Fall back to the closest source for creeps spawned before
-        // assignments existed or when the assigned source left the room.
-        const sources = creep.room.find(FIND_SOURCES_ACTIVE);
-        if (sources.length === 0)
-        {
-            return; // No sources found
-        }
-
-        const assignedSource = creep.memory.sourceId !== undefined
-            ? sources.find((candidate) => candidate.id === creep.memory.sourceId)
-            : undefined;
-        const source = assignedSource !== undefined
-            ? assignedSource
-            : creep.pos.findClosestByPath(sources);
-
         if (source === null)
         {
-            return; // No sources found
+            return; // nowhere to harvest and nothing worth delivering
         }
-
-        // Try to harvest from source
         const harvestResult = creep.harvest(source);
-
-        if (harvestResult === ERR_NOT_IN_RANGE)
+        if (harvestResult === ERR_NOT_IN_RANGE && creep.pos.getRangeTo(source) > 1)
         {
-            // Move toward source to harvest
-            const sourceRange = creep.pos.getRangeTo(source);
-            if (sourceRange > 1)
-            {
-                creep.moveTo(source, { ignoreCreeps: true, reusePath: 20, range: 1 });
-            }
-            else
-            {
-                // Already at source, try to harvest again next tick
-                // Or if we're close to spawn, move to spawn to deliver
-                const spawn = creep.pos.findClosestByPath(FIND_MY_SPAWNS);
-                if (spawn !== null && creep.pos.getRangeTo(spawn) <= 3)
-                {
-                    creep.moveTo(spawn, { ignoreCreeps: true, reusePath: 20, range: 1 });
-                }
-            }
+            moveToToward(creep, source, 1);
         }
+        // ERR_NOT_IN_RANGE in range (the source moved under a mid-tick step)
+        // or ERR_NOT_ENOUGH_RESOURCES (dry source): stand here and retry -
+        // the source refills on its 300-tick cycle and the phase switch
+        // above handles the dry-source-with-partial-load case.
         return;
     }
 
@@ -94,7 +120,7 @@ export function runHarvester(creep: Creep): void
             const transferResult = creep.transfer(spawn, RESOURCE_ENERGY);
             if (transferResult === ERR_NOT_IN_RANGE)
             {
-                const moveResult = creep.moveTo(spawn, { ignoreCreeps: true, reusePath: 20, range: 1, maxRooms: 1 });
+                const moveResult = moveToToward(creep, spawn, 1);
                 // Only ERR_NO_PATH means "cannot reach"; ERR_TIRED/ERR_BUSY/other means try again next tick
                 if (moveResult === ERR_NO_PATH)
                 {
@@ -121,6 +147,10 @@ export function runHarvester(creep: Creep): void
             {
                 deliveredToSpawn = true;
                 creep.memory.deliveryAttempts = 0; // Reset on success
+                if (creep.store[RESOURCE_ENERGY] === 0)
+                {
+                    creep.memory.working = false; // store empty: gather again
+                }
             }
             // If ERR_FULL, the spawn is full but we're in range - this shouldn't happen if freeCapacity > 0
             // But handle it just in case
@@ -151,7 +181,7 @@ export function runHarvester(creep: Creep): void
                 const transferResult = creep.transfer(tower, RESOURCE_ENERGY);
                 if (transferResult === ERR_NOT_IN_RANGE)
                 {
-                    const moveResult = creep.moveTo(tower, { ignoreCreeps: true, reusePath: 20, range: 1 });
+                    const moveResult = moveToToward(creep, tower, 1);
                     // Only ERR_NO_PATH means "cannot reach"; ERR_TIRED/ERR_BUSY/other means try again next tick
                     if (moveResult === ERR_NO_PATH)
                     {
@@ -177,6 +207,10 @@ export function runHarvester(creep: Creep): void
                 {
                     deliveredToTower = true;
                     creep.memory.deliveryAttempts = 0; // Reset on success
+                    if (creep.store[RESOURCE_ENERGY] === 0)
+                    {
+                        creep.memory.working = false; // store empty: gather again
+                    }
                 }
                 break; // Only try one tower
             }
@@ -187,19 +221,19 @@ export function runHarvester(creep: Creep): void
         // so other creeps can pick it up.
         if (!deliveredToTower)
         {
-            const extensions = creep.room.find(FIND_STRUCTURES, {
-                filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
+            const extensions = room.find(FIND_MY_STRUCTURES, {
+                filter: (structure): structure is StructureExtension => structure.structureType === STRUCTURE_EXTENSION,
             });
             let deliveredToExtension = false;
             for (const extension of extensions)
             {
-                const freeCapacity = (extension as StructureExtension).store.getFreeCapacity(RESOURCE_ENERGY);
+                const freeCapacity = (extension ).store.getFreeCapacity(RESOURCE_ENERGY);
                 if (freeCapacity !== null && freeCapacity > 0)
                 {
                     const transferResult = creep.transfer(extension, RESOURCE_ENERGY);
                     if (transferResult === ERR_NOT_IN_RANGE)
                     {
-                        const moveResult = creep.moveTo(extension, { ignoreCreeps: true, reusePath: 20, range: 1 });
+                        const moveResult = moveToToward(creep, extension, 1);
                         // Only ERR_NO_PATH means "cannot reach"; ERR_TIRED/ERR_BUSY/other means try again next tick
                         if (moveResult === ERR_NO_PATH)
                         {
@@ -225,6 +259,10 @@ export function runHarvester(creep: Creep): void
                     {
                         deliveredToExtension = true;
                         creep.memory.deliveryAttempts = 0; // Reset on success
+                        if (creep.store[RESOURCE_ENERGY] === 0)
+                        {
+                            creep.memory.working = false; // store empty: gather again
+                        }
                     }
                     break; // Only try one extension
                 }

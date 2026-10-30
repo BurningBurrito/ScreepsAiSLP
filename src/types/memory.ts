@@ -27,6 +27,25 @@ declare global {
     failedTransferAttempts?: number;
     /** Number of consecutive delivery attempts (for frozen harvester prevention) */
     deliveryAttempts?: number;
+    /**
+     * Position ("x,y") and tick of the last moveToToward() call: the stuck
+     * detector in utils/movement.ts compares both against the current tick to
+     * drop a cached path that keeps replaying into a blocked tile.
+     */
+    stuckPos?: string;
+    stuckSince?: number;
+    /**
+     * The engine's own path cache (written by creep.moveTo with reusePath,
+     * read on the next moveTo with the same destination). Typed here because
+     * utils/movement.ts deletes it when the cached path is stale; the d.ts
+     * only mentions it in a comment.
+     */
+    _move?: { // eslint-disable-line no-underscore-dangle -- the engine's own property name
+      dest: { x: number; y: number; room: string };
+      time: number;
+      path: string;
+      room: string;
+    };
   }
 
   /**

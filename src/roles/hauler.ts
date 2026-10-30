@@ -9,7 +9,13 @@
  *
  * IMPORTANT: Haulers NEVER withdraw from spawn or extensions. Those are
  * destinations, not sources. This prevents energy from going in circles.
+ *
+ * Every move goes through utils/moveToToward, which drops the creep's cached
+ * path when it keeps replaying a blocked one (see that file for the engine
+ * detail).
  */
+
+import { moveToToward } from "utils/movement";
 
 export function runHauler(creep: Creep): void
 {
@@ -32,7 +38,7 @@ export function runHauler(creep: Creep): void
                 {
                     if (creep.transfer(tower, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                     {
-                        creep.moveTo(tower, { reusePath: 20, range: 1 });
+                        moveToToward(creep, tower, 1);
                     }
                     return;
                 }
@@ -55,7 +61,7 @@ export function runHauler(creep: Creep): void
                 {
                     if (creep.transfer(targetExtension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                     {
-                        creep.moveTo(targetExtension, { reusePath: 20, range: 1 });
+                        moveToToward(creep, targetExtension, 1);
                     }
                     return;
                 }
@@ -74,7 +80,7 @@ export function runHauler(creep: Creep): void
             {
                 if (creep.transfer(targetSpawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(targetSpawn, { reusePath: 20, range: 1 });
+                    moveToToward(creep, targetSpawn, 1);
                 }
                 return;
             }
@@ -98,7 +104,7 @@ export function runHauler(creep: Creep): void
             {
                 if (creep.withdraw(targetContainer, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(targetContainer, { reusePath: 20, range: 1 });
+                    moveToToward(creep, targetContainer, 1);
                 }
                 return;
             }
@@ -111,7 +117,7 @@ export function runHauler(creep: Creep): void
     {
         if (creep.pickup(droppedResources) === ERR_NOT_IN_RANGE)
         {
-            creep.moveTo(droppedResources, { reusePath: 20, range: 1 });
+            moveToToward(creep, droppedResources, 1);
         }
         return;
     }
@@ -130,7 +136,7 @@ export function runHauler(creep: Creep): void
             {
                 if (creep.withdraw(targetContainer, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(targetContainer, { reusePath: 20, range: 1 });
+                    moveToToward(creep, targetContainer, 1);
                 }
                 return;
             }
@@ -143,6 +149,6 @@ export function runHauler(creep: Creep): void
     });
     if (finalSpawnPos !== null && creep.pos.getRangeTo(finalSpawnPos) > 3)
     {
-        creep.moveTo(finalSpawnPos, { reusePath: 20, range: 1 });
+        moveToToward(creep, finalSpawnPos, 1);
     }
 }

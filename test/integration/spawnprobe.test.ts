@@ -78,7 +78,7 @@ describe("spawnprobe: source vs controller travel costs", function ()
             for (const result of results)
             {
                 const text = String(result);
-                if (text.indexOf("TRACE ") !== -1)
+                if (text.indexOf("TRACE ") !== -1 || text.indexOf("EV t:") !== -1 || text.indexOf("STATE t:") !== -1)
                 {
                     console.log(text);
                 }

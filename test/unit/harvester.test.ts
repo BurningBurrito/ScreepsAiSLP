@@ -1,140 +1,181 @@
 import {assert} from "chai";
 import {runHarvester} from "../../src/roles/harvester";
-import {Game, Memory, FIND_MY_SPAWNS, FIND_MY_STRUCTURES, STRUCTURE_EXTENSION, STRUCTURE_TOWER} from "./mock";
+import {Game, Memory, OK, ERR_NOT_IN_RANGE} from "./mock";
 
 // Import types to extend global scope
 import "../../src/types/memory";
 
-// Define RESOURCE_ENERGY for tests
+// Define Screeps constants for tests (real values from @types/screeps)
 const RESOURCE_ENERGY = "energy";
+const FIND_SOURCES = 105;
+const FIND_MY_SPAWNS = 112;
+const FIND_MY_STRUCTURES = 108;
+const STRUCTURE_EXTENSION = "extension";
+const STRUCTURE_TOWER = "tower";
 
 describe("harvester", () => {
-  beforeEach(() => {
-    // @ts-ignore : allow adding Game to global
-    global.Game = _.clone(Game);
-    // @ts-ignore : allow adding Memory to global
-    global.Memory = _.clone(Memory);
-    // Define Screeps globals for harvester tests
-    // @ts-ignore
-    global.FIND_SOURCES_ACTIVE = 104;
-    // @ts-ignore
-    global.FIND_MY_SPAWNS = 112;
-    // @ts-ignore
-    global.FIND_STRUCTURES = 107;
-    // @ts-ignore
-    global.FIND_MY_STRUCTURES = 108;
-    // @ts-ignore
-    global.STRUCTURE_EXTENSION = "extension";
-    // @ts-ignore
-    global.STRUCTURE_TOWER = "tower";
-    // @ts-ignore
-    global.RESOURCE_ENERGY = "energy";
-    // @ts-ignore
-    global.ERR_NOT_IN_RANGE = -9;
-    // @ts-ignore
-    global.ERR_NO_PATH = -4;
-    // @ts-ignore
-    global.ERR_INVALID_TARGET = -8;
-  });
+    beforeEach(() => {
+        // @ts-ignore : allow adding Game to global
+        global.Game = _.clone(Game);
+        // @ts-ignore : allow adding Memory to global
+        global.Memory = _.clone(Memory);
+        // @ts-ignore
+        global.FIND_SOURCES = FIND_SOURCES;
+        // @ts-ignore
+        global.FIND_SOURCES_ACTIVE = 104;
+        // @ts-ignore
+        global.FIND_MY_SPAWNS = FIND_MY_SPAWNS;
+        // @ts-ignore
+        global.FIND_MY_STRUCTURES = FIND_MY_STRUCTURES;
+        // @ts-ignore
+        global.STRUCTURE_EXTENSION = STRUCTURE_EXTENSION;
+        // @ts-ignore
+        global.STRUCTURE_TOWER = STRUCTURE_TOWER;
+        // @ts-ignore
+        global.RESOURCE_ENERGY = RESOURCE_ENERGY;
+        // @ts-ignore
+        global.ERR_NOT_IN_RANGE = ERR_NOT_IN_RANGE;
+        // @ts-ignore
+        global.ERR_NO_PATH = -4;
+        // @ts-ignore
+        global.OK = OK;
+        // @ts-ignore : movement.ts counts MOVE parts in the body
+        global.MOVE = "move";
+    });
 
-  it("transfers to spawn when spawn has free capacity and creep has partial energy", () => {
-    // Setup: harvester with partial energy (20 of 50) and spawn with free capacity
-    let transferCallCount = 0;
-    let upgradeControllerCallCount = 0;
+    /**
+     * Builds a harvester creep mock.
+     * @param energy - Energy currently in the store
+     * @param capacity - Store capacity
+     * @param working - The working flag to start with
+     * @param sources - The sources returned by room.find(FIND_SOURCES)
+     * @param spawnFree - Free capacity of the (single) spawn
+     * @param memory - Extra memory fields (e.g. sourceId)
+     * @returns The mock creep and its call counters
+     */
+    function makeCreep(
+        energy: number,
+        capacity: number,
+        working: boolean,
+        sources: any[],
+        spawnFree: number,
+        memory: Record<string, any> = {},
+    ): { creep: any; calls: { [key: string]: number } }
+    {
+        const calls: { [key: string]: number } = {};
+        const creep: any = {
+            memory: { working, role: "harvester", ...memory },
+            body: [
+                { type: "work" },
+                { type: "carry" },
+                { type: "move" },
+            ],
+            store: {
+                [RESOURCE_ENERGY]: energy,
+                getFreeCapacity: () => capacity - energy,
+                getCapacity: () => capacity,
+            },
+            pos: {
+                x: 14,
+                y: 19,
+                getRangeTo: (target: any) => target.rangeFromCreep ?? 1,
+            },
+            room: {
+                find: (type: number) => {
+                    if (type === FIND_SOURCES) {
+                        return sources;
+                    }
+                    if (type === FIND_MY_SPAWNS) {
+                        return [{ store: { getFreeCapacity: () => spawnFree }, rangeFromCreep: 1 }];
+                    }
+                    return []; // no towers or extensions in these tests
+                },
+                controller: null,
+            },
+            moveTo: () => {
+                calls.moveTo = (calls.moveTo ?? 0) + 1;
+                return OK;
+            },
+            transfer: function (this: any) {
+                calls.transfer = (calls.transfer ?? 0) + 1;
+                this.store[RESOURCE_ENERGY] = 0; // the engine moves the whole load
+                return OK;
+            },
+            harvest: () => {
+                calls.harvest = (calls.harvest ?? 0) + 1;
+                return OK;
+            },
+            drop: () => {
+                calls.drop = (calls.drop ?? 0) + 1;
+            },
+        };
+        return { creep, calls };
+    }
+    it("harvests from the active source when the store is empty", () => {
+        const source = { id: "s1", energy: 1000, pos: { getRangeTo: () => 1 }, rangeFromCreep: 1 };
+        const { creep, calls } = makeCreep(0, 50, false, [source], 10);
 
-    const creep: any = {
-      memory: { working: true, role: "harvester" },
-      store: {
-        [RESOURCE_ENERGY]: 20,
-        getFreeCapacity: (resourceType: ResourceConstant) => 30,
-        getCapacity: (resourceType: ResourceConstant) => 50,
-      },
-      pos: { findClosestByPath: () => null },
-      room: {
-        find: (type: number, options?: any) => {
-          if (type === FIND_MY_SPAWNS) return [{ store: { getFreeCapacity: () => 10 } }];
-          return [];
-        },
-        controller: { pos: { findClosestByPath: () => null } },
-      },
-      moveTo: () => {},
-      upgradeController: () => { upgradeControllerCallCount++; return OK; },
-      transfer: (target: any, resourceType: ResourceConstant) => { transferCallCount++; return ERR_NOT_IN_RANGE; },
-      harvest: () => ERR_NOT_IN_RANGE,
-      drop: () => {},
-    };
+        runHarvester(creep);
 
-    runHarvester(creep);
+        assert.equal(calls.harvest, 1, "harvest should be called when the store is empty");
+        assert.isFalse(creep.memory.working, "creep should stay in gather mode while empty");
+        assert.equal(calls.transfer ?? 0, 0, "no transfer while empty");
+    });
 
-    // With partial energy and spawn having free capacity, should call transfer
-    assert.equal(transferCallCount, 1, "transfer should be called when spawn has free capacity");
-    assert.equal(upgradeControllerCallCount, 0, "upgradeController should not be called");
-  });
+    it("moves to the source when out of range", () => {
+        const source = { id: "s1", energy: 1000, pos: { getRangeTo: () => 3 }, rangeFromCreep: 3 };
+        const { creep, calls } = makeCreep(0, 50, false, [source], 10);
+        creep.harvest = () => ERR_NOT_IN_RANGE;
 
-  it("upgrades controller when spawn is full and creep has partial energy", () => {
-    // Setup: harvester with partial energy (20 of 50) but spawn is full
-    let transferCallCount = 0;
-    let upgradeControllerCallCount = 0;
+        runHarvester(creep);
 
-    const creep: any = {
-      memory: { working: true, role: "harvester" },
-      store: {
-        [RESOURCE_ENERGY]: 20,
-        getFreeCapacity: (resourceType: ResourceConstant) => 30,
-        getCapacity: (resourceType: ResourceConstant) => 50,
-      },
-      pos: { findClosestByPath: () => null },
-      room: {
-        find: (type: number, options?: any) => {
-          if (type === FIND_MY_SPAWNS) return [{ store: { getFreeCapacity: () => 0 } }];
-          if (type === FIND_MY_STRUCTURES) return []; // No towers
-          return [];
-        },
-        controller: { pos: { findClosestByPath: () => null } },
-      },
-      moveTo: () => {},
-      upgradeController: () => { upgradeControllerCallCount++; return OK; },
-      transfer: (target: any, resourceType: ResourceConstant) => { transferCallCount++; return ERR_NOT_IN_RANGE; },
-      harvest: () => ERR_NOT_IN_RANGE,
-      drop: () => {},
-    };
+        assert.equal(calls.moveTo, 1, "moveTo should be called when harvest is out of range");
+        assert.equal(creep.memory.sourceId, "s1", "the creep should keep its source assignment");
+    });
 
-    runHarvester(creep);
+    it("delivers to spawn when the store is full", () => {
+        const source = { id: "s1", energy: 1000, pos: { getRangeTo: () => 1 }, rangeFromCreep: 1 };
+        const { creep, calls } = makeCreep(50, 50, false, [source], 10);
 
-    // With partial energy but spawn full, should call drop on ground
-    assert.equal(transferCallCount, 0, "transfer should not be called when spawn is full");
-    assert.equal(upgradeControllerCallCount, 0, "upgradeController should not be called when tower is unavailable");
-    assert.isFalse(creep.memory.working, "creep should stop working after dropping energy");
-  });
+        runHarvester(creep);
 
-  it("harvests from source when store is empty", () => {
-    // Setup: empty store and one active source; the creep has no stored
-    // source assignment, so it falls back to the closest source.
-    let harvestCallCount = 0;
-    const source: any = { id: "source-1" };
+        assert.equal(calls.transfer, 1, "the full load should be delivered to the spawn");
+        assert.isFalse(creep.memory.working, "after delivering, the creep returns to gathering");
+        assert.equal(calls.drop ?? 0, 0, "no drop when delivery succeeds");
+    });
 
-    const creep: any = {
-      memory: { working: false, role: "harvester" },
-      store: {
-        [RESOURCE_ENERGY]: 0,
-        getFreeCapacity: (resourceType: ResourceConstant) => 50,
-        getCapacity: (resourceType: ResourceConstant) => 50,
-      },
-      pos: { findClosestByPath: () => source },
-      room: {
-        find: (type: number) => (type === FIND_SOURCES_ACTIVE ? [source] : []),
-        controller: null,
-      },
-      moveTo: () => {},
-      upgradeController: () => OK,
-      transfer: () => ERR_NOT_IN_RANGE,
-      harvest: () => { harvestCallCount++; return OK; },
-    };
+    it("drops the load when spawn is full and no tower or extension exists", () => {
+        const source = { id: "s1", energy: 0, pos: { getRangeTo: () => 1 }, rangeFromCreep: 1 };
+        const { creep, calls } = makeCreep(50, 50, true, [source], 0);
 
-    runHarvester(creep);
+        runHarvester(creep);
 
-    // When not working and store is empty, the creep should be harvesting
-    assert.equal(harvestCallCount, 1, "harvest should be called when the store is empty");
-    assert.isFalse(creep.memory.working, "creep should be in gathering mode when store is empty");
-  });
+        assert.equal(calls.transfer ?? 0, 0, "transfer should not be called when the spawn is full");
+        assert.equal(calls.drop, 1, "energy should be dropped as last resort");
+        assert.isFalse(creep.memory.working, "creep should stop working after dropping");
+    });
+
+    it("delivers a partial load when the assigned source ran dry", () => {
+        const dryAssigned = { id: "s1", energy: 0, pos: { getRangeTo: () => 1 }, rangeFromCreep: 1 };
+        const dryOther = { id: "s2", energy: 0, pos: { getRangeTo: () => 5 }, rangeFromCreep: 5 };
+        // 30 of 50 is above PARTIAL_DELIVERY_FRACTION (0.5 * 50 = 25)
+        const { creep, calls } = makeCreep(30, 50, false, [dryAssigned, dryOther], 10, { sourceId: "s1" });
+
+        runHarvester(creep);
+
+        assert.equal(calls.transfer, 1, "the worth-while partial load should go to the spawn");
+        assert.equal(calls.harvest ?? 0, 0, "no harvesting while delivering");
+    });
+
+    it("keeps harvesting with a small partial load at a dry source", () => {
+        const dryAssigned = { id: "s1", energy: 0, pos: { getRangeTo: () => 1 }, rangeFromCreep: 1 };
+        const { creep, calls } = makeCreep(10, 50, false, [dryAssigned], 10, { sourceId: "s1" });
+
+        runHarvester(creep);
+
+        assert.isFalse(creep.memory.working, "a small load is not worth a round trip");
+        assert.equal(calls.harvest, 1, "the creep should wait at its source and keep harvesting");
+        assert.equal(calls.transfer ?? 0, 0, "no transfer for a small load");
+    });
 });
+

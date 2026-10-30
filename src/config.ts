@@ -45,6 +45,34 @@ export const MIN_CREEPS_BY_LEVEL: {
  */
 export const MAX_DELIVERY_ATTEMPTS = 100;
 
+/**
+ * Stuck-path recovery (utils/movement.ts): the detector drops a creep's
+ * cached path (memory._move) when it calls moveToToward() from the same tile
+ * for 2 x (non-MOVE parts) + this many ticks. The 2 x parts term is the
+ * creep's fatigue cycle (one step per 2 ticks per non-MOVE part with one MOVE
+ * part on plain), so a walking creep never trips the detector; this base is
+ * margin for swamp terrain and bodies with extra MOVE parts.
+ */
+export const STUCK_CLEAR_BASE = 2;
+
+/**
+ * reusePath passed by every moveToToward() call: the engine reuses the
+ * computed path for this many ticks (same destination) instead of re-running
+ * pathfinding every tick. 20 is the balance: short enough that a changed
+ * room (creeps moving, roads appearing) re-routes within a few walks, long
+ * enough to save CPU on the many short role walks.
+ */
+export const MOVE_REUSE_PATH_TICKS = 20;
+
+/**
+ * Partial-load threshold: a harvester or upgrader standing at a depleted
+ * source carries its load off once it holds at least this fraction of its
+ * capacity, instead of idling until the source refills (300-tick cycle). 50%
+ * balances a short wasted trip against 300 ticks of a half-full store doing
+ * nothing.
+ */
+export const PARTIAL_DELIVERY_FRACTION = 0.5;
+
 /** Minimum body parts for basic creep functionality */
 export const MIN_BODY_PARTS = {
   work: 2,
