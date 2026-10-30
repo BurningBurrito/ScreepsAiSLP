@@ -286,14 +286,14 @@ describe("builder", () => {
         // its own class above the extensions, so a carrying builder works it
         // even when an extension sits closer.
         const { creep, calls } = makeCarryingBuilder([
-            { id: "ext1", structureType: "extension", pos: pos(14, 20) }, // range 1 from the creep
-            { id: "tower", structureType: "tower", pos: pos(18, 25) },    // range 5
+            { id: "ext1", structureType: "extension", progress: 2000, pos: pos(14, 20) }, // range 1 from the creep
+            { id: "tower", structureType: "tower", progress: 0, pos: pos(18, 25) },    // range 5
         ]);
 
         runBuilder(creep);
 
         assert.equal(calls.build, 1, "the builder builds while a priority site exists");
-        assert.equal(calls.lastBuilt, "tower", "the tower site beats a closer extension");
+        assert.equal(calls.lastBuilt, "tower", "the tower site beats a closer, more advanced extension");
     });
 
     it("prefers an extension site over a closer road site", () => {
@@ -301,13 +301,43 @@ describe("builder", () => {
         // do: roads are only built in bootstrap (M2), never while an
         // extension site is still up.
         const { creep, calls } = makeCarryingBuilder([
-            { id: "road1", structureType: "road", pos: pos(14, 20) },
-            { id: "ext1", structureType: "extension", pos: pos(18, 25) },
+            { id: "road1", structureType: "road", progress: 0, pos: pos(14, 20) },
+            { id: "ext1", structureType: "extension", progress: 0, pos: pos(18, 25) },
         ]);
 
         runBuilder(creep);
 
         assert.equal(calls.lastBuilt, "ext1", "the extension site beats a closer road");
+    });
+
+    it("converges on the most advanced extension, not the nearest", () => {
+        // Second M3 attempt: after the tower finished, per-builder nearest
+        // sites split the crew over eight extensions and none of the rest
+        // ever completed. The whole crew must instead work the most advanced
+        // site (here ext2, almost done) even when ext1 sits closer, so the
+        // room's energy capacity actually grows when a site is COMPLETE.
+        const { creep, calls } = makeCarryingBuilder([
+            { id: "ext1", structureType: "extension", progress: 100, pos: pos(14, 20) },  // range 1
+            { id: "ext2", structureType: "extension", progress: 2900, pos: pos(18, 25) }, // range 5
+        ]);
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "ext2", "the nearly-finished extension beats a closer one");
+    });
+
+    it("breaks an extension progress tie by closeness to the spawn", () => {
+        // With no progress anywhere yet (fresh sites) the focus is the site
+        // closest to the spawn, so every builder - whatever it stands on -
+        // computes the same first target from shared room state.
+        const { creep, calls } = makeCarryingBuilder([
+            { id: "ext1", structureType: "extension", progress: 0, pos: pos(14, 20) }, // range 1 from the spawn
+            { id: "ext2", structureType: "extension", progress: 0, pos: pos(18, 25) }, // range 5
+        ]);
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "ext1", "equal progress goes to the spawn-side site");
     });
 });
 
