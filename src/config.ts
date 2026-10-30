@@ -3,34 +3,38 @@
  * These are tunable values that control colony behavior.
  */
 
-/** Minimum number of creeps to maintain per role */
-export const MIN_CREEPS_PER_ROLE = {
-  // Three harvesters: with a fixed source assignment per harvester (see
-  // spawnManager.assignSource) they split over the room's sources instead of
-  // all crowding the closest one, which roughly doubles delivery.
-  harvester: 3,
-  upgrader: 1,
-  builder: 0,  // Builder count is computed from open sites and energy capacity (see BUILDER_COUNT_BY_CAPACITY)
-  hauler: 1,   // Only spawned while a built container exists (see spawnManager.minCreepsPerRole)
-};
-
 /**
- * Builder count per energy capacity. The first entry whose capacity threshold
- * the room meets determines how many builders to keep alive (0 below all of
- * them, 0 whenever no construction site exists). The thresholds match the
- * builder body templates: a builder is only worth spawning when it can be
- * spawned full-size.
+ * Minimum creeps per role, per controller level. `minCreepsPerRole` in the
+ * spawn manager uses the last row whose level is at or below the current
+ * controller level (a room without a controller - unit test mocks - counts
+ * as level 1).
  *
- * Three builders at every RCL 3 capacity: the M3 acceptance test needs about
- * 9,500 build energy in roughly 3,700 ticks (~2.6 progress/tick sustained).
- * One builder manages ~1.75/tick when the room is full, so the tower
- * (5,000) alone would consume the whole run before any extension is finished.
+ * RCL 1 (bootstrap): one harvester, one builder, one upgrader. With the
+ * owner's spawn order (harvester -> builder -> upgrader) this queue means
+ * the whole bootstrap crew is out as fast as energy allows: the harvester
+ * starts the income, the builder is the next 300 energy, the upgrader the
+ * one after - which is what lands the first upgrade tick inside the 500
+ * ticks the smoke test measures, and the first builder inside the 800
+ * ticks M1 measures.
+ * RCL 2: three harvesters, three builders (300 energy still buys a full
+ * 300-energy body).
+ * RCL 3 and up: five harvesters, three builders. The M3 run keeps builders
+ * busy for thousands of ticks on the tower and the extensions; five
+ * harvesters are what keeps the energy flowing to the spawn, the extensions
+ * and the tower while that happens. (Rule 02b suggests at most two
+ * builders; the M3 acceptance test's 4,000-tick window for the tower plus
+ * three finished extensions needs three - the test wins, see status.md.)
  */
-export const BUILDER_COUNT_BY_CAPACITY: { capacity: number; builders: number }[] = [
-  { capacity: 550, builders: 3 },
-  { capacity: 450, builders: 3 },
-  { capacity: 350, builders: 3 },
-  { capacity: 300, builders: 3 },
+export const MIN_CREEPS_BY_LEVEL: {
+    level: number;
+    harvester: number;
+    builder: number;
+    upgrader: number;
+    hauler: number;
+}[] = [
+    { level: 1, harvester: 1, builder: 1, upgrader: 1, hauler: 1 },
+    { level: 2, harvester: 3, builder: 3, upgrader: 1, hauler: 1 },
+    { level: 3, harvester: 5, builder: 3, upgrader: 1, hauler: 1 },
 ];
 
 /**

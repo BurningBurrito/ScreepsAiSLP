@@ -11,20 +11,33 @@
  * Build priority (M3):
  *   Tower and extension sites form one priority class (the M3 spec: while
  *   either exists, builders work on them, closest site wins within the
- *   class). Then container sites. Road sites are only considered once no
- *   tower, extension or container site exists anymore, so builders never
- *   spend energy on roads while the priority structures are still
- *   unfinished.
+ *   class). Road sites come next, and container sites last.
+ *
+ *   Roads sit above containers because that is the only moment they get
+ *   built at all: in bootstrap (no tower or extension site yet) the first
+ *   finished road is what M2 measures within 3,000 ticks of an RCL 1 start,
+ *   and once extension sites exist, builders never reach the road list
+ *   again - five 3,000-energy sites keep them busy for the whole M3 window.
+ *   Containers are the long-term fallback; M4 redesigns logistics around
+ *   them and revisits this order.
  *
  * With no sites left, a builder upgrades the controller instead of idling
  * (an idle creep is a bug).
+ *
+ * Self-harvest source choice: the source nearest the spawn (Chebyshev). The
+ * builder loops between the spawn (withdrawal, creep respawns) and its build
+ * sites, which sit on the road network around the spawn; findClosestByPath
+ * would send it to the far source across the room (same swamp-cost trap the
+ * upgrader hit, see utils/pickSource).
  */
+
+import { pickSourceClosestTo } from "utils/pickSource";
 
 /**
  * Selects the next construction site for a builder.
  *
- * Priority: tower and extension sites together (one class), then container,
- * and only then roads. Within a priority class the closest site (by path)
+ * Priority: tower and extension sites together (one class), then roads,
+ * then containers. Within a priority class the closest site (by path)
  * wins, so distance is a tie-breaker, never the first choice.
  * @param creep The builder that needs a target (used for pathing)
  * @param room The room to search
@@ -51,18 +64,20 @@ function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
         return creep.pos.findClosestByPath<ConstructionSite>(prioritySites);
     }
 
-    const containerSites = sitesOf(STRUCTURE_CONTAINER);
-    if (containerSites.length > 0)
-    {
-        return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
-    }
-
-    // Roads are the last priority: only when no tower, extension or container
-    // site is left do builders touch a road site (M3 build order).
+    // Roads come before containers: in bootstrap (no tower or extension
+    // site) the first finished road is what M2 measures within 3,000 ticks
+    // of an RCL 1 start, and once extension sites exist builders never
+    // reach this list again. Containers are the long-term fallback (M4).
     const roadSites = sitesOf(STRUCTURE_ROAD);
     if (roadSites.length > 0)
     {
         return creep.pos.findClosestByPath<ConstructionSite>(roadSites);
+    }
+
+    const containerSites = sitesOf(STRUCTURE_CONTAINER);
+    if (containerSites.length > 0)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
     }
 
     return null;
@@ -192,13 +207,22 @@ export function runBuilder(creep: Creep): void
     }
 
     // Harvest from a source and stay there until the store is full.
+    // The builder's loop is anchored at the spawn (its energy comes from
+    // there and its sites sit on the road network around it), so pick the
+    // source nearest the spawn - not the cheapest path, which the swamp
+    // pocket around the spawn-side source distorts (see the file header).
     const sources = room.find(FIND_SOURCES_ACTIVE);
     if (sources.length > 0)
     {
-        const source = creep.pos.findClosestByPath(sources);
-        if (source !== null)
+        const spawn = room.find(FIND_MY_SPAWNS)[0];
+        const controller = room.controller;
+        const anchor = spawn !== undefined
+            ? spawn.pos
+            : controller !== undefined ? controller.pos : null;
+        if (anchor !== null)
         {
-            if (creep.harvest(source) === ERR_NOT_IN_RANGE)
+            const source = pickSourceClosestTo(sources, anchor);
+            if (source !== null && creep.harvest(source) === ERR_NOT_IN_RANGE)
             {
                 creep.moveTo(source, { reusePath: 20 });
             }

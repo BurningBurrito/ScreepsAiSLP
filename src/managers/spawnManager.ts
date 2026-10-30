@@ -20,7 +20,7 @@
  * tick onward (the spawn is busy for three ticks per body part anyway).
  */
 
-import { BUILDER_COUNT_BY_CAPACITY, MIN_CREEPS_PER_ROLE } from "config";
+import { MIN_CREEPS_BY_LEVEL } from "config";
 
 /** Roles checked each tick, highest priority first (owner rule #5). */
 const SPAWN_ORDER: Role[] = ["harvester", "builder", "upgrader", "hauler"];
@@ -128,28 +128,32 @@ function pickBody(role: Role, budget: number): { body: BodyPartConstant[]; cost:
 /**
  * Computes the minimum population per role for this room.
  *
- * Builders: only while something is under construction, and only as many as
- * the energy capacity can support full-size (see BUILDER_COUNT_BY_CAPACITY).
- * Haulers: only once a container is actually built (stage 2 economy) - until
- * then they would just park next to the spawn (owner rule #1).
+ * The base row comes from the controller level (see MIN_CREEPS_BY_LEVEL):
+ * the bootstrap phase needs a short queue (harvester, builder, upgrader -
+ * the upgrader has to be alive within the first 500 ticks or the smoke
+ * test sees no controller progress), while the RCL 3 world needs five
+ * harvesters to feed the builders. A room without a controller (unit test
+ * mocks) counts as level 1.
+ *
+ * Builders: only while something is under construction.
+ * Haulers: only once a container is actually built (stage 2 economy) -
+ * until then they would just park next to the spawn (owner rule #1).
  * @param room The room to compute minimums for
  * @returns The minimum number of alive creeps per role
  */
 function minCreepsPerRole(room: Room): Record<Role, number>
 {
     const siteCount = room.find(FIND_CONSTRUCTION_SITES).length;
-    const capacity = room.energyCapacityAvailable;
 
-    let builderMin = 0;
-    if (siteCount > 0)
+    const level = room.controller !== undefined ? room.controller.level : 1;
+    // The last row whose level is at or below the controller's level: the
+    // table is sorted ascending, so later rows overwrite earlier ones.
+    let row = MIN_CREEPS_BY_LEVEL[0];
+    for (const entry of MIN_CREEPS_BY_LEVEL)
     {
-        for (const entry of BUILDER_COUNT_BY_CAPACITY)
+        if (level >= entry.level)
         {
-            if (capacity >= entry.capacity)
-            {
-                builderMin = entry.builders;
-                break;
-            }
+            row = entry;
         }
     }
 
@@ -158,10 +162,10 @@ function minCreepsPerRole(room: Room): Record<Role, number>
     }).length;
 
     return {
-        harvester: MIN_CREEPS_PER_ROLE.harvester,
-        builder: builderMin,
-        upgrader: MIN_CREEPS_PER_ROLE.upgrader,
-        hauler: containerCount > 0 ? MIN_CREEPS_PER_ROLE.hauler : 0,
+        harvester: row.harvester,
+        builder: siteCount > 0 ? row.builder : 0,
+        upgrader: row.upgrader,
+        hauler: containerCount > 0 ? row.hauler : 0,
     };
 }
 

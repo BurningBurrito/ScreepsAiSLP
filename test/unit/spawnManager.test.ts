@@ -38,6 +38,8 @@ interface RoomOptions {
   spawnResult?: number;
   /** When true, room.find returns no spawn at all. */
   noSpawn?: boolean;
+  /** Controller level for the minimums table; undefined = no controller. */
+  controllerLevel?: number;
   sources?: {id: string}[];
 }
 
@@ -90,6 +92,7 @@ describe("spawnManager", () => {
       name: "w10n10",
       energyCapacityAvailable: options.capacity === undefined ? 300 : options.capacity,
       energyAvailable: options.available === undefined ? 300 : options.available,
+      controller: options.controllerLevel !== undefined ? {level: options.controllerLevel} : undefined,
       find: (type: number) => {
         if (type === FIND_MY_SPAWNS) return options.noSpawn ? [] : [spawn];
         if (type === FIND_CONSTRUCTION_SITES) return new Array(options.sites === undefined ? 0 : options.sites).fill(0);
@@ -294,6 +297,96 @@ describe("spawnManager", () => {
     assert.equal(calls[0].name, "hauler-4");
     assert.equal(calls[0].memory.role, "hauler");
     assert.deepEqual(calls[0].body, [CARRY, CARRY, MOVE, MOVE]);
+  });
+
+  it("scales the harvester minimum with the controller level (RCL 2 wants three)", () => {
+    addCreeps({
+      "harvester-0": {role: "harvester"},
+      "harvester-1": {role: "harvester"},
+      "upgrader-2": {role: "upgrader"},
+    });
+    // Three creeps already exist, so the next name uses counter value 3.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 3;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 4,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      controllerLevel: 2,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // Two of the three RCL 2 harvesters are alive, and harvesters come
+    // before builders in the spawn order (owner rule #5).
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "harvester-3");
+    assert.equal(calls[0].memory.role, "harvester");
+  });
+
+  it("scales the harvester minimum with the controller level (RCL 3 wants five)", () => {
+    addCreeps({
+      "harvester-0": {role: "harvester"},
+      "harvester-1": {role: "harvester"},
+      "harvester-2": {role: "harvester"},
+      "harvester-3": {role: "harvester"},
+      "upgrader-4": {role: "upgrader"},
+      "builder-5": {role: "builder"},
+    });
+    // Six creeps already exist, so the next name uses counter value 6.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 6;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 60,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      controllerLevel: 3,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // Four of the five RCL 3 harvesters are alive; the missing one spawns
+    // even though a builder slot is also open (harvesters first).
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "harvester-6");
+    assert.equal(calls[0].memory.role, "harvester");
+  });
+
+  it("keeps the bootstrap queue short at RCL 1: no second harvester, builder next", () => {
+    addCreeps({
+      "harvester-0": {role: "harvester"},
+    });
+    // One creep already exists, so the next name uses counter value 1.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 1;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 60,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      controllerLevel: 1,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // The RCL 1 row wants one harvester (alive) and one builder (none):
+    // the builder is next, so the upgrader follows right behind and can
+    // show controller progress within the smoke test's 500 ticks.
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "builder-1");
+    assert.equal(calls[0].memory.role, "builder");
+    assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
   });
 
   it("moves on to the next role when the engine rejects a spawn", () => {

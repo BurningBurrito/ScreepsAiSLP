@@ -7,7 +7,17 @@
  * energy the harvesters just delivered and starve creep respawns. It also
  * never walks to the controller while empty: an empty upgrader standing at
  * the controller does nothing, and an idle creep is a bug.
+ *
+ * Source choice: the source nearest the controller (Chebyshev), because the
+ * upgrader's loop is fixed at source <-> controller and that minimises its
+ * travel. findClosestByPath must not pick the source: it prices swamp tiles
+ * 10x plain, and in the test world the spawn-side source sits in a swamp
+ * pocket, so the path cost calls the far source "closest" and the upgrader
+ * burns its whole life crossing the room (measured: zero upgrades in the
+ * 500-tick smoke window that way). See utils/pickSource.
  */
+
+import { pickSourceClosestTo } from "utils/pickSource";
 
 /**
  * Runs the upgrader role for one tick.
@@ -56,11 +66,24 @@ export function runUpgrader(creep: Creep): void
         creep.memory.working = false;
     }
 
-    // --- Phase 2: harvest from a source, stay until the store is full ---
+    // --- Phase 2: harvest from the source nearest the controller ---
     const sources = room.find(FIND_SOURCES_ACTIVE);
     if (sources.length > 0)
     {
-        const source = creep.pos.findClosestByPath(sources);
+        // Anchor on the controller: the upgrader repeats this exact round
+        // trip for its whole life, so the nearest source to the controller
+        // is the cheapest one it can serve (see the file header).
+        let source: Source | null = null;
+        const controller = room.controller;
+        if (controller !== undefined)
+        {
+            source = pickSourceClosestTo(sources, controller.pos);
+        }
+        if (source === null)
+        {
+            source = creep.pos.findClosestByPath(sources);
+        }
+
         if (source !== null)
         {
             if (creep.harvest(source) === ERR_NOT_IN_RANGE)
