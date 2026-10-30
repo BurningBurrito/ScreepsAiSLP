@@ -1,7 +1,7 @@
 # ScreepsAiSLP Status
 
 ## Current State
-M1/M2/M3 in progress. The upgrader bootstrap failure (controller progress frozen at 0) is
+M1/M2/M3 complete. The upgrader bootstrap failure (controller progress frozen at 0) is
 fixed in three layers. First: the upgrader and builder pick their self-harvest source by
 Chebyshev distance to a fixed anchor (controller for the upgrader, spawn for the builder)
 instead of findClosestByPath, which the swamp pocket around the spawn-side source distorted in
@@ -16,14 +16,22 @@ Third: the upgrader latches its source choice in memory for the whole work cycle
 (src/roles/builder.ts), so the builder no longer camps the pocket's second standable tile and
 the upgrader no longer oscillates between the two sources. Verified with spawnprobe (700 ticks):
 controller progress 0 -> 100 by t=700 (pre-fix regression: 0; baseline: 50), creep idle 18 % -> 6 %.
-M3's build order is now fixed in two layers (src/roles/builder.ts, src/roles/upgrader.ts): the
-tower site is its own priority class above the extensions, the upgrader delegates to runBuilder
-while a tower or extension site exists, and while extension sites remain every builder works the
-ONE most advanced extension (progress first, spawn-distance tie-break) so the room's energy
-capacity grows as sites actually complete - the second M3 run finished 2 of 3 extensions because
-the crew split one-per-site over eight sites.
+M3 is complete: the acceptance test passed (1 passing, 17 min, 4,000 ticks). The build order is
+fixed in two layers (src/roles/builder.ts, src/roles/upgrader.ts): the tower site is its own
+priority class above the extensions, the upgrader delegates to runBuilder while a tower or
+extension site exists, and while extension sites remain every builder works the ONE most
+advanced extension (progress first, spawn-distance tie-break) so the room's energy capacity
+grows as sites actually complete. Final M3 snapshot: tower built and full (maxTowerEnergy
+1000), 4 extensions built + 6 sites placed (all 10 allowed), energyCapacity 500, road share
+0 %, 59 road tiles, 0 on wall, 0 stray, sources 2 of 2 and controller connected, farthest
+structure 6 tiles from spawn (limit 8), level 3.
 
 ## Change Log
+### 2026-10-30 (M3 acceptance pass)
+- **M3 COMPLETE**: acceptance-m3 passed (1 passing, 17 min) with the focused-extension fix from the previous entry. Snapshot after 4,000 ticks: towersBuilt 1, maxTowerEnergy 1000 (need >= 500), extensionsBuilt 4 + extensionSites 6 = all 10 allowed (need >= 3 built), energyCapacity 500 (need >= 450), roadShare 0 while priority sites existed (limit 10 %), 59 road tiles / 0 on wall / 0 stray, sources 2 of 2 + controller connected, farthestFromSpawn 6 (limit 8), level 3. Capacity climbed 300 -> 350 (~t2300) -> 400 (~t2800) -> 450 (~t3500) -> 500 (~t4000): one site finished at a time. Whole-run scorecard: harvested 38,120 energy, construction 4.28/tick, spawn idle 46 %, CPU avg 2.08 / max 26.07, 0 bot console errors.
+- **Docs**: blog post blog/2026-10-30-build-priorities-and-a-tower.md (the two measured failure modes and the focus fix); README.md status and features updated; M3 ticked under Upcoming Features.
+- Full-suite gate (agent-test all, 40 min): 50 passing (unit) + 7 passing (integration) - M1, M2, M3 acceptance, smoke and spawnprobe all green on commit cb8e347. The M3 run reproduced the passing snapshot exactly (roadShare 0, maxTowerEnergy 1000, extensions 4 built + 6 placed, capacity 500). M2 snapshot: 3 extensions built + 2 sites, 7 roads built + 52 sites, capacity 450, level 2.
+
 ### 2026-10-30 (M3 focus run)
 - **M3 gate fix: focused extension building (src/roles/builder.ts)**: selectBuildSite no longer lets each builder pick its own nearest extension site. While any extension site exists, every builder (including the delegated upgrader) works the ONE most advanced site - highest build progress, ties broken by closeness to the spawn. All builders compute the same focus from shared room state (the progress numbers), so no Memory is needed and a global reset cannot desynchronise the crew. Reason: in the post-tower-first M3 run the tower finished and the first two extensions took ~450 ticks each with the full crew on them, but the crew then split one-per-site over the remaining eight sites (12,412 energy spread) and the third extension was still over 2,000 progress short at the end of the 4,000-tick window. Capacity only grows when a site is COMPLETE, so finishing one site at a time is what buys the energyCapacity criterion.
 - **Unit tests (test/unit/builder.test.ts)**: +2 tests - a carrying builder converges on the most advanced extension (progress 2,900) even when a closer one (progress 100) sits at range 1; with equal progress the spawn-side site wins so every builder computes the same first target. 50 unit tests passing (48 before).
@@ -74,18 +82,13 @@ the crew split one-per-site over eight sites.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- M3 gate failure (2 of the 3 extensions finished in the 4,000-tick window, energyCapacity 400 < 450): fix implemented this run - builders now converge on the single most advanced extension site (highest progress, tie: nearest the spawn) instead of spreading one per site. Unit checks green (50 passing); verifying with smoke then the M3 acceptance run.
-- Plan for this run: [1] lint/build/unit (done, 50 passing) -> [2] smoke 500 ticks (regression guard: at RCL 1 no tower/extension sites exist, so the new focus branch is inactive) -> [3] commit -> [4] M3 acceptance (4,000 ticks; expect tower finished early and >= 3 extensions / 450 capacity) -> [5] full agent-test all (M1/M2 must stay green) -> [6] status/README/blog if green.
-- **Second M3 acceptance run (before this fix, tower-first + upgrader delegation)**: tower built and full (towersBuilt 1, maxTowerEnergy 1000), extensionsBuilt 2 (need 3), energyCapacity 400 (need 450). Failure mode: after the tower finished, 4 builders split one-per-site over the 8 remaining extension sites (12,412 energy in flight) and none of the rest completed.
-- **Honest observation**: whole-run harvest is 2,488 this run vs 2,544 in the pre-fix run (-56, about 2 %, essentially flat - the builder now self-harvests the slightly farther open source after yielding the pocket to the upgrader) and construction is 3.3 vs 4.69/tick in the pre-fix run (the drop is expected: the upgrader now burns 0.18/tick on upgrades, so energy is split between construction and upgrading instead of all going to construction). The harvester itself is healthy (working on the pocket, not idle), so this is the intended trade, not a role regression.
-- **Baseline 2026-10-24** (smoke, 500 ticks, reports/latest.md): build energy to roads 0 %; roads 59 / 0 on wall / 0 disconnected; roads reach sources 2 of 2 and controller; extensions/towers farther than 8 tiles: 0; sites on wall terrain: 0; harvested 3.62/tick, delivered 1.92/tick, construction 1.74/tick; RCL 1/8; upgrader born ~480, progress 0 (the failure this run fixes).
-- **Last M3 acceptance run (4000 ticks, 1-builder economy)**: tower built and full (maxTowerEnergy 1000), but extensionsBuilt 1 (need 3), energyCapacity 350 (need 450) - build throughput was the only failing part.
-- Next: run the full acceptance suite to confirm no regressions beyond the verified spawnprobe (smoke, M1 800, M2 3000 roadsBuilt >= 1 + 1 extension, M3 4000 tower + 3 extensions + 500 tower energy). M3 build throughput was already the failing part before this fix and is a separate follow-up; the controller-progress regression this run targets is resolved.
+- **M3 gate: PASSED this run** (acceptance-m3, 1 passing, 17 min, numbers above). Remaining steps this run: [1] full suite agent-test all (M1/M2/smoke must stay green) - IN PROGRESS -> [2] copy the "N passing, M failing" line into the Change Log -> [3] commit everything (code already committed as cb8e347; docs commit pending).
+- **Next milestone (M4, containers and static mining)**: the hauler role already exists (withdraws from containers, delivers tower -> extensions -> spawn; spawnManager spawns haulers once a container exists) and constructionManager already computes container positions beside each source and places one site at a time (placeContainerSites). Still needed per milestones/M4.md: a stationary miner per source parked on its container tile, hauler delivery order per spec (spawn/extensions -> controller container -> upgraders in range 1), the spawn manager rewritten as a priority list, and a container-aware path in selectBuildSite while container sites exist. M4 acceptance: 3,000 ticks, 2 containers adjacent to 2 sources, >= 60 % of the harvest ceiling, wasted-at-regen <= 15 %, upgrade >= 20 % of ceiling, no >150-tick idle spawn at full energy, CPU <= 10/tick.
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
 - [x] M1: basic economy and creep management (completed)
-- [ ] M3: build priorities, layout and a tower (in progress)
+- [x] M3: build priorities, layout and a tower (completed 2026-10-30, acceptance 1 passing)
 - [ ] M4 containers and static mining
 - [ ] M5 CPU profiling and path caching
 - [ ] M6 expansion to a second room
@@ -109,3 +112,6 @@ the crew split one-per-site over eight sites.
 - **CPU bucket**: Unused CPU accumulates in a bucket (max 10,000) allowing bursts of up to 500 CPU per tick
 - **Working flag**: State flag on creeps that determines whether they are gathering energy (working=false) or using it (working=true)
 - **ERR_NO_PATH vs ERR_TIRED/ERR_BUSY**: ERR_NO_PATH means the path is permanently blocked; ERR_TIRED/ERR_BUSY mean the creep can't move this tick but should try again
+- **Construction site / build progress**: the ghost outline placed before a structure exists; it only becomes a real structure once energy spent on it (build progress) reaches the structure's cost - progress on an unfinished site is worthless at the deadline
+- **Energy capacity**: the total energy a room can hold at once (spawn 100 + 50 per finished extension); bigger capacity means bigger creeps
+- **Priority class (design concept)**: grouping structure types so builders always finish every site in a higher class before touching a lower one; M3 runs tower > extensions > roads > containers

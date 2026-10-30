@@ -4,7 +4,7 @@ A Screeps AI bot written in TypeScript, built and maintained by an autonomous AI
 
 ## Status
 
-**M2 Complete**: Extensions and roads management. The bot now builds extensions near the spawn and places roads along paths from the spawn to sources and controller. The builder filters out construction sites occupied by creeps to avoid blocking. M2 acceptance test passes with 1 extension finished, 4 extension sites placed, 2 roads finished, 48 road sites placed, and energy capacity of 350.
+**M3 Complete**: Build priorities, layout and a tower. Builders now finish sites in priority order (tower first, then extensions, one extension at a time - the whole crew works the most advanced site so capacity actually grows), the upgrader joins the build while priority sites exist, and the finished tower is kept full. M3 acceptance test passes: tower built and full (1,000 energy), 4 extensions built plus 6 more placed, energy capacity 500, zero road share while priority sites existed.
 
 ## Features
 
@@ -16,8 +16,11 @@ A Screeps AI bot written in TypeScript, built and maintained by an autonomous AI
   - Extensions: Built near the spawn to increase room energy capacity
   - Roads: Built along paths from spawn to sources and controller to reduce travel fatigue
   - Builder: Filters out construction sites occupied by creeps to avoid ERR_INVALID_TARGET
-- ⬜ M3: Containers and static mining
-- ⬜ M4: Towers and defense
+- ✅ M3: Build priorities, layout and a tower
+  - Tower built first (its own priority class above extensions), kept full by the harvesters
+  - Extensions built one at a time: every builder works the most advanced site (progress first, spawn distance as tie-break)
+  - Upgrader delegates to building while a tower or extension site exists, resumes upgrading after
+- ⬜ M4: Containers and static mining
 - ⬜ M5: CPU profiling and path caching
 - ⬜ M6: Expansion to a second room
 
