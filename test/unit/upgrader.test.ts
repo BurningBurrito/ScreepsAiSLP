@@ -10,6 +10,11 @@ const RESOURCE_ENERGY = "energy";
 const FIND_SOURCES = 105;
 const FIND_CREEPS = 101;
 const FIND_MY_STRUCTURES = 108;
+const FIND_CONSTRUCTION_SITES = 111;
+const FIND_MY_SPAWNS = 112;
+const STRUCTURE_EXTENSION = "extension";
+const STRUCTURE_TOWER = "tower";
+const STRUCTURE_ROAD = "road";
 const TERRAIN_MASK_WALL = 1;
 
 /**
@@ -98,6 +103,97 @@ function makeUpgrader(memory: Record<string, any>):
     };
     return { creep, calls, sourceA, sourceB };
 }
+/**
+ * Builds a carrying upgrader standing at the controller with the given
+ * construction sites in the room, so runUpgrader reaches the M3 delegation
+ * (carry energy, priority sites present). The creep's
+ * pos.findClosestByPath returns the closest site by Chebyshev distance;
+ * room.find honours the filter option like the real API.
+ * @param sites The construction sites present in the room.
+ * @returns The mock creep and its call counters (lastBuilt names the site built).
+ */
+function makeUpgraderWithSites(sites: any[]):
+    { creep: any; calls: { build?: number; upgrade?: number; lastBuilt?: string } }
+{
+    const calls: { build?: number; upgrade?: number; lastBuilt?: string } = {};
+    const sourceA = { id: "sA", energy: 500, pos: pos(14, 18) };
+    const sourceB = { id: "sB", energy: 500, pos: pos(39, 14) };
+    const controller = { my: true, pos: pos(25, 25) };
+    const spawn = { pos: pos(13, 20), store: { getFreeCapacity: () => 0 } };
+    const creep: any = {
+        id: "u1",
+        memory: { working: true, role: "upgrader" },
+        body: [
+            { type: "work" },
+            { type: "carry" },
+            { type: "move" },
+        ],
+        store: {
+            [RESOURCE_ENERGY]: 50,
+            getFreeCapacity: () => 0,
+            getCapacity: () => 50,
+        },
+        pos: {
+            ...pos(25, 25),
+            findClosestByPath: (candidates: any[]) => {
+                let best: any = null;
+                let bestDistance = Infinity;
+                for (const candidate of candidates)
+                {
+                    const distance = Math.max(
+                        Math.abs(candidate.pos.x - 25),
+                        Math.abs(candidate.pos.y - 25),
+                    );
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        best = candidate;
+                    }
+                }
+                return best;
+            },
+            findClosestByRange: () => null,
+        },
+        room: {
+            find: (type: number, opts?: any) => {
+                if (type === FIND_SOURCES)
+                {
+                    return [sourceA, sourceB];
+                }
+                if (type === FIND_MY_SPAWNS)
+                {
+                    return [spawn];
+                }
+                if (type === FIND_CONSTRUCTION_SITES)
+                {
+                    return opts !== undefined && opts.filter !== undefined
+                        ? sites.filter(opts.filter)
+                        : sites;
+                }
+                return [];
+            },
+            controller,
+            energyAvailable: 300,
+            energyCapacityAvailable: 300,
+            getTerrain: () => ({ get: () => 0 }),
+        },
+        build: (site: any) => {
+            calls.build = (calls.build ?? 0) + 1;
+            calls.lastBuilt = site.id;
+            return OK;
+        },
+        upgradeController: () => {
+            calls.upgrade = (calls.upgrade ?? 0) + 1;
+            return OK;
+        },
+        harvest: () => OK,
+        withdraw: () => ERR_NOT_IN_RANGE,
+        pickup: () => OK,
+        moveTo: () => OK,
+    };
+    return { creep, calls };
+}
+
 describe("upgrader", () => {
     beforeEach(() => {
         // @ts-ignore : allow adding Game to global
@@ -110,6 +206,16 @@ describe("upgrader", () => {
         global.FIND_CREEPS = FIND_CREEPS;
         // @ts-ignore
         global.FIND_MY_STRUCTURES = FIND_MY_STRUCTURES;
+        // @ts-ignore
+        global.FIND_CONSTRUCTION_SITES = FIND_CONSTRUCTION_SITES;
+        // @ts-ignore
+        global.FIND_MY_SPAWNS = FIND_MY_SPAWNS;
+        // @ts-ignore
+        global.STRUCTURE_EXTENSION = STRUCTURE_EXTENSION;
+        // @ts-ignore
+        global.STRUCTURE_TOWER = STRUCTURE_TOWER;
+        // @ts-ignore
+        global.STRUCTURE_ROAD = STRUCTURE_ROAD;
         // @ts-ignore
         global.RESOURCE_ENERGY = RESOURCE_ENERGY;
         // @ts-ignore
@@ -162,6 +268,36 @@ describe("upgrader", () => {
 
         assert.equal(calls.lastHarvested, "sB", "a dry latched source is abandoned for a live one");
         assert.equal(creep.memory.sourceId, "sB", "the latch follows the live source");
+    });
+
+    it("builds the tower site instead of upgrading while it is unfinished", () => {
+        // M3: while a tower or extension site exists, the upgrader is a
+        // fourth builder - the WORK energy goes into the construction, not
+        // the controller. It must work the tower even when an extension sits
+        // closer (same priority as the builder role).
+        const { creep, calls } = makeUpgraderWithSites([
+            { id: "ext1", structureType: "extension", pos: pos(24, 24) }, // range 1 from the creep
+            { id: "tower", structureType: "tower", pos: pos(18, 25) },    // range 7
+        ]);
+
+        runUpgrader(creep);
+
+        assert.equal(calls.build, 1, "the upgrader builds while a priority site exists");
+        assert.equal(calls.lastBuilt, "tower", "it works the tower, not the closer extension");
+        assert.equal(calls.upgrade, undefined, "it does not touch the controller");
+    });
+
+    it("keeps upgrading when only non-priority sites (roads) remain", () => {
+        // The pause condition is tower or extension sites only: road sites
+        // must not send the upgrader off to build them.
+        const { creep, calls } = makeUpgraderWithSites([
+            { id: "road1", structureType: "road", pos: pos(24, 24) },
+        ]);
+
+        runUpgrader(creep);
+
+        assert.equal(calls.upgrade, 1, "no tower or extension site: the upgrader upgrades");
+        assert.equal(calls.build, undefined, "it does not build the road site");
     });
 });
 

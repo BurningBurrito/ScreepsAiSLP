@@ -1,19 +1,19 @@
-# Scorecard: spawnprobe · 2026-10-30 07:20 · 700 ticks · commit f81e1f3
+# Scorecard: smoke · 2026-10-30 09:02 · 500 ticks · commit 7bf7d15
 
-| Metric (last 280 ticks unless noted) | This run | Previous run (2026-10-30 06:28, f81e1f3) | Change |
+| Metric (last 200 ticks unless noted) | This run | Previous run (2026-10-30 05:40, 01c7958) | Change |
 | --- | --- | --- | --- |
-| Energy harvested / tick | 3.9 | 5.03 | -1.13 |
-| Energy wasted at source regeneration (sum) | 1,784 | 1,588 | +196 |
-| Controller progress / tick | 0.18 | 0 | +0.18 |
-| Construction progress / tick | 3.3 | 4.69 | -1.39 |
+| Energy harvested / tick | 3.46 | 3.28 | +0.18 |
+| Energy wasted at source regeneration (sum) | 1,000 | 1,000 | 0 |
+| Controller progress / tick | 0.1 | 0.08 | +0.02 |
+| Construction progress / tick | 3.11 | 2.78 | +0.33 |
 | Energy delivered to spawn and extensions / tick | 0 | 0 | 0 |
 | Spawn idle while energy is full | 100 % | 100 % | 0 pts |
 | Spawn busy | 0 % | 0 % | 0 pts |
-| Creep ticks idle (no action, no move for 5+ ticks) | 6 % | 18 % | -12 pts |
-| CPU / tick (average, max) | 1.51, 20.19 | 1.53, 20.13 | -0.02 |
-| RCL / progress at end (whole run) | 1 / 100 | 1 / 0 | +100 |
+| Creep ticks idle (no action, no move for 5+ ticks) | 8 % | 18 % | -10 pts |
+| CPU / tick (average, max) | 1.53, 25.9 | 1.49, 20.23 | +0.04 |
+| RCL / progress at end (whole run) | 1 / 50 | 1 / 16 | +34 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
-| Energy harvested (whole run) | 2,488 | 2,544 | -56 |
+| Energy harvested (whole run) | 1,692 | 1,656 | +36 |
 | Build energy spent on roads (share of all build energy) | 99 % | 98 % | +1 pts |
 | Road tiles: total / on wall / disconnected from the spawn network (end) | 59 / 0 / 0 | 59 / 0 / 0 | 0 |
 | Roads reach (end): sources, controller | 2 of 2, yes | 2 of 2, yes |  |
@@ -23,16 +23,14 @@
 | Creeps at end (peak) | 3 (3) | 3 (3) | 0 |
 
 Creeps at end by role: builder 1, harvester 1, upgrader 1.
-Structures at end: road 4, spawn 1. Construction sites: 56 (container 1, road 55). Build energy in the window by target: completed 12, road 911.
+Structures at end: road 2, spawn 1. Construction sites: 58 (container 1, road 57). Build energy in the window by target: completed 9, road 613.
 Room energy capacity 300; source capacity 3000 and 3000; Memory 1 KB; bucket 10000.
-Bot console: 721 lines, 0 with errors (reports/spawnprobe-console.log). Probe results missing for 0 ticks.
+Bot console: 8 lines, 0 with errors (reports/smoke-console.log). Probe results missing for 0 ticks.
 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
-      100 | builder 1, harvester 1                   |   3.2 |     0 |    67/300 | idle | 1.5
+      100 | builder 1, harvester 1                   |   3.2 |     0 |    67/300 | idle | 1.6
       200 | builder 1, harvester 1, upgrader 1       |   4.2 |     0 |   196/300 | idle | 1.4
-      300 | builder 1, harvester 1, upgrader 1       |   2.6 |   0.3 |   300/300 | idle | 1.3
-      400 | builder 1, harvester 1, upgrader 1       |   3.2 |   0.2 |   300/300 | idle | 1.4
-      500 | builder 1, harvester 1, upgrader 1       |   3.7 |     0 |   300/300 | idle | 1.5
-      600 | builder 1, harvester 1, upgrader 1       |     4 |   0.5 |   300/300 | idle | 1.5
-      700 | builder 1, harvester 1, upgrader 1       |     4 |     0 |   300/300 | idle | 1.5
+      300 | builder 1, harvester 1, upgrader 1       |   2.6 |   0.3 |   300/300 | idle | 1.4
+      400 | builder 1, harvester 1, upgrader 1       |   3.2 |   0.2 |   300/300 | idle | 1.5
+      500 | builder 1, harvester 1, upgrader 1       |   3.7 |     0 |   300/300 | idle | 1.6

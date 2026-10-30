@@ -119,6 +119,94 @@ function makeBuilder(terrain: (x: number, y: number) => number, memory: Record<s
     };
     return { creep, calls, sourceA, sourceB };
 }
+
+/**
+ * Builds a builder carrying a full store, standing at the spawn, with the
+ * given construction sites in the room, so the role runs its build phase.
+ * The creep's pos.findClosestByPath returns the site with the smallest
+ * Chebyshev distance (matching the real method for these close layouts), so
+ * the tests exercise the priority classes, not the mock. room.find honours
+ * the filter option, exactly like the real API does.
+ * @param sites The construction sites present in the room.
+ * @returns The mock creep and its call counters (lastBuilt names the site built).
+ */
+function makeCarryingBuilder(sites: any[]): { creep: any; calls: { build?: number; lastBuilt?: string } }
+{
+    const calls: { build?: number; lastBuilt?: string } = {};
+    const sourceA = { id: "sA", energy: 500, pos: pos(14, 18) };
+    const sourceB = { id: "sB", energy: 500, pos: pos(39, 14) };
+    const controller = { my: true, pos: pos(25, 25) };
+    const spawn = { pos: pos(13, 20), store: { getFreeCapacity: () => 0 } };
+    const creep: any = {
+        id: "b1",
+        memory: { working: true, role: "builder" },
+        body: [
+            { type: "work" },
+            { type: "carry" },
+            { type: "move" },
+        ],
+        store: {
+            [RESOURCE_ENERGY]: 50,
+            getFreeCapacity: () => 0,
+            getCapacity: () => 50,
+        },
+        pos: {
+            ...pos(13, 20),
+            findClosestByPath: (candidates: any[]) => {
+                let best: any = null;
+                let bestDistance = Infinity;
+                for (const candidate of candidates)
+                {
+                    const distance = Math.max(
+                        Math.abs(candidate.pos.x - 13),
+                        Math.abs(candidate.pos.y - 20),
+                    );
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        best = candidate;
+                    }
+                }
+                return best;
+            },
+            findClosestByRange: () => null,
+        },
+        room: {
+            find: (type: number, opts?: any) => {
+                if (type === FIND_SOURCES_ACTIVE || type === FIND_SOURCES)
+                {
+                    return [sourceA, sourceB];
+                }
+                if (type === FIND_MY_SPAWNS)
+                {
+                    return [spawn];
+                }
+                if (type === FIND_CONSTRUCTION_SITES)
+                {
+                    return opts !== undefined && opts.filter !== undefined
+                        ? sites.filter(opts.filter)
+                        : sites;
+                }
+                return [];
+            },
+            controller,
+            energyAvailable: 300,
+            energyCapacityAvailable: 300,
+            getTerrain: () => ({ get: () => 0 }),
+        },
+        build: (site: any) => {
+            calls.build = (calls.build ?? 0) + 1;
+            calls.lastBuilt = site.id;
+            return OK;
+        },
+        upgradeController: () => OK,
+        harvest: () => OK,
+        withdraw: () => ERR_NOT_IN_RANGE,
+        pickup: () => OK,
+        moveTo: () => OK,
+    };
+    return { creep, calls };
+}
 describe("builder", () => {
     beforeEach(() => {
         // @ts-ignore : allow adding Game to global
@@ -189,6 +277,37 @@ describe("builder", () => {
         runBuilder(creep);
 
         assert.equal(calls.lastHarvested, "sA", "a walled-off alternative yields to the pocket");
+    });
+
+    it("prefers an unfinished tower site over a closer extension site", () => {
+        // M3 fix: with tower and extensions in one "closest wins" class the
+        // builders clustered on the nearby extensions and starved the tower
+        // (4,959 of 5,000 at the end of the M3 window). The tower site is now
+        // its own class above the extensions, so a carrying builder works it
+        // even when an extension sits closer.
+        const { creep, calls } = makeCarryingBuilder([
+            { id: "ext1", structureType: "extension", pos: pos(14, 20) }, // range 1 from the creep
+            { id: "tower", structureType: "tower", pos: pos(18, 25) },    // range 5
+        ]);
+
+        runBuilder(creep);
+
+        assert.equal(calls.build, 1, "the builder builds while a priority site exists");
+        assert.equal(calls.lastBuilt, "tower", "the tower site beats a closer extension");
+    });
+
+    it("prefers an extension site over a closer road site", () => {
+        // With no tower site left, extensions take the builders before roads
+        // do: roads are only built in bootstrap (M2), never while an
+        // extension site is still up.
+        const { creep, calls } = makeCarryingBuilder([
+            { id: "road1", structureType: "road", pos: pos(14, 20) },
+            { id: "ext1", structureType: "extension", pos: pos(18, 25) },
+        ]);
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "ext1", "the extension site beats a closer road");
     });
 });
 

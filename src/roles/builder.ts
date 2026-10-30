@@ -9,15 +9,26 @@
  *   carry capacity empties it and blocks every creep respawn.
  *
  * Build priority (M3):
- *   Tower and extension sites form one priority class (the M3 spec: while
- *   either exists, builders work on them, closest site wins within the
- *   class). Road sites come next, and container sites last.
+ *   1. The tower site, on its own: it is a single 5,000-energy structure
+ *      and the M3 test fails unless it is finished. With every builder on
+ *      it, the tower completes first and only then do builders spread over
+ *      the 3,000-energy extensions.
+ *   2. Extension sites (closest wins).
+ *   3. Road sites.
+ *   4. Container sites.
+ *
+ *   The tower used to share its class with the extensions ("closest
+ *   priority site wins"), and that is exactly how it starved in the first
+ *   M3 attempt: builders cluster on the closest extensions and finish all
+ *   of them before the tower gets a full build cycle - measured 4,959 of
+ *   5,000 tower progress at the end of the window. Tower-own-class is the
+ *   fix (acceptance failure of 2026-10-30).
  *
  *   Roads sit above containers because that is the only moment they get
  *   built at all: in bootstrap (no tower or extension site yet) the first
  *   finished road is what M2 measures within 3,000 ticks of an RCL 1 start,
- *   and once extension sites exist, builders never reach the road list
- *   again - five 3,000-energy sites keep them busy for the whole M3 window.
+ *   and while priority sites exist, builders never reach the road list -
+ *   the 3,000-energy extension sites keep them busy for the whole M3 window.
  *   Containers are the long-term fallback; M4 redesigns logistics around
  *   them and revisits this order.
  *
@@ -42,9 +53,9 @@ import { moveToToward } from "utils/movement";
 /**
  * Selects the next construction site for a builder.
  *
- * Priority: tower and extension sites together (one class), then roads,
- * then containers. Within a priority class the closest site (by path)
- * wins, so distance is a tie-breaker, never the first choice.
+ * Priority: tower sites, then extension sites, then roads, then containers.
+ * Within a priority class the closest site (by path) wins, so distance is a
+ * tie-breaker, never the first choice.
  * @param creep The builder that needs a target (used for pathing)
  * @param room The room to search
  * @returns The selected site, or null when nothing is under construction
@@ -56,23 +67,24 @@ function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
             filter: (site) => site.structureType === type,
         });
 
-    // Tower and extension sites form one priority class (M3 spec: "while any
-    // tower or extension site exists, builders work on those; choose by
-    // priority first, distance second"). Building them in parallel instead of
-    // tower-then-extensions is what lets the M3 acceptance test finish the
-    // tower and all three extensions inside its tick limit.
-    const prioritySites = [
-        ...sitesOf(STRUCTURE_TOWER),
-        ...sitesOf(STRUCTURE_EXTENSION),
-    ];
-    if (prioritySites.length > 0)
+    // The tower gets its own class above the extensions (see the file
+    // header for why): all builders on the one 5,000-energy tower site
+    // finish it first, then spread over the extensions.
+    const towerSites = sitesOf(STRUCTURE_TOWER);
+    if (towerSites.length > 0)
     {
-        return creep.pos.findClosestByPath<ConstructionSite>(prioritySites);
+        return creep.pos.findClosestByPath<ConstructionSite>(towerSites);
+    }
+
+    const extensionSites = sitesOf(STRUCTURE_EXTENSION);
+    if (extensionSites.length > 0)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(extensionSites);
     }
 
     // Roads come before containers: in bootstrap (no tower or extension
     // site) the first finished road is what M2 measures within 3,000 ticks
-    // of an RCL 1 start, and once extension sites exist builders never
+    // of an RCL 1 start, and while priority sites exist builders never
     // reach this list again. Containers are the long-term fallback (M4).
     const roadSites = sitesOf(STRUCTURE_ROAD);
     if (roadSites.length > 0)
@@ -87,6 +99,22 @@ function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
     }
 
     return null;
+}
+
+/**
+ * Checks whether the room has a priority build site: an unfinished tower or
+ * extension. The upgrader uses this to pause RCL work and help building
+ * instead (see upgrader.ts), so the WORK energy goes into the structures
+ * the milestone actually needs rather than into the controller.
+ * @param room The room to search
+ * @returns True when at least one tower or extension site exists
+ */
+export function hasPriorityBuildSites(room: Room): boolean
+{
+    return room.find(FIND_CONSTRUCTION_SITES).some(
+        (site) => site.structureType === STRUCTURE_TOWER
+            || site.structureType === STRUCTURE_EXTENSION,
+    );
 }
 
 /**

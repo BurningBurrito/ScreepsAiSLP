@@ -1,6 +1,17 @@
 /**
  * Upgrader creep role.
  *
+ * While the room is still building its core infrastructure - an unfinished
+ * tower or extension site exists (M3) - the upgrader pauses RCL work and
+ * runs the builder role instead. The tower is a 5,000-energy structure the
+ * milestone window must finish, and the energy an upgrader would burn on
+ * the controller is better spent on the tower and the 3,000-energy
+ * extensions. This turns the upgrader into a fourth builder during
+ * construction; the moment the last priority site is finished it resumes
+ * upgrading. The pause cannot hurt RCL 2 in practice: the construction
+ * manager only places extension sites from controller level 2 and the tower
+ * site from level 3, so the upgrader always makes its early progress first.
+ *
  * Two phases, driven by the store (an upgrader never withdraws from the spawn
  * or an extension - doing so would steal the energy the harvesters just
  * delivered and starve creep respawns):
@@ -30,6 +41,7 @@
  * tick of the long return walk and re-create the oscillation. See pickSource.
  */
 
+import { hasPriorityBuildSites, runBuilder } from "roles/builder";
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
 import { PARTIAL_DELIVERY_FRACTION } from "config";
 import { moveToToward } from "utils/movement";
@@ -38,6 +50,8 @@ import { moveToToward } from "utils/movement";
  * Runs the upgrader role for one tick.
  *
  * Order of checks:
+ *   0. While a tower or extension site exists, build instead (see the file
+ *      header): the WORK energy goes into the construction, not RCL.
  *   1. Pick the harvest target (source nearest the controller, from the
  *      active sources; the nearest of all when both are dry - it refills on
  *      the 300-tick cycle).
@@ -48,6 +62,17 @@ import { moveToToward } from "utils/movement";
 export function runUpgrader(creep: Creep): void
 {
     const room = creep.room;
+
+    // M3: while the tower or an extension is still a site, the upgrader is a
+    // fourth builder. runBuilder handles the whole cycle (build, self-
+    // harvest, withdraw only when the room is full) and shares the
+    // memory.working carry-state flag this role already uses.
+    if (hasPriorityBuildSites(room))
+    {
+        runBuilder(creep);
+        return;
+    }
+
     const energy = creep.store[RESOURCE_ENERGY] ?? 0;
     const capacity = creep.store.getCapacity(RESOURCE_ENERGY);
     const controller = room.controller;
