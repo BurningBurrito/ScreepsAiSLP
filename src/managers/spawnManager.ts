@@ -20,6 +20,7 @@
  * tick onward (the spawn is busy for three ticks per body part anyway).
  */
 
+import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
 import { MIN_CREEPS_BY_LEVEL } from "config";
 
 /** Roles checked each tick, highest priority first (owner rule #5). */
@@ -172,11 +173,18 @@ function minCreepsPerRole(room: Room): Record<Role, number>
 /**
  * Assigns a source to a new harvester.
  *
- * Every harvester gets the source with the fewest living harvesters already
- * assigned to it, so the room's sources are split evenly instead of all
- * harvesters crowding the one closest to the spawn. The assignment is stored
- * in the creep's Memory and survives global resets; when a harvester dies,
- * its slot frees up and the next spawn rebalances.
+ * Balance by remaining capacity, not by count: a source in a wall pocket
+ * has very few standable tiles (the test room's pocket source has exactly
+ * two), so a plain fewest-harvesters rule would keep sending a third
+ * harvester to the pocket that is already full. Each candidate source is
+ * scored as standable tiles minus living harvesters already assigned to it,
+ * and the highest score wins. Only when every source is full (all scores
+ * zero or below) does it fall back to the fewest-assigned source - someone
+ * still has to be assigned somewhere.
+ *
+ * The assignment is stored in the creep's Memory and survives global
+ * resets; when a harvester dies, its slot frees up and the next spawn
+ * rebalances.
  * @param room The room to assign a source in
  * @returns The id of the chosen source, or undefined when the room has none
  */
@@ -205,12 +213,28 @@ function assignSource(room: Room): string | undefined
         }
     }
 
+    const occupied = collectOccupiedTiles(room, "");
     let best = sources[0];
+    let bestScore = -1;
     for (const source of sources)
     {
-        if (counts[source.id] < counts[best.id])
+        const score = countStandableTiles(source, room, occupied) - counts[source.id];
+        if (score > bestScore)
         {
+            bestScore = score;
             best = source;
+        }
+    }
+    if (bestScore <= 0)
+    {
+        // Every source is crowded: fall back to the least-assigned one, it
+        // frees up whenever one of its harvesters dies.
+        for (const source of sources)
+        {
+            if (counts[source.id] < counts[best.id])
+            {
+                best = source;
+            }
         }
     }
     return best.id;

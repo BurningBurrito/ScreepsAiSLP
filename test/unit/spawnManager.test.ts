@@ -40,7 +40,9 @@ interface RoomOptions {
   noSpawn?: boolean;
   /** Controller level for the minimums table; undefined = no controller. */
   controllerLevel?: number;
-  sources?: {id: string}[];
+  sources?: {id: string; pos?: {x: number; y: number}}[];
+  /** "x,y" tiles that are wall terrain (all others are plain). */
+  wallTiles?: string[];
 }
 
 describe("spawnManager", () => {
@@ -88,11 +90,27 @@ describe("spawnManager", () => {
         return options.spawnResult === undefined ? 0 : options.spawnResult;
       },
     };
+    // Default source positions (the test room's layout); tests may override
+    // them via options.sources.
+    const wallTiles = new Set(options.wallTiles === undefined ? [] : options.wallTiles);
+    const sources = (options.sources === undefined
+      ? [{id: "source-1"}, {id: "source-2"}]
+      : options.sources).map((source, index) => ({
+      id: source.id,
+      pos: source.pos === undefined
+        ? (index === 0 ? {x: 14, y: 18} : {x: 39, y: 14})
+        : source.pos,
+    }));
     const room = {
       name: "w10n10",
       energyCapacityAvailable: options.capacity === undefined ? 300 : options.capacity,
       energyAvailable: options.available === undefined ? 300 : options.available,
       controller: options.controllerLevel !== undefined ? {level: options.controllerLevel} : undefined,
+      // 0 = plain, TERRAIN_MASK_WALL (1) = wall; the source-assignment code
+      // probes the tiles next to each source for standable room.
+      getTerrain: () => ({
+        get: (x: number, y: number) => (wallTiles.has(`${x},${y}`) ? 1 : 0),
+      }),
       find: (type: number) => {
         if (type === FIND_MY_SPAWNS) return options.noSpawn ? [] : [spawn];
         if (type === FIND_CONSTRUCTION_SITES) return new Array(options.sites === undefined ? 0 : options.sites).fill(0);
@@ -100,7 +118,7 @@ describe("spawnManager", () => {
           return new Array(options.containers === undefined ? 0 : options.containers).fill({structureType: "container"});
         }
         if (type === FIND_SOURCES_ACTIVE) {
-          return options.sources === undefined ? [{id: "source-1"}, {id: "source-2"}] : options.sources;
+          return sources;
         }
         return [];
       },
@@ -113,12 +131,12 @@ describe("spawnManager", () => {
    * Adds living creeps to the globals the code under test reads (the cloned
    * globals, not the mock import: the clone happened in beforeEach).
    */
-  function addCreeps(creeps: Record<string, {role: string}>): void {
+  function addCreeps(creeps: Record<string, {role: string; sourceId?: string}>): void {
     for (const name in creeps) {
       // @ts-ignore : write into the game globals
-      (global as any).Game.creeps[name] = {memory: {role: creeps[name].role}};
+      (global as any).Game.creeps[name] = {memory: {role: creeps[name].role, sourceId: creeps[name].sourceId}};
       // @ts-ignore : write into the game globals
-      (global as any).Memory.creeps[name] = {role: creeps[name].role};
+      (global as any).Memory.creeps[name] = {role: creeps[name].role, sourceId: creeps[name].sourceId};
     }
   }
 
@@ -430,5 +448,87 @@ describe("spawnManager", () => {
     assert.equal(calls[1].name, "upgrader-1");
     assert.equal(calls[2].name, "harvester-2");
     assert.equal(calls[3].name, "upgrader-3");
+  });
+
+  /**
+   * Wall tiles around the 3x3 block centred on (x, y) that leave exactly
+   * two standable tiles, (x-1, y+1) and (x, y+1) - the shape of the test
+   * room's pocket source.
+   */
+  function pocketWalls(x: number, y: number): string[] {
+    const walls: string[] = [];
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        if (dx === 0 && dy === 0) continue;
+        if (dx === -1 && dy === 1) continue;
+        if (dx === 0 && dy === 1) continue;
+        walls.push(`${x + dx},${y + dy}`);
+      }
+    }
+    return walls;
+  }
+
+  it("keeps a new harvester off a pocket source whose standable tiles are full", () => {
+    // source-1 is a pocket with exactly two standable tiles, and both are
+    // taken by harvesters already assigned to it. source-2 is open ground.
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-1"},
+      "harvester-2": {role: "harvester", sourceId: "source-2"},
+      "harvester-3": {role: "harvester", sourceId: "source-2"},
+    });
+    // Four creeps already exist, so the next name uses counter value 4.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 4;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 0,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      controllerLevel: 3,
+      wallTiles: pocketWalls(14, 18),
+    });
+
+    checkAndSpawn(room);
+
+    // RCL 3 wants five harvesters, so the fifth spawns. The pocket's score
+    // is 2 standable - 2 assigned = 0, the open source's 8 - 2 = 6: the new
+    // harvester must not be sent to a source it could never stand next to
+    // (it would oscillate at the pocket entrance instead of harvesting).
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "harvester-4");
+    assert.equal(calls[0].memory.sourceId, "source-2");
+  });
+
+  it("still uses the pocket source while it has a free standable tile", () => {
+    // Both sources are two-tile pockets; the second one is full, the first
+    // has one free tile, so the pocket is still the right assignment.
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-2"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "upgrader-2": {role: "upgrader"},
+    });
+    // Three creeps already exist, so the next name uses counter value 3.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 3;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 0,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      controllerLevel: 3,
+      wallTiles: [...pocketWalls(14, 18), ...pocketWalls(39, 14)],
+    });
+
+    checkAndSpawn(room);
+
+    // Scores: source-1 2 - 0 = 2, source-2 2 - 2 = 0 -> the pocket wins.
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "harvester-3");
+    assert.equal(calls[0].memory.sourceId, "source-1");
   });
 });

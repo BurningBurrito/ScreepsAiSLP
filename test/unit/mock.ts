@@ -6,8 +6,13 @@ export const ERR_NO_PATH = -4;
 export const ERR_INVALID_TARGET = -8;
 export const FIND_MY_SPAWNS = 112;
 export const FIND_MY_STRUCTURES = 108;
+export const FIND_CREEPS = 101;
+export const FIND_SOURCES = 102;
+export const FIND_SOURCES_ACTIVE = 104;
 export const STRUCTURE_EXTENSION = "extension";
 export const STRUCTURE_TOWER = "tower";
+export const TERRAIN_MASK_WALL = 1;
+export const TERRAIN_MASK_SWAMP = 2;
 
 // Mock store class with getFreeCapacity
 class MockStore {

@@ -1,16 +1,34 @@
 # ScreepsAiSLP Status
 
 ## Current State
-M1/M2/M3 in progress. The upgrader bootstrap failure (0 controller progress in the 500-tick
-smoke) is fixed: the upgrader and builder now pick their self-harvest source by Chebyshev
-distance to a fixed anchor (controller for the upgrader, spawn for the builder) instead of
-findClosestByPath, which the swamp pocket around the spawn-side source distorted in favour
-of the far source (src/utils/pickSource.ts, src/roles/upgrader.ts, src/roles/builder.ts).
-Probe-verified: the upgrader now walks straight to the near source. Still in place from the
-previous run: per-level spawn minimums (RCL 1: 1h/1b/1u, RCL 3: 5h/3b/1u) in
-MIN_CREEPS_BY_LEVEL and builder priority roads-before-containers.
+M1/M2/M3 in progress. The upgrader bootstrap failure (controller progress frozen at 0) is
+fixed in three layers. First: the upgrader and builder pick their self-harvest source by
+Chebyshev distance to a fixed anchor (controller for the upgrader, spawn for the builder)
+instead of findClosestByPath, which the swamp pocket around the spawn-side source distorted in
+favour of the far source (src/utils/pickSource.ts, src/roles/upgrader.ts, src/roles/builder.ts).
+Second: occupancy-aware selection - pickSourceWithStandableTile skips a source whose standable
+tiles are all occupied (the pocket source has only two), assignSource spreads harvesters by
+remaining standable capacity, and the stuck detector in src/utils/movement.ts now clears a
+creep's cached path when it makes no net progress across a 2 x (non-MOVE parts) + 2 tick
+window, which catches the engine's two-tile ping-pong fallback at a blocked pocket entrance.
+Third: the upgrader latches its source choice in memory for the whole work cycle
+(src/roles/upgrader.ts) and the builder ranks the upgrader's source last when self-harvesting
+(src/roles/builder.ts), so the builder no longer camps the pocket's second standable tile and
+the upgrader no longer oscillates between the two sources. Verified with spawnprobe (700 ticks):
+controller progress 0 -> 100 by t=700 (pre-fix regression: 0; baseline: 50), creep idle 18 % -> 6 %.
 
 ## Change Log
+### 2026-10-30
+- **Occupancy-aware source selection (src/utils/pickSource.ts, new helpers)**: added collectOccupiedTiles (creeps other than the asker + own structures, one room.find each), countStandableTiles (non-wall, in-bounds, unoccupied neighbours of a source) and pickSourceWithStandableTile (first source in priority order that still has a free standable tile; falls back to the first candidate when all are full so the creep waits instead of idling). Reason: the test room's pocket source at (14,18) has only two standable tiles; once two creeps stand there a third can never get in and the engine single-steps it at the pocket mouth (measured: upgrader oscillating between the two entrance tiles, 0 upgrades in 500 ticks; 330-tick no-upgrade window in reports/latest.md).
+- **Upgrader and builder self-harvest (src/roles/upgrader.ts, src/roles/builder.ts)**: replaced pickSourceClosestTo with sortSourcesByDistance + pickSourceWithStandableTile (same anchors: controller, spawn), so a crowded pocket is skipped instead of becoming a parking trap.
+- **Spawn manager assignment (src/managers/spawnManager.ts)**: assignSource now balances harvesters by remaining standable capacity (countStandableTiles minus already-assigned harvesters) instead of raw harvester count per source, so new harvesters spread across sources with free tiles.
+- **Stuck detector (src/utils/movement.ts)**: the sliding window now triggers when the creep stands on the same tile at both ends of the window (no net progress), which catches the engine's ping-pong fallback (alternating two tiles) in addition to standing still; the window still slides on every trigger, so a walking creep (one step per 2 x non-MOVE parts ticks) never trips it.
+- **Unit tests (test/unit/pickSource.test.ts new, test/unit/movement.test.ts, test/unit/mock.ts, test/unit/spawnManager.test.ts)**: 11 pickSource tests (ordering, standable counts, pocket skip, structure blocks, own-tile exclusion, full fallback), 2 movement tests (2-tile oscillation clears the cache; a straight walk keeps it), 2 spawnManager tests (pocket with full standable tiles gets no new harvester; pocket with a free tile still used). 39 unit tests passing.
+- **Upgrader source latch (src/roles/upgrader.ts)**: the upgrader latches its chosen source in creep.memory.sourceId for the whole work cycle and re-picks only on the transition tick that empties the store after an upgrade, or when the latched source vanishes or runs dry while another source is live. Reason: re-picking the nearest-controller source every tick against the builder's transient pocket-tile occupancy made the upgrader oscillate between the two sources (measured: 0 controller progress in 700 ticks, creep idle 18 %); latching stabilises the target until the cycle completes.
+- **Builder yields the upgrader's source (src/roles/builder.ts)**: when self-harvesting, the builder ranks the source nearest the controller (the upgrader's pick) last, so it takes the other source and falls back to the upgrader's only when the other has no free standable tile. This frees the pocket's second standable tile for the upgrader.
+- **Unit tests (test/unit/upgrader.test.ts new, test/unit/builder.test.ts new)**: 3 upgrader latch tests (keeps the latched source mid-cycle instead of flipping to the closer one; re-picks on the store-emptying transition tick; drops a latched source that ran dry while another is live) and 2 builder yield tests (yields the upgrader's source and self-harvests at the other; falls back to the upgrader's source when the other is walled off). 44 unit tests passing.
+- **Integration verification (spawnprobe, 700 ticks, via agent-test, 1 passing)**: controller progress 0 -> 100 by t=700 (pre-fix regression: 0; baseline 2026-10-30 commit 01c7958: 50), controller progress/tick 0 -> 0.18, creep idle 18 % -> 6 %. The upgrader probe trace shows a clean harvest(pocket A at 14,18) -> upgrade(controller at 8,43) cycle with no tick-to-tick oscillation; it switches to the open source B only for the few ticks the pocket genuinely runs dry, then returns when it refills.
+
 ### 2026-10-24
 - **Spawn minimums per controller level (src/config.ts, src/managers/spawnManager.ts)**: replaced MIN_CREEPS_PER_ROLE (fixed 3 harvesters) + BUILDER_COUNT_BY_CAPACITY with MIN_CREEPS_BY_LEVEL: RCL 1 = 1 harvester / 1 builder / 1 upgrader, RCL 2 = 3/3/1, RCL 3+ = 5/3/1 (hauler 1 in every row, only active once a built container exists; builder 0 while no construction site exists). Reason: the old fixed 3-harvester minimum queued the upgrader at position 6, so the first upgrade tick landed after the smoke test's 500-tick window (measured: upgrader born ~480, progress 0). With the owner's spawn order (harvester -> builder -> upgrader) the RCL 1 crew is now h0 -> b0 -> u0, one 300-energy body apart.
 - **Builder priority: roads before containers (src/roles/builder.ts)**: selectBuildSite now orders tower+extensions (one class) -> roads -> containers. Roads sit above containers because bootstrap is the only window they get built: M2 needs a finished road within 3,000 ticks of an RCL 1 start, and once extension sites exist (RCL 2+) builders never reach the road list again. M3 is unaffected: tower+extension sites exist from tick 1, so builders never touch roads during the M3 window (road share stays 0 %).
@@ -40,11 +58,11 @@ MIN_CREEPS_BY_LEVEL and builder priority roads-before-containers.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- M1/M2/M3 acceptance: upgrader bootstrap fix in place, smoke test running. Root cause of "0 progress in 500 ticks": upgrader.ts and builder.ts picked their source with pos.findClosestByPath, which prices swamp tiles 10x plain. Source A (spawn-side, (14,18)) sits in a swamp pocket, so path cost called the far source B (39,14) "closest" and the upgrader spent its life crossing the room. Fix: src/utils/pickSource.ts (pickSourceClosestTo, Chebyshev distance to a fixed anchor, O(sources), no path finding) - the upgrader anchors on the controller (its loop is fixed at source <-> controller), the builder anchors on the spawn (its loop is spawn <-> sites).
-- Verified in the 170-tick probe: upgrader-2 at (15,20), one step from the pocket exit, walking to source A (old code: walking to source B). findClosestByPath from that same tile still returns B, confirming the trap.
+- M3: upgrader regression FIXED and verified end to end. The upgrader source latch + builder yield restore controller progress: spawnprobe (700 ticks, agent-test, 1 passing) shows controller progress 0 -> 100 by t=700 (pre-fix regression 0, baseline 50), 0.18/tick, idle 18 % -> 6 %. Upgrader probe trace: clean harvest(pocket A) -> upgrade(controller) cycle, no oscillation. 44 unit tests passing.
+- **Honest observation**: whole-run harvest is 2,488 this run vs 2,604 at the 2026-10-30 baseline (-4.5 %) and construction is 3.3 vs 4.69/tick in the pre-fix run; expected, because the upgrader now actually burns energy on upgrades (energy is split between construction and upgrading) and the builder self-harvests the slightly farther open source. The harvester itself is healthy (working on the pocket, not idle), so this is the intended trade, not a role regression.
 - **Baseline 2026-10-24** (smoke, 500 ticks, reports/latest.md): build energy to roads 0 %; roads 59 / 0 on wall / 0 disconnected; roads reach sources 2 of 2 and controller; extensions/towers farther than 8 tiles: 0; sites on wall terrain: 0; harvested 3.62/tick, delivered 1.92/tick, construction 1.74/tick; RCL 1/8; upgrader born ~480, progress 0 (the failure this run fixes).
 - **Last M3 acceptance run (4000 ticks, 1-builder economy)**: tower built and full (maxTowerEnergy 1000), but extensionsBuilt 1 (need 3), energyCapacity 350 (need 450) - build throughput was the only failing part.
-- Next: read the smoke scorecard (progress > 0 by 500), then M1 (800), M2 (3000, roadsBuilt >= 1 + 1 extension), M3 (4000, tower + 3 extensions + 500 tower energy).
+- Next: read the spawnprobe console trace (upgrader position + controller progress per 10 ticks), then smoke, then M1 (800), M2 (3000, roadsBuilt >= 1 + 1 extension), M3 (4000, tower + 3 extensions + 500 tower energy).
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)

@@ -24,14 +24,20 @@
  * With no sites left, a builder upgrades the controller instead of idling
  * (an idle creep is a bug).
  *
- * Self-harvest source choice: the source nearest the spawn (Chebyshev). The
- * builder loops between the spawn (withdrawal, creep respawns) and its build
- * sites, which sit on the road network around the spawn; findClosestByPath
- * would send it to the far source across the room (same swamp-cost trap the
- * upgrader hit, see utils/pickSource).
+ * Self-harvest source choice: the source nearest the spawn (Chebyshev) that
+ * still has a free tile to stand on - except the upgrader's source. The
+ * upgrader anchors on the controller and harvests the source nearest it (see
+ * upgrader.ts); that source's standable tiles are scarce (the test world's
+ * pocket source has exactly two, one owned by a harvester), so a builder that
+ * self-harvests there permanently blocks the upgrader (the controller-progress
+ * regression: 50 total -> 0 in 700 ticks). The builder therefore ranks the
+ * upgrader's source last and takes the other one, falling back to the
+ * upgrader's only when the other has no free tile. The standable-tile filter
+ * still applies (see utils/pickSource).
  */
 
-import { pickSourceClosestTo } from "utils/pickSource";
+import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
+import { moveToToward } from "utils/movement";
 
 /**
  * Selects the next construction site for a builder.
@@ -118,7 +124,7 @@ export function runBuilder(creep: Creep): void
 
             if (buildResult === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(site, { reusePath: 20 });
+                moveToToward(creep, site, 3);
                 return;
             }
 
@@ -138,7 +144,7 @@ export function runBuilder(creep: Creep): void
 
                 if (upgradeResult === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(controller, { reusePath: 20, range: 3 });
+                    moveToToward(creep, controller, 3);
                     return;
                 }
             }
@@ -162,7 +168,7 @@ export function runBuilder(creep: Creep): void
         {
             if (creep.pickup(dropped) === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(dropped, { reusePath: 20, range: 1 });
+                moveToToward(creep, dropped, 1);
             }
             return;
         }
@@ -180,7 +186,7 @@ export function runBuilder(creep: Creep): void
             {
                 if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(spawn, { reusePath: 20, range: 1 });
+                    moveToToward(creep, spawn, 1);
                 }
                 return;
             }
@@ -195,7 +201,7 @@ export function runBuilder(creep: Creep): void
             {
                 if (creep.withdraw(extension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
                 {
-                    creep.moveTo(extension, { reusePath: 20, range: 1 });
+                    moveToToward(creep, extension, 1);
                 }
                 return;
             }
@@ -208,9 +214,16 @@ export function runBuilder(creep: Creep): void
 
     // Harvest from a source and stay there until the store is full.
     // The builder's loop is anchored at the spawn (its energy comes from
-    // there and its sites sit on the road network around it), so pick the
-    // source nearest the spawn - not the cheapest path, which the swamp
+    // there and its sites sit on the road network around it), so rank the
+    // sources by distance to the spawn - not by path cost, which the swamp
     // pocket around the spawn-side source distorts (see the file header).
+    //
+    // Yield the upgrader's source: the upgrader anchors on the controller and
+    // harvests the source nearest it (see upgrader.ts). That source's standable
+    // tiles are scarce, so a builder that camps it blocks the upgrader
+    // (the controller-progress regression). Rank the upgrader's source last;
+    // the builder takes the other source and falls back to the upgrader's only
+    // when the other has no free tile.
     const sources = room.find(FIND_SOURCES_ACTIVE);
     if (sources.length > 0)
     {
@@ -221,10 +234,23 @@ export function runBuilder(creep: Creep): void
             : controller !== undefined ? controller.pos : null;
         if (anchor !== null)
         {
-            const source = pickSourceClosestTo(sources, anchor);
+            let candidates = sortSourcesByDistance(sources, anchor);
+            if (controller !== undefined && sources.length > 1)
+            {
+                const upgraderSource = sortSourcesByDistance(sources, controller.pos)[0];
+                candidates = [
+                    ...candidates.filter((candidate) => candidate.id !== upgraderSource.id),
+                    upgraderSource,
+                ];
+            }
+            // Nearest the spawn first (upgrader's source last), then the
+            // standable-tile filter: a builder that cannot stand next to its
+            // source would oscillate at the entrance (measured 50+ ticks) and
+            // harvest nothing.
+            const source = pickSourceWithStandableTile(candidates, room, creep.id);
             if (source !== null && creep.harvest(source) === ERR_NOT_IN_RANGE)
             {
-                creep.moveTo(source, { reusePath: 20 });
+                moveToToward(creep, source, 1);
             }
         }
     }

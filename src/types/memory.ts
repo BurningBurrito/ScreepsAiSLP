@@ -15,7 +15,8 @@ declare global {
   interface CreepMemory {
     /** Role of the creep: harvester, upgrader, or builder */
     role: Role;
-    /** ID of the source this creep is assigned to (for harvesters) */
+    /** ID of the source this creep is assigned to: a persistent assignment
+     *  for harvesters, a per-work-cycle latch for upgraders (see upgrader.ts) */
     sourceId?: string;
     /** ID of the construction site this creep is building (for builders) */
     targetId?: string;
