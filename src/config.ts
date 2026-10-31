@@ -97,3 +97,39 @@ export const ROAD_BUILD_INTERVAL = 100;
 
 /** Number of road tiles to build per interval */
 export const ROADS_PER_INTERVAL = 5;
+
+/**
+ * Defense settings (M4).
+ */
+
+/**
+ * Number of ticks without hostiles anywhere in the colony before the mode
+ * reverts from 'defend' back to 'peace'. This hysteresis keeps the towers'
+ * repair behavior and the builder's rampart-first priority from flickering
+ * on and off during the last moments of a fight.
+ */
+export const DEFEND_REVERT_TICKS = 500;
+
+/**
+ * Hit target for ramparts: towers (in peace) and builders repair ramparts
+ * up to this value and stop there. A fresh rampart holds 10,000 hit points,
+ * so repairing to this point is also "fully repaired" - the M4 spec says
+ * repairing beyond it is not needed yet.
+ */
+export const RAMPART_TARGET_HITS = 10000;
+
+/**
+ * Minimum controller level at which rampart sites are placed. Ramparts
+ * protect the spawn and the towers; the towers only exist from level 3, so
+ * the ramparts gate on the same level.
+ */
+export const RAMPART_MIN_LEVEL = 3;
+
+/**
+ * Energy a tower keeps in reserve for its defense duty. The tower only
+ * repairs (ramparts, roads, containers) while it holds strictly more than
+ * this, and harvesters only refill it while it holds strictly less. 500
+ * energy is 50 shots (10 energy each) - enough for the single-creep
+ * incursions the towers are built for, without sitting idle above it.
+ */
+export const TOWER_ENERGY_RESERVE = 500;

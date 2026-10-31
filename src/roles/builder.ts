@@ -8,17 +8,23 @@
  *   the spawn stocked: a builder that drains the spawn whenever it has free
  *   carry capacity empties it and blocks every creep respawn.
  *
- * Build priority (M3):
- *   1. The tower site, on its own: it is a single 5,000-energy structure
+ * Build priority (M4):
+ *   1. In defend or war mode, rampart sites: the shield the spawn and the
+ *      towers sit behind is finished before anything else, tower site
+ *      included.
+ *   2. The tower site, on its own: it is a single 5,000-energy structure
  *      and the M3 test fails unless it is finished. With every builder on
  *      it, the tower completes first and only then do builders spread over
  *      the 3,000-energy extensions.
- *   2. Extension sites, all builders on ONE of them: the most advanced
+ *   3. Rampart sites (peace): one on the spawn's tile and one on each
+ *      finished tower's tile. Each costs only 300 energy for 10,000 hits -
+ *      cheap insurance, and the M4 spec puts them right after the towers.
+ *   4. Extension sites, all builders on ONE of them: the most advanced
  *      (highest build progress, ties broken by closeness to the spawn).
  *      The room state is shared, so every builder computes the same focus
  *      without any memory - and the choice survives a global reset.
- *   3. Road sites.
- *   4. Container sites.
+ *   5. Road sites.
+ *   6. Container sites.
  *
  *   The tower used to share its class with the extensions ("closest
  *   priority site wins"), and that is exactly how it starved in the first
@@ -65,10 +71,11 @@ import { moveToToward } from "utils/movement";
 /**
  * Selects the next construction site for a builder.
  *
- * Priority: the tower site on its own, then ONE extension (the most
- * advanced, so the whole crew converges on it and actually finishes it),
- * then roads, then containers. Within a priority class the tie-breakers
- * are progress and distance, never a free-for-all.
+ * Priority (M4): in defend or war mode the rampart sites come first;
+ * otherwise the tower site on its own, then ramparts, then ONE extension
+ * (the most advanced, so the whole crew converges on it and actually
+ * finishes it), then roads, then containers. Within a priority class the
+ * tie-breakers are progress and distance, never a free-for-all.
  * @param creep The builder that needs a target (used for pathing)
  * @param room The room to search
  * @returns The selected site, or null when nothing is under construction
@@ -80,6 +87,39 @@ function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
             filter: (site) => site.structureType === type,
         });
 
+    // Rampart focus: the crew works the most advanced rampart (highest
+    // build progress; a tie goes to the site closest to the spawn) so a
+    // rampart is actually FINISHED instead of every builder nibbling at the
+    // newest site. Same shared-state rule as the extension focus below.
+    const rampartSites = sitesOf(STRUCTURE_RAMPART);
+    const focusRampart = (): ConstructionSite | null =>
+    {
+        if (rampartSites.length === 0)
+        {
+            return null;
+        }
+        const spawn = room.find(FIND_MY_SPAWNS)[0];
+        const distanceToSpawn = (site: ConstructionSite): number =>
+            spawn !== undefined
+                ? site.pos.getRangeTo(spawn.pos)
+                : creep.pos.getRangeTo(site.pos);
+        return rampartSites.sort(
+            (a, b) => (b.progress - a.progress) || (distanceToSpawn(a) - distanceToSpawn(b)),
+        )[0];
+    };
+
+    // Defend/war mode (M4): the shield comes before everything, even the
+    // tower site - with the ramparts up, the towers can do their job.
+    const mode = Memory.mode ?? "peace";
+    if (mode !== "peace")
+    {
+        const focus = focusRampart();
+        if (focus !== null)
+        {
+            return focus;
+        }
+    }
+
     // The tower gets its own class above the extensions (see the file
     // header for why): all builders on the one 5,000-energy tower site
     // finish it first, then move on to the extensions.
@@ -87,6 +127,15 @@ function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
     if (towerSites.length > 0)
     {
         return creep.pos.findClosestByPath<ConstructionSite>(towerSites);
+    }
+
+    // Peace mode: ramparts come right after the towers (the M4 spec order:
+    // tower sites, then ramparts, then extensions, then everything else,
+    // roads last).
+    const rampart = focusRampart();
+    if (rampart !== null)
+    {
+        return rampart;
     }
 
     // Extensions: the whole crew works ONE site at a time - the most

@@ -1,11 +1,17 @@
 /** Construction Manager
- * Manages the construction of extensions, roads, and towers in the room.
+ * Manages the construction of towers, ramparts, extensions, containers,
+ * and roads in the room.
+ * Towers defend the room, heal creeps, and repair structures; the ramparts
+ * on the spawn's and the towers' tiles are the shield in front of them.
  * Extensions store energy and increase room energy capacity.
  * Roads reduce travel fatigue and speed up movement.
- * Towers defend the room, heal creeps, and repair structures.
  *
  * This manager computes optimal placement layouts based on the room's
  * actual objects (spawn, sources, controller) rather than using fixed coordinates.
+ *
+ * Structure limits come from the game's CONTROLLER_STRUCTURES table
+ * (structureLimit below): at level 5 the room builds 2 towers and 30
+ * extensions, never the RCL 3 numbers. Tower sites are placed one at a time.
  *
  * Layout invariant: the road network is the skeleton of the room. Extensions,
  * towers and containers are never placed on a road tile, because the
@@ -14,6 +20,8 @@
  * from the network are re-attempted every tick (existingRoadPositions check),
  * so a single failed createConstructionSite cannot permanently break the route.
  */
+
+import { RAMPART_MIN_LEVEL } from "config";
 
 /** Get the spawn position in this room */
 function getSpawnPosition(room: Room): RoomPosition | null
@@ -46,6 +54,44 @@ function getControllerLevel(room: Room): number
         return 1;
     }
     return room.controller.level;
+}
+
+/**
+ * The maximum number of a buildable structure the controller level allows,
+ * straight from the game's CONTROLLER_STRUCTURES table (the M4 spec: limits
+ * come from the table, never from fixed numbers).
+ *
+ * The lookup goes through a function, and the fallback table is built at
+ * call time, for the same reason bodyTemplates() is a function: the
+ * structure constants only exist inside the Screeps sandbox, and unit tests
+ * import this module in plain Node. In Node the fallback - the same values
+ * the game's table holds - is used instead (string keys on purpose: they are
+ * evaluated at call time, so the file stays importable outside the sandbox).
+ * @param structureType The structure to look up (e.g. STRUCTURE_TOWER)
+ * @param level The controller level
+ * @returns The maximum number allowed at that level (0 when unknown)
+ */
+function structureLimit(structureType: BuildableStructureConstant, level: number): number
+{
+    let table: { [level: number]: number } | undefined;
+    if (typeof CONTROLLER_STRUCTURES === "undefined")
+    {
+        const fallback: Partial<Record<BuildableStructureConstant, { [level: number]: number }>> = {
+            extension: { 1: 0, 2: 5, 3: 10, 4: 20, 5: 30, 6: 40, 7: 50, 8: 60 },
+            tower: { 1: 0, 2: 0, 3: 1, 4: 1, 5: 2, 6: 2, 7: 3, 8: 6 },
+            rampart: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 10, 6: 20, 7: 30, 8: 40 },
+        };
+        table = fallback[structureType];
+    }
+    else
+    {
+        table = CONTROLLER_STRUCTURES[structureType];
+    }
+    if (table === undefined)
+    {
+        return 0;
+    }
+    return table[level] ?? 0;
 }
 
 /** Get all sources in the room */
@@ -118,8 +164,11 @@ function isWallPosition(pos: RoomPosition, room: Room): boolean
     return false;
 }
 
-/** Generate extension positions in a checkerboard pattern around the spawn */
-function computeExtensionPositions(room: Room, excludeTiles: Set<string>): RoomPosition[]
+/**
+ * Generate extension positions in a checkerboard pattern around the spawn,
+ * up to `limit` (the controller level's extension allowance).
+ */
+function computeExtensionPositions(room: Room, excludeTiles: Set<string>, limit: number): RoomPosition[]
 {
     const positions: RoomPosition[] = [];
     const spawn = getSpawnPosition(room);
@@ -132,6 +181,11 @@ function computeExtensionPositions(room: Room, excludeTiles: Set<string>): RoomP
     // Use checkerboard pattern: only positions where (x + y) % 2 === (spawnX + spawnY) % 2
     const spawnParity = (spawn.x + spawn.y) % 2;
     const maxRange = 8;
+
+    // Look these up once for the whole search: they are fixed for the room,
+    // and the candidate loop below runs hundreds of times.
+    const sources = getSources(room);
+    const controller = getControllerPosition(room);
 
     for (let range = 2; range <= maxRange; range++)
     {
@@ -193,7 +247,6 @@ function computeExtensionPositions(room: Room, excludeTiles: Set<string>): RoomP
             }
 
             // Skip if too close to source (range 1)
-            const sources = getSources(room);
             let tooCloseToSource = false;
             for (const source of sources)
             {
@@ -209,7 +262,6 @@ function computeExtensionPositions(room: Room, excludeTiles: Set<string>): RoomP
             }
 
             // Skip if too close to controller (range 1)
-            const controller = getControllerPosition(room);
             if (controller !== null && pos.getRangeTo(controller) <= 1)
             {
                 continue;
@@ -217,8 +269,9 @@ function computeExtensionPositions(room: Room, excludeTiles: Set<string>): RoomP
 
             positions.push(pos);
 
-            // Limit to 10 extensions (RCL 3 max)
-            if (positions.length >= 10)
+            // Stop once the level's allowance is reached (M4: the limit
+            // comes from CONTROLLER_STRUCTURES, not a fixed number).
+            if (positions.length >= limit)
             {
                 return positions;
             }
@@ -228,8 +281,11 @@ function computeExtensionPositions(room: Room, excludeTiles: Set<string>): RoomP
     return positions;
 }
 
-/** Get tower positions near the spawn */
-function computeTowerPositions(room: Room, excludeTiles: Set<string>): RoomPosition[]
+/**
+ * Get tower positions near the spawn, up to `maxTowers` (the number of
+ * towers the level still allows).
+ */
+function computeTowerPositions(room: Room, excludeTiles: Set<string>, maxTowers: number): RoomPosition[]
 {
     const positions: RoomPosition[] = [];
     const spawn = getSpawnPosition(room);
@@ -241,6 +297,11 @@ function computeTowerPositions(room: Room, excludeTiles: Set<string>): RoomPosit
     // Try positions at range 2, then 3
     const spawnParity = (spawn.x + spawn.y) % 2;
     const ranges = [2, 3, 4];
+
+    // Look these up once for the whole search: they are fixed for the room,
+    // and the candidate loop below runs hundreds of times.
+    const sources = getSources(room);
+    const controller = getControllerPosition(room);
 
     for (const range of ranges)
     {
@@ -294,7 +355,6 @@ function computeTowerPositions(room: Room, excludeTiles: Set<string>): RoomPosit
             }
 
             // Skip if too close to source
-            const sources = getSources(room);
             let tooCloseToSource = false;
             for (const source of sources)
             {
@@ -310,7 +370,6 @@ function computeTowerPositions(room: Room, excludeTiles: Set<string>): RoomPosit
             }
 
             // Skip if too close to controller
-            const controller = getControllerPosition(room);
             if (controller !== null && pos.getRangeTo(controller) <= 1)
             {
                 continue;
@@ -318,7 +377,7 @@ function computeTowerPositions(room: Room, excludeTiles: Set<string>): RoomPosit
 
             positions.push(pos);
 
-            if (positions.length >= 1) // Only need 1 tower
+            if (positions.length >= maxTowers)
             {
                 return positions;
             }
@@ -410,12 +469,17 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[]): number
     return 0;  // TODO: Track actually placed roads
 }
 
-/** Place extension construction sites */
-function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): void
+/**
+ * Place extension construction sites, up to the level's allowance.
+ * @param room The room to place sites in
+ * @param extensionPositions Candidate positions, in priority order
+ * @param limit The maximum number of extensions the controller level allows
+ */
+function placeExtensionSites(room: Room, extensionPositions: RoomPosition[], limit: number): void
 {
-    // Count built extensions AND sites: the room must never hold more than 10
-    // extensions total (the RCL 3 limit), so sites are only placed for the
-    // missing ones.
+    // Count built extensions AND sites: the room must never hold more than
+    // the level allows (CONTROLLER_STRUCTURES), so sites are only placed
+    // for the missing ones.
     const extensionsBuilt = room.find(FIND_STRUCTURES, {
         filter: (structure) => structure.structureType === STRUCTURE_EXTENSION,
     }).length;
@@ -423,7 +487,7 @@ function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): vo
         filter: (site) => site.structureType === STRUCTURE_EXTENSION,
     }).length;
 
-    const remaining = Math.min(10 - (extensionsBuilt + extensionSites), extensionPositions.length);
+    const remaining = Math.min(limit - (extensionsBuilt + extensionSites), extensionPositions.length);
     if (remaining <= 0)
     {
         return;
@@ -461,21 +525,38 @@ function placeExtensionSites(room: Room, extensionPositions: RoomPosition[]): vo
     }
 }
 
-/** Place tower construction sites */
+/**
+ * Place tower construction sites, one at a time, up to the level's limit
+ * (1 tower at RCL 3-4, 2 from RCL 5 on - the CONTROLLER_STRUCTURES table).
+ * The builders finish the current tower before the next site is placed, so
+ * construction energy never splits between two towers at once.
+ * @param room The room to place a site in
+ * @param towerPositions Candidate positions, in priority order
+ */
 function placeTowerSites(room: Room, towerPositions: RoomPosition[]): void
 {
-    const towersBuilt = room.find(FIND_MY_STRUCTURES, {
-        filter: (structure) => structure.structureType === STRUCTURE_TOWER,
-    }).length;
-
-    if (towersBuilt >= 1 || towerPositions.length === 0)
+    const controllerLevel = getControllerLevel(room);
+    const limit = structureLimit(STRUCTURE_TOWER, controllerLevel);
+    if (limit < 1 || towerPositions.length === 0)
     {
         return;
     }
 
-    const controllerLevel = getControllerLevel(room);
-    if (controllerLevel < 3)
+    const towersBuilt = room.find(FIND_MY_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_TOWER,
+    }).length;
+
+    if (towersBuilt >= limit)
     {
+        return;
+    }
+
+    const towerSites = room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_TOWER,
+    });
+    if (towerSites.length > 0)
+    {
+        // The builders are already on a tower; wait for it to finish.
         return;
     }
 
@@ -486,7 +567,56 @@ function placeTowerSites(room: Room, towerPositions: RoomPosition[]): void
         if (sites.length === 0)
         {
             room.createConstructionSite(pos, STRUCTURE_TOWER);
-            return; // Only place one tower
+            return; // Only one tower site at a time
+        }
+    }
+}
+
+/**
+ * Place rampart construction sites: one on the spawn's tile and one on each
+ * finished tower's tile (M4). The rampart is the shield the spawn and the
+ * tower sit behind. Existing ramparts and sites are never re-placed, so the
+ * cost only appears once per structure.
+ *
+ * Gated on the tower level (RAMPART_MIN_LEVEL = 3): below that there is no
+ * tower to protect, and the spec does not require early ramparts.
+ *
+ * A rampart is the only structure that may be built on an already occupied
+ * tile - that is why the targets ARE the spawn's and the towers' tiles, and
+ * why the "already there" check looks for a rampart specifically, not for
+ * any structure (the spawn and the tower are on the tile on purpose).
+ * @param room The room to place rampart sites in
+ * @param structures The room's own structures (passed in, found once per tick)
+ */
+function placeRampartSites(room: Room, structures: Structure[]): void
+{
+    if (getControllerLevel(room) < RAMPART_MIN_LEVEL)
+    {
+        return;
+    }
+
+    const targets: RoomPosition[] = [];
+    const spawns = room.find(FIND_MY_SPAWNS);
+    if (spawns.length > 0)
+    {
+        targets.push(spawns[0].pos);
+    }
+    for (const structure of structures)
+    {
+        if (structure.structureType === STRUCTURE_TOWER)
+        {
+            targets.push(structure.pos);
+        }
+    }
+
+    for (const pos of targets)
+    {
+        const ramparts = pos.lookFor(LOOK_STRUCTURES)
+            .filter((structure) => structure.structureType === STRUCTURE_RAMPART);
+        const hasSite = pos.lookFor(LOOK_CONSTRUCTION_SITES).length > 0;
+        if (ramparts.length === 0 && !hasSite)
+        {
+            room.createConstructionSite(pos, STRUCTURE_RAMPART);
         }
     }
 }
@@ -862,11 +992,30 @@ export function manageConstruction(room: Room): void
     // Clean up old road sites that aren't on the computed paths
     cleanOldRoadSites(room, roadPaths);
 
-    // Compute tower positions (highest priority), excluding the road network
-    const towerPositions = computeTowerPositions(room, roadNetworkTiles);
+    // Count what is built and under construction, and what the controller
+    // level allows (CONTROLLER_STRUCTURES, not the RCL 3 numbers).
+    const level = getControllerLevel(room);
+    const structures = room.find(FIND_MY_STRUCTURES);
+    const sites = room.find(FIND_CONSTRUCTION_SITES);
 
-    // Compute extension positions (second priority), excluding the road network
-    const extensionPositions = computeExtensionPositions(room, roadNetworkTiles);
+    const towersBuilt = structures.filter((s) => s.structureType === STRUCTURE_TOWER).length;
+    const towerSites = sites.filter((s) => s.structureType === STRUCTURE_TOWER).length;
+    const towerLimit = structureLimit(STRUCTURE_TOWER, level);
+
+    const extensionsBuilt = structures.filter((s) => s.structureType === STRUCTURE_EXTENSION).length;
+    const extensionSites = sites.filter((s) => s.structureType === STRUCTURE_EXTENSION).length;
+    const extensionLimit = structureLimit(STRUCTURE_EXTENSION, level);
+
+    // Skip the position searches entirely once a class is at its limit:
+    // they are the most expensive part of this manager (per-tile lookFor
+    // and getRangeTo over hundreds of candidates), and the M4 test runs
+    // 6,000 ticks.
+    const towerPositions = towersBuilt + towerSites < towerLimit
+        ? computeTowerPositions(room, roadNetworkTiles, towerLimit - towersBuilt)
+        : [];
+    const extensionPositions = extensionsBuilt + extensionSites < extensionLimit
+        ? computeExtensionPositions(room, roadNetworkTiles, extensionLimit)
+        : [];
 
     // Compute container positions (third priority), excluding the road network
     const containerPositions = computeContainerPositions(room, roadNetworkTiles);
@@ -874,8 +1023,11 @@ export function manageConstruction(room: Room): void
     // Place tower sites first (highest priority)
     placeTowerSites(room, towerPositions);
 
+    // Place rampart sites (M4: on the spawn's and the towers' tiles)
+    placeRampartSites(room, structures);
+
     // Place extension sites (second priority)
-    placeExtensionSites(room, extensionPositions);
+    placeExtensionSites(room, extensionPositions, extensionLimit);
 
     // Place container sites (third priority)
     placeContainerSites(room, containerPositions);

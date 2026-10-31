@@ -3,9 +3,11 @@ import { ErrorMapper } from "utils/ErrorMapper";
 import { checkAndSpawn } from "managers/spawnManager";
 import { cleanMemory } from "managers/memoryManager";
 import { manageConstruction } from "managers/constructionManager";
+import { manageMode } from "managers/modeManager";
 import { manageTower } from "managers/towerManager";
 import { reportCPU } from "managers/cpuReporter";
 import { runBuilder } from "roles/builder";
+import { runDefender } from "roles/defender";
 import { runHarvester } from "roles/harvester";
 import { runHauler } from "roles/hauler";
 import { runUpgrader } from "roles/upgrader";
@@ -47,6 +49,9 @@ function mainLoop(): void
                 case "hauler":
                     runHauler(creep);
                     break;
+                case "defender":
+                    runDefender(creep);
+                    break;
             }
         }
     }
@@ -60,6 +65,9 @@ function mainLoop(): void
 
         if (room !== undefined)
         {
+            // Mode first: the spawn (defender reserve) and the towers
+            // (repair gate) read Memory.mode set this same tick.
+            manageMode(room);
             checkAndSpawn(room);
             manageConstruction(room);
             manageTower(room);

@@ -12,19 +12,20 @@
  *   holds right now - otherwise nothing would ever be spawned.
  *
  * Spawn order (owner rule #5): harvester, then builder, then upgrader, then
- * hauler. At most ONE spawn is started per tick: a spawnCreep call is stored
- * as an engine "intent" that only resolves at the end of the tick, and the
- * engine keeps at most one createCreep intent per spawn - a second spawnCreep
- * call in the same tick overwrites the first one and the first creep is
- * silently never spawned. The remaining roles are picked up from the next
- * tick onward (the spawn is busy for three ticks per body part anyway).
+ * defender, then hauler. At most ONE spawn is started per tick: a spawnCreep
+ * call is stored as an engine "intent" that only resolves at the end of the
+ * tick, and the engine keeps at most one createCreep intent per spawn - a
+ * second spawnCreep call in the same tick overwrites the first one and the
+ * first creep is silently never spawned. The remaining roles are picked up
+ * from the next tick onward (the spawn is busy for three ticks per body part
+ * anyway).
  */
 
 import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
 import { MIN_CREEPS_BY_LEVEL } from "config";
 
 /** Roles checked each tick, highest priority first (owner rule #5). */
-const SPAWN_ORDER: Role[] = ["harvester", "builder", "upgrader", "hauler"];
+const SPAWN_ORDER: Role[] = ["harvester", "builder", "upgrader", "defender", "hauler"];
 
 /**
  * Body templates per role, largest first. The first template whose cost fits
@@ -65,8 +66,15 @@ function bodyTemplates(): Record<Role, BodyPartConstant[][]>
         // roads. Haulers never carry WORK parts (owner rule #1).
         [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE, MOVE], // 800
         [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE], // 550
-        [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE], // 450
+        [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE], // 450
         [CARRY, CARRY, MOVE, MOVE], // 200
+    ],
+    defender: [
+        // The defender is a last-resort attacker (M4): two ATTACK parts, one
+        // CARRY for tower energy transfers, one MOVE. It never harvests, and
+        // it is the only role that exists in defend mode when the towers are
+        // dry. Kept small: it is a spare, not the economy.
+        [ATTACK, ATTACK, CARRY, MOVE], // 230
     ],
     };
 }
@@ -127,6 +135,29 @@ function pickBody(role: Role, budget: number): { body: BodyPartConstant[]; cost:
 }
 
 /**
+ * Whether any of the room's towers has enough energy to fire (M4: the
+ * defender slot exists only when the towers are dry).
+ *
+ * Guarded for plain Node: the engine constant TOWER_POWER_ATTACK is missing
+ * outside the sandbox, and the mock rooms never hold a loaded tower, so
+ * "cannot fire" is the safe answer there.
+ * @param room The room to check
+ * @returns True when at least one tower can fire one shot
+ */
+function towerCanFire(room: Room): boolean
+{
+    if (typeof TOWER_POWER_ATTACK !== "number")
+    {
+        return false;
+    }
+    return room.find(FIND_MY_STRUCTURES, {
+        filter: (structure) =>
+            structure.structureType === STRUCTURE_TOWER &&
+            structure.store.getUsedCapacity(RESOURCE_ENERGY) >= TOWER_POWER_ATTACK,
+    }).length > 0;
+}
+
+/**
  * Computes the minimum population per role for this room.
  *
  * The base row comes from the controller level (see MIN_CREEPS_BY_LEVEL):
@@ -162,11 +193,19 @@ function minCreepsPerRole(room: Room): Record<Role, number>
         filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
     }).length;
 
+    // M4: a defender is a last-resort attacker. It exists only while the
+    // colony is in defend or war mode AND no tower can fire - if any tower
+    // still has a shot, the tower handles the hostile and the energy stays
+    // with the economy. In peace the minimum is zero.
+    const mode = Memory.mode ?? "peace";
+    const defender = mode !== "peace" ? (towerCanFire(room) ? 0 : 1) : 0;
+
     return {
         harvester: row.harvester,
         builder: siteCount > 0 ? row.builder : 0,
         upgrader: row.upgrader,
         hauler: containerCount > 0 ? row.hauler : 0,
+        defender,
     };
 }
 
