@@ -7,7 +7,15 @@ declare global {
   /**
    * Role type definition for creep roles
    */
-  type Role = "harvester" | "upgrader" | "builder" | "hauler";
+  type Role = "harvester" | "upgrader" | "builder" | "hauler" | "defender";
+
+  /**
+   * The colony-wide threat state (M4). 'peace' is the default, 'defend' is
+   * set by the bot while a hostile is (or was recently) in a room, and 'war'
+   * is set by the owner manually - the bot never writes 'war' and it behaves
+   * like 'defend' while it lasts.
+   */
+  type GameMode = "peace" | "defend" | "war";
 
   /**
    * Creep memory structure - stored in Memory.creeps[creepName]
@@ -59,6 +67,12 @@ declare global {
     sourceIds: string[];
     /** Array of spawn IDs in this room */
     spawnIds: string[];
+    /**
+     * Last tick a hostile creep was seen in this room (M4 mode tracking).
+     * Undefined until the first sighting; 'defend' reverts to 'peace' when
+     * this tick is at least config.DEFEND_REVERT_TICKS old.
+     */
+    lastHostileTick?: number;
   }
 
   /**
@@ -69,6 +83,12 @@ declare global {
     creeps: { [name: string]: CreepMemory };
     /** Memory for individual rooms */
     rooms: { [name: string]: RoomMemory };
+    /**
+     * Colony-wide threat state (M4), maintained by managers/modeManager.
+     * Missing means 'peace' so a world that predates this field works
+     * without migration.
+     */
+    mode?: GameMode;
     /** Total number of creeps spawned (for naming) */
     creepCounter: number;
     /** Last tick when CPU summary was logged */
