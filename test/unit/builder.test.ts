@@ -111,7 +111,7 @@ function makeBuilder(
             controller,
             getTerrain: () => ({ get: terrain }),
             energyAvailable: 100,
-            energyCapacityAvailable: 300, // not full: no withdrawal
+            energyCapacityAvailable: 300, // below the withdrawal floor (0.5 x 300 = 150): no withdrawal
         },
         harvest: (source: any) => {
             calls.harvest = (calls.harvest ?? 0) + 1;
@@ -268,6 +268,25 @@ describe("builder", () => {
 
         assert.equal(calls.harvest, 1, "the empty builder harvests from a source");
         assert.equal(calls.lastHarvested, "sB", "the builder takes the open source, not the pocket");
+    });
+
+    it("withdraws from the room above the floor instead of self-harvesting", () => {
+        // With surplus spawning the room is rarely completely full; the
+        // builder must withdraw once the room holds at least
+        // BUILDER_WITHDRAW_FRACTION of its capacity (0.5 x 300 = 150 here)
+        // instead of walking to a distant source to self-harvest (the
+        // regression that dropped construction to 0.19/tick).
+        const { creep, calls } = makeBuilder(() => 0, { working: false });
+        creep.room.energyAvailable = 200; // above the 150 floor
+        const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
+        spawn.store.getFreeCapacity = () => 50; // the spawn can accept energy
+        let withdrew = 0;
+        creep.withdraw = () => { withdrew += 1; return OK; };
+
+        runBuilder(creep);
+
+        assert.equal(withdrew, 1, "the builder withdraws from the room above the floor");
+        assert.equal(calls.harvest ?? 0, 0, "the builder does not self-harvest when it can withdraw");
     });
 
     it("falls back to the upgrader's source when the other has no free tile", () => {

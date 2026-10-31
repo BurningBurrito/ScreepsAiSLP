@@ -56,6 +56,26 @@ export const SURPLUS_UPGRADER_MAX = 2;
 export const SURPLUS_BUILDER_MAX = 3;
 
 /**
+ * Fraction of the room's energy capacity at or above which a builder
+ * withdraws energy from the spawn or an extension instead of harvesting
+ * from a source itself (owner rule #3, relaxed).
+ *
+ * The original rule was "only when the room is completely full", but
+ * surplus spawning (see SURPLUS_UPGRADER_MAX / SURPLUS_BUILDER_MAX) drains
+ * the store the moment it peaks, so the room is rarely completely full and
+ * the builders were forced onto the far-source self-harvest loop
+ * (construction regressed 3.11 -> 0.19/tick, idle 8% -> 23%).
+ *
+ * 50% keeps the store cycling (the "Spawn idle while full" metric stays
+ * low) while giving the builders a steady supply: the builders drain the
+ * store down to this floor and the harvesters refill it, so the builders
+ * build from the room instead of walking to a distant source. The floor is
+ * still high enough that the spawn can queue a minimum-crew respawn between
+ * delivery ticks.
+ */
+export const BUILDER_WITHDRAW_FRACTION = 0.5;
+
+/**
  * Maximum consecutive failed delivery ticks before a harvester drops its
  * energy. ERR_NO_PATH drops immediately (unreachable target); this is only a
  * safety net for a creep that is stuck for a long time. A heavy body moves

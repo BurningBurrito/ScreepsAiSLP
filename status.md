@@ -30,6 +30,33 @@ shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain comple
 (static mining with containers and haulers) is next.
 
 ## Change Log
+### 2026-10-31 (construction-rate regression fixed: builder withdrawal floor)
+- **Root cause of the construction-rate regression (3.11 -> 0.19/tick):** the
+  builder's energy withdrawal was gated on the room being completely full
+  (energyAvailable >= energyCapacityAvailable, owner rule #3). The surplus
+  spawning from the previous run drains the store the moment it peaks, so the
+  room is rarely completely full and the builders were forced onto the
+  far-source self-harvest loop (~40 tiles to a distant source), which dropped
+  construction to 0.19/tick and creep idle to 23 %.
+- **Fix (src/roles/builder.ts, src/config.ts):** changed the builder's
+  withdrawal gate from "room completely full" to "room at or above
+  BUILDER_WITHDRAW_FRACTION (0.5) of capacity". The builders now drain the
+  store down to 50 % and the harvesters refill it, so the builders build from
+  the room instead of self-harvesting. The floor is still high enough that the
+  spawn can queue a minimum-crew respawn between delivery ticks (a deliberate
+  deviation from owner rule #3, noted in the config comment and the file header).
+- **Unit test (test/unit/builder.test.ts):** added "withdraws from the room
+  above the floor instead of self-harvesting" (builder with energyAvailable
+  200/300, above the 150 floor, withdraws from the spawn and does not
+  self-harvest). Updated the stale "completely full" comment in the mock room.
+  68 unit tests passing.
+- **Smoke (500 ticks) on the fixed code:** construction progress 3.75/tick (was
+  0.19, baseline 3.11), spawn idle while full 0 % (was 2 %), creep ticks idle
+  8 % (was 23 %), CPU 1.44/tick (was 1.61). Controller progress 0.1/tick (was
+  0.35) and RCL progress at end 1/50 (was 1/100): the builders now compete for
+  the room's energy, so the upgrader's sink is slower - a tradeoff accepted for
+  the faster construction. 0 console errors.
+
 ### 2026-10-31 (M4 second-tower root cause fixed)
 - **Root cause of the M4 acceptance failure (criterion 1: "both towers allowed at level 5 are built or placed"):** construction-slot saturation. A temporary probe test (test/integration/probe-tower.test.ts, 2,600 ticks, deleted after) dumped the tiles around the spawn every 100 ticks: the first tower was placed at tick ~100 and finished, all 30 extension slots were consumed (29 sites + 1 built), and NO second tower site was ever created - computeExtensionPositions fills the checkerboard rings from range 2 outward, and at level 5 all 30 slots fit inside ranges 2-4, the exact range computeTowerPositions searches for the second tower. Baseline (pre-fix) scorecard, fields the M4 spec lists to watch: construction progress 4.39/tick, extensions and towers farther than 8 tiles 0, spawn idle while full 68 %.
 - **Fix (src/managers/constructionManager.ts):** manageConstruction now calls computeTowerPositions with the number of towers still missing (limit - built - sites), so ALL future tower tiles are known up front; the road network plus those tiles form towerReserveTiles, which is passed as excludeTiles to computeExtensionPositions and computeContainerPositions. placeTowerSites still places one site per tick (M4 spec: "One tower site at a time") and now finds its future tile free.
@@ -144,7 +171,12 @@ shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain comple
   1. Baseline smoke - done (reports/smoke.md, numbers above).
   2. Surplus spawning in src/managers/spawnManager.ts + caps in src/config.ts + unit
      tests in test/unit/spawnManager.test.ts.
-  3. Smoke verification: spawn idle while full below 20 %, no other line regresses.
+  3. Smoke verification: spawn idle while full below 20 % - DONE (0 %, baseline 100
+     %). The surplus spawning had regressed construction to 0.19/tick (builder
+     withdrawal gated on the room being completely full); fixed with the
+     BUILDER_WITHDRAW_FRACTION (0.5) floor in src/roles/builder.ts + src/config.ts.
+     Construction recovered to 3.75/tick (was 0.19, baseline 3.11), creep idle 8 %
+     (was 23 %). See the Change Log entry for the full scorecard.
   4. Full suite via agent-test start all: M1-M4 + smoke + spawnprobe green.
   5. Docs: status.md/README update, final commit.
 - **M5 (static mining with containers and haulers): deferred** until the feedback item

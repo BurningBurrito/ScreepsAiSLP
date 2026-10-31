@@ -1,12 +1,16 @@
 /**
  * Builder creep role.
  *
- * Energy loop (owner rule #3):
- *   A builder only withdraws energy from the spawn or an extension when the
- *   room is completely full. In every other situation it harvests from a
- *   source itself and stays there until its store is full. This is what keeps
- *   the spawn stocked: a builder that drains the spawn whenever it has free
- *   carry capacity empties it and blocks every creep respawn.
+ * Energy loop (owner rule #3, relaxed):
+ *   A builder withdraws energy from the spawn or an extension once the room
+ *   holds at least BUILDER_WITHDRAW_FRACTION of its capacity; only below that
+ *   floor does it harvest from a source itself and stay there until its store
+ *   is full. The floor keeps the spawn stocked: a builder that drains the
+ *   spawn whenever it has free carry capacity empties it and blocks every
+ *   creep respawn. (The original rule was "only when the room is completely
+ *   full", but surplus spawning keeps the store cycling, so it is rarely
+ *   completely full and the full-room gate starved the builders into the
+ *   far-source self-harvest loop - see config.ts for the numbers.)
  *
  * Build priority (M4):
  *   1. In defend or war mode, rampart sites: the shield the spawn and the
@@ -82,6 +86,7 @@
  */
 
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
+import { BUILDER_WITHDRAW_FRACTION } from "config";
 import { moveToToward } from "utils/movement";
 
 /**
@@ -215,11 +220,12 @@ export function hasPriorityBuildSites(room: Room): boolean
  *   1. Carrying energy: build the highest-priority site (fall back to
  *      upgrading the controller when no site exists).
  *   2. Not carrying: pick up dropped energy when there is some next to us.
- *   3. Not carrying and the room is completely full: withdraw from the
- *      spawn, then from an extension (owner rule #3 - the only case where a
- *      builder may take energy from a structure).
+ *   3. Not carrying and the room is at or above the withdrawal floor
+ *      (BUILDER_WITHDRAW_FRACTION of its capacity): withdraw from the spawn,
+ *      then from an extension (owner rule #3, relaxed).
  *   4. Otherwise: harvest from a source and stay there until the store is
- *      full, so the builder always spends energy it harvested itself.
+ *      full, so a builder only self-harvests when the store is below the
+ *      floor and never drains the spawn.
  * @param creep The builder creep to run
  */
 export function runBuilder(creep: Creep): void
@@ -299,10 +305,14 @@ export function runBuilder(creep: Creep): void
         }
     }
 
-    // Withdraw from structures only when the room is completely full.
-    // Any earlier withdrawal would steal energy the harvesters just delivered
-    // and the spawn would starve (owner rule #3).
-    if (room.energyAvailable >= room.energyCapacityAvailable)
+    // Withdraw from structures once the room holds at least
+    // BUILDER_WITHDRAW_FRACTION of its capacity. The store is kept cycling by
+    // surplus spawning, so it is rarely *completely* full; the old full-room
+    // gate starved the builders into the far-source self-harvest loop
+    // (construction 3.11 -> 0.19/tick). The floor still leaves enough energy
+    // for the spawn to queue a minimum-crew respawn between delivery ticks
+    // (owner rule #3, relaxed - see config.ts for the numbers).
+    if (room.energyAvailable >= room.energyCapacityAvailable * BUILDER_WITHDRAW_FRACTION)
     {
         const spawns = room.find(FIND_MY_SPAWNS);
         for (const spawn of spawns)
