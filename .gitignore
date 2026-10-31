@@ -94,3 +94,6 @@ $RECYCLE.BIN/
 reports/*.json
 reports/*-console.log
 reports/*-creeps.txt
+
+# Local diagnostic scripts (kept out of the repository per owner feedback 2026-10-30)
+probe-tmp/
