@@ -1,6 +1,6 @@
-# Scorecard: spawnprobe · 2026-10-30 21:00 · 700 ticks · commit 2a12b91
+# Scorecard: spawnprobe · 2026-10-31 01:55 · 700 ticks · commit e265aca
 
-| Metric (last 280 ticks unless noted) | This run | Previous run (2026-10-30 16:05, 7748cab) | Change |
+| Metric (last 280 ticks unless noted) | This run | Previous run (2026-10-30 21:00, 2a12b91) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 3.9 | 3.9 | 0 |
 | Energy wasted at source regeneration (sum) | 1,784 | 1,784 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 100 % | 100 % | 0 pts |
 | Spawn busy | 0 % | 0 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 6 % | 6 % | 0 pts |
-| CPU / tick (average, max) | 1.43, 20.09 | 1.43, 20.33 | 0 |
+| CPU / tick (average, max) | 1.44, 20.4 | 1.43, 20.09 | +0.01 |
 | RCL / progress at end (whole run) | 1 / 100 | 1 / 100 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
 | Energy harvested (whole run) | 2,488 | 2,488 | 0 |
@@ -33,6 +33,6 @@ Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tic
       200 | builder 1, harvester 1, upgrader 1       |   4.2 |     0 |   196/300 | idle | 1.3
       300 | builder 1, harvester 1, upgrader 1       |   2.6 |   0.3 |   300/300 | idle | 1.3
       400 | builder 1, harvester 1, upgrader 1       |   3.2 |   0.2 |   300/300 | idle | 1.4
-      500 | builder 1, harvester 1, upgrader 1       |   3.7 |     0 |   300/300 | idle | 1.5
+      500 | builder 1, harvester 1, upgrader 1       |   3.7 |     0 |   300/300 | idle | 1.4
       600 | builder 1, harvester 1, upgrader 1       |     4 |   0.5 |   300/300 | idle | 1.5
       700 | builder 1, harvester 1, upgrader 1       |     4 |     0 |   300/300 | idle | 1.4
