@@ -342,9 +342,9 @@ export function runBuilder(creep: Creep): void
             }
         }
 
-        // The room is full but no structure has free capacity: nothing to
-        // withdraw, fall through and harvest (sites and the controller still
-        // absorb energy, so harvesting is never wasted).
+        // The room is at or above the floor but no structure has free
+        // capacity: nothing to withdraw, fall through and harvest (sites and
+        // the controller still absorb energy, so harvesting is never wasted).
     }
 
     // Harvest from a source and stay there until the store is full.
