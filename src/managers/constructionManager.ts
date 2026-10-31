@@ -1009,16 +1009,32 @@ export function manageConstruction(room: Room): void
     // Skip the position searches entirely once a class is at its limit:
     // they are the most expensive part of this manager (per-tile lookFor
     // and getRangeTo over hundreds of candidates), and the M4 test runs
-    // 6,000 ticks.
+    // 6,000 ticks. All missing tower positions are computed (not just the
+    // next one): placeTowerSites still places only one site at a time, but
+    // the whole set is reserved so extensions cannot take the future tiles.
     const towerPositions = towersBuilt + towerSites < towerLimit
-        ? computeTowerPositions(room, roadNetworkTiles, towerLimit - towersBuilt)
-        : [];
-    const extensionPositions = extensionsBuilt + extensionSites < extensionLimit
-        ? computeExtensionPositions(room, roadNetworkTiles, extensionLimit)
+        ? computeTowerPositions(room, roadNetworkTiles, towerLimit - towersBuilt - towerSites)
         : [];
 
-    // Compute container positions (third priority), excluding the road network
-    const containerPositions = computeContainerPositions(room, roadNetworkTiles);
+    // Reserve the road network plus every future tower tile from the
+    // extension (and container) layout. The extension search fills the
+    // checkerboard rings from range 2 outward, and at level 5 all 30 of its
+    // slots fit inside ranges 2-4 - exactly the range the second tower is
+    // searched for. Without this reservation the extensions occupy every
+    // candidate tile and the second tower site can never be placed (M4
+    // acceptance failure of 2026-10-31: towersBuilt + towerSites stuck at 1).
+    const towerReserveTiles = new Set(roadNetworkTiles);
+    for (const pos of towerPositions)
+    {
+        towerReserveTiles.add(`${pos.x},${pos.y}`);
+    }
+    const extensionPositions = extensionsBuilt + extensionSites < extensionLimit
+        ? computeExtensionPositions(room, towerReserveTiles, extensionLimit)
+        : [];
+
+    // Compute container positions (third priority), excluding the road
+    // network and the reserved tower tiles
+    const containerPositions = computeContainerPositions(room, towerReserveTiles);
 
     // Place tower sites first (highest priority)
     placeTowerSites(room, towerPositions);

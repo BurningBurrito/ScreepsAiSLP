@@ -11,17 +11,39 @@ aborted every tick and silently killed the console channel the test probes use. 
 fixed: Memory.rooms is created when missing, the source-map lookup falls back to the original
 stack, and non-Error throws are logged instead of rethrown. acceptance-m1 now passes on a
 fresh world (801 ticks, 0 console errors).
-The bot now holds a level 5 room against an intruder (M4): computeTowerPositions and
-placeTowerSites build the two allowed towers within a few tiles of the spawn, one site at a
-time; placeRampartSites puts a rampart on the spawn's tile and on every finished tower;
-manageTowerLogic attacks the closest hostile, heals, and only repairs (ramparts -> roads ->
-containers) in peace while the tower holds more than the 500-energy attack reserve;
-manageMode switches Memory.mode to 'defend' itself when a hostile appears (back to 'peace'
-500 ticks after the last sighting), checkSafeMode arms safe mode only for a dangerous
-hostile with every tower dry, and runDefender is spawned only in that gap by checkAndSpawn.
-The full suite (M1-M4 acceptance + smoke + spawnprobe) is running to verify M4.
+M4 (Hold the room, level 5) PASSED its acceptance test on 2026-10-31: 1 passing (26m),
+6,001 ticks, EXIT 0. Snapshot: towersBuilt 2, towersWithRampart 2, extensionsBuilt 5 +
+extensionSites 25 (30 total), energyCapacity 550, maxTowerEnergy 540, farthestFromSpawn 8,
+spawnHasRampart, intruder (1000 hits at tick 5400) killed in 1 tick with Memory.mode
+'defend' from the same tick, 0 safe-mode ticks, spawn at 5000 hits, 10 creeps at the end,
+0 console errors. Before the fix the second tower site was never created because
+computeExtensionPositions filled the checkerboard rings from range 2 outward and at level 5
+all 30 extension slots fit inside ranges 2-4 - exactly the range computeTowerPositions
+searches - so the extensions occupied every candidate tile (probe run, 2,600 ticks: 29
+extension sites + 1 built, 59 roads, 1 container, NO tower sites, first tower already
+finished). The fix (src/managers/constructionManager.ts): all missing tower positions are
+computed up front and the road network plus every future tower tile is reserved (passed as
+excludeTiles) to computeExtensionPositions and computeContainerPositions; placeTowerSites
+still places one site at a time. Regression test test/unit/constructionManager.test.ts
+(4 tests) fails without the fix and passes with it; 57 unit tests pass; smoke (500 ticks)
+shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain complete; M5
+(static mining with containers and haulers) is next.
 
 ## Change Log
+### 2026-10-31 (M4 second-tower root cause fixed)
+- **Root cause of the M4 acceptance failure (criterion 1: "both towers allowed at level 5 are built or placed"):** construction-slot saturation. A temporary probe test (test/integration/probe-tower.test.ts, 2,600 ticks, deleted after) dumped the tiles around the spawn every 100 ticks: the first tower was placed at tick ~100 and finished, all 30 extension slots were consumed (29 sites + 1 built), and NO second tower site was ever created - computeExtensionPositions fills the checkerboard rings from range 2 outward, and at level 5 all 30 slots fit inside ranges 2-4, the exact range computeTowerPositions searches for the second tower. Baseline (pre-fix) scorecard, fields the M4 spec lists to watch: construction progress 4.39/tick, extensions and towers farther than 8 tiles 0, spawn idle while full 68 %.
+- **Fix (src/managers/constructionManager.ts):** manageConstruction now calls computeTowerPositions with the number of towers still missing (limit - built - sites), so ALL future tower tiles are known up front; the road network plus those tiles form towerReserveTiles, which is passed as excludeTiles to computeExtensionPositions and computeContainerPositions. placeTowerSites still places one site per tick (M4 spec: "One tower site at a time") and now finds its future tile free.
+- **Regression test (test/unit/constructionManager.test.ts, 4 tests, new file):** mock room with spawn and controller at (25,25), sources in the far corners. The search walks Manhattan-diamond rings, and the four diagonal "range 2" tiles are at range 1 from the controller (on the spawn's tile) and excluded, so the tower candidates are the axial tiles - first tower (23,25), second (25,27). Tests: one tower site first on (23,25); while all 30 extensions fill up, (25,27) stays free (this test FAILS without the fix - the extensions take the tile); the second site (25,27) is placed once the first tower is finished, with ramparts on the spawn's and the finished tower's tiles; no site beyond the level-5 limit of two. 57 unit tests passing (53 + 4).
+- Probe test deleted. **Verification (same day): acceptance-m4 PASSED - 1 passing (26m),
+  6,001 ticks, EXIT 0.** Snapshot: towersBuilt 2, towerSites 0, towersWithRampart 2,
+  extensionsBuilt 5 + extensionSites 25 (30 total), energyCapacity 550, maxTowerEnergy
+  540, farthestFromSpawn 8, spawnHasRampart, firstHostile 5401 / firstDefend 5401,
+  intruderGoneAfterTicks 1, safeModeTicks 0, spawnHits 5000, creeps 10, 0 console errors.
+  Scorecard (fields the M4 spec lists to watch): construction progress 4.44/tick (baseline
+  4.39), extensions and towers farther than 8 tiles 0 (baseline 0), spawn idle while full
+  82 % (baseline 68 %). Smoke (500 ticks) on the fixed code: 0 console errors, 0 probe
+  misses, all scorecard numbers unchanged from the previous run.
+
 ### 2026-10-31 (root cause of the M1 failure found and fixed)
 - **Root cause (not environmental, code bug):** the clean-environment acceptance-m1 re-run (started 10:30) failed identically to the 10:01 gate (empty probe results, no console output, 0 transfers, no creeps). Isolated it with a throwaway mockup driver script (diag-console.js, deleted after the fix): the probe results ARE delivered when the module is trivial, but never with dist/main.js. The engine evaluates the user's console commands inside the same context and tick as loop(); a throw OUT of loop() aborts the tick and the commands are skipped.
 - **Two bugs in sequence (src/utils/ErrorMapper.ts, src/managers/modeManager.ts):**
@@ -92,15 +114,15 @@ The full suite (M1-M4 acceptance + smoke + spawnprobe) is running to verify M4.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **M4 (Hold the room, level 5) is the objective.** The two M1-blocking bugs are fixed and
-  acceptance-m1 passes (801 ticks, 2026-10-31). The full suite (agent-test start all: M1-M4
-  acceptance + smoke + spawnprobe, ~1 h) is running to verify the M4 acceptance criteria:
-  a tower finished and held at >= 500 energy, both level-5 tower sites built or placed,
-  >= 3 extensions finished and 15 built or placed, energy capacity >= 450, extensions and
-  towers within 10 tiles of the spawn, ramparts on the spawn and every finished tower,
-  Memory.mode 'defend' within 5 ticks of the NPC intruder at t=5400, intruder killed within
-  100 ticks, no safe mode, spawn survives, >= 3 creeps at the end. If a criterion fails,
-  fix that criterion only and re-run the full suite.
+- **M4 (Hold the room, level 5) is COMPLETE** - acceptance passed 2026-10-31: 1 passing
+  (26m), towersBuilt 2 with ramparts, 30 extensions built or placed, capacity 550,
+  intruder killed in 1 tick, 0 safe-mode ticks. The second-tower fix
+  (src/managers/constructionManager.ts reserves the future tower tiles from the extension
+  and container layout) is covered by 4 regression unit tests (57 unit tests passing).
+  Scorecard, fields the M4 spec lists to watch: construction progress 4.44/tick (baseline
+  4.39), extensions and towers farther than 8 tiles 0 (unchanged), spawn idle while full
+  82 % (baseline 68 % - the run ends in a full-energy build-and-hold phase; flag for M5
+  review, not a failure).
 - **M5 (static mining with containers and haulers) next**: the hauler role already exists
   (withdraws from containers, delivers tower -> extensions -> spawn; checkAndSpawn spawns
   haulers once a container exists) and constructionManager computes container positions
@@ -116,7 +138,7 @@ The full suite (M1-M4 acceptance + smoke + spawnprobe) is running to verify M4.
 - [x] M2 extensions and roads (completed)
 - [x] M1: basic economy and creep management (completed)
 - [x] M3: build priorities, layout and a tower (completed 2026-10-30, acceptance 1 passing)
-- [ ] M4: Hold the room (level 5) - towers, ramparts, defend mode
+- [x] M4: Hold the room (level 5) - towers, ramparts, defend mode (completed 2026-10-31, acceptance 1 passing)
 - [ ] M5: static mining with containers and haulers
 - [ ] CPU profiling and path caching (former M5, before the M4 renumber)
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
