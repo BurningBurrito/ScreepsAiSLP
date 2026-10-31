@@ -26,7 +26,7 @@ computed up front and the road network plus every future tower tile is reserved 
 excludeTiles) to computeExtensionPositions and computeContainerPositions; placeTowerSites
 still places one site at a time. Regression test test/unit/constructionManager.test.ts
 (4 tests) fails without the fix and passes with it; 57 unit tests pass; smoke (500 ticks)
-shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain complete; M5
+shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain complete. Full suite verified the same day: agent-test start all (M1-M4 acceptance + smoke + spawnprobe) = 8 passing (1h), EXIT 0, re-confirming the M4 snapshot in-run (towersBuilt 2, towersWithRampart 2, extensionsBuilt 5 + extensionSites 25, energyCapacity 550, maxTowerEnergy 540, firstHostile/firstDefend 5401, intruderGoneAfterTicks 1, safeModeTicks 0, 10 creeps, 0 console errors). M5
 (static mining with containers and haulers) is next.
 
 ## Change Log
@@ -43,6 +43,14 @@ shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain comple
   4.39), extensions and towers farther than 8 tiles 0 (baseline 0), spawn idle while full
   82 % (baseline 68 %). Smoke (500 ticks) on the fixed code: 0 console errors, 0 probe
   misses, all scorecard numbers unchanged from the previous run.
+ - **Full test suite (agent-test start all, commit 2c081e3): 8 passing (1h), EXIT 0.**
+   M1-M4 acceptance, smoke and spawnprobe all green. M4 snapshot re-confirmed in this run:
+   towersBuilt 2, towerSites 0, towersWithRampart 2, extensionsBuilt 5 + extensionSites 25,
+   energyCapacity 550, maxTowerEnergy 540, farthestFromSpawn 8, firstHostile 5401 /
+   firstDefend 5401, intruderGoneAfterTicks 1, safeModeTicks 0, spawnHits 5000, mode
+   'peace' at the end, 10 creeps. Smoke: 0 console errors, 0 probe misses, CPU 1.42/tick.
+   Spawnprobe scorecard unchanged from the previous run (construction progress 3.3/tick,
+   CPU 1.46 average, 0 console errors).
 
 ### 2026-10-31 (root cause of the M1 failure found and fixed)
 - **Root cause (not environmental, code bug):** the clean-environment acceptance-m1 re-run (started 10:30) failed identically to the 10:01 gate (empty probe results, no console output, 0 transfers, no creeps). Isolated it with a throwaway mockup driver script (diag-console.js, deleted after the fix): the probe results ARE delivered when the module is trivial, but never with dist/main.js. The engine evaluates the user's console commands inside the same context and tick as loop(); a throw OUT of loop() aborts the tick and the commands are skipped.
@@ -123,6 +131,7 @@ shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain comple
   4.39), extensions and towers farther than 8 tiles 0 (unchanged), spawn idle while full
   82 % (baseline 68 % - the run ends in a full-energy build-and-hold phase; flag for M5
   review, not a failure).
+  Full suite verified: agent-test start all = 8 passing (1h), EXIT 0 (see Change Log).
 - **M5 (static mining with containers and haulers) next**: the hauler role already exists
   (withdraws from containers, delivers tower -> extensions -> spawn; checkAndSpawn spawns
   haulers once a container exists) and constructionManager computes container positions
@@ -165,3 +174,4 @@ shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain comple
 - **Construction site / build progress**: the ghost outline placed before a structure exists; it only becomes a real structure once energy spent on it (build progress) reaches the structure's cost - progress on an unfinished site is worthless at the deadline
 - **Energy capacity**: the total energy a room can hold at once (spawn 100 + 50 per finished extension); bigger capacity means bigger creeps
 - **Priority class (design concept)**: grouping structure types so builders always finish every site in a higher class before touching a lower one; M3 runs tower > extensions > roads > containers
+- **Manhattan diamond ring (M4 post, 2026-10-31)**: the set of tiles at a fixed Manhattan distance (|dx| + |dy|) from a point, shaped like a diamond on the square grid - how computeTowerPositions walks candidate tiles at range 2, then 3, then 4; the diagonal tiles of a "range 2" ring are only range 1 (Chebyshev) from a controller on the spawn's tile, so the search skips them
