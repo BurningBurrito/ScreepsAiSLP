@@ -1,6 +1,6 @@
-# Scorecard: smoke · 2026-10-31 18:06 · 500 ticks · commit 2c081e3
+# Scorecard: smoke · 2026-10-31 19:16 · 500 ticks · commit f606551
 
-| Metric (last 200 ticks unless noted) | This run | Previous run (2026-10-31 16:35, 26aaced) | Change |
+| Metric (last 200 ticks unless noted) | This run | Previous run (2026-10-31 18:06, 2c081e3) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 3.46 | 3.46 | 0 |
 | Energy wasted at source regeneration (sum) | 1,000 | 1,000 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 100 % | 100 % | 0 pts |
 | Spawn busy | 0 % | 0 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 8 % | 8 % | 0 pts |
-| CPU / tick (average, max) | 1.42, 20.35 | 1.45, 21.85 | -0.03 |
+| CPU / tick (average, max) | 1.39, 20.34 | 1.42, 20.35 | -0.03 |
 | RCL / progress at end (whole run) | 1 / 50 | 1 / 50 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
 | Energy harvested (whole run) | 1,692 | 1,692 | 0 |
