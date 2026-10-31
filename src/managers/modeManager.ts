@@ -30,8 +30,13 @@ export function manageMode(room: Room): void
 {
     const hostiles = room.find(FIND_HOSTILE_CREEPS);
 
-    // A fresh world (or a global reset) may not have the room's memory yet;
-    // create it with the required fields before writing lastHostileTick.
+    // A fresh world (or a global reset) has no Memory.rooms at all - create
+    // both levels before writing lastHostileTick.
+    if (Memory.rooms === undefined)
+    {
+        Memory.rooms = {};
+    }
+
     if (Memory.rooms[room.name] === undefined)
     {
         Memory.rooms[room.name] = { sourceIds: [], spawnIds: [] };

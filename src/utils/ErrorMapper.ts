@@ -79,11 +79,24 @@ export class ErrorMapper {
             const message = `Source maps don't work in the simulator - displaying original error`;
             console.log(`<span style='color:red'>${message}<br>${_.escape(e.stack)}</span>`);
           } else {
-            console.log(`<span style='color:red'>${_.escape(this.sourceMappedStackTrace(e))}</span>`);
+            // sourceMappedStackTrace() requires('main.js.map'), which throws when the
+            // map file was not uploaded. That throw happens inside this catch block:
+            // it would mask the original error AND abort the tick (console commands
+            // are then skipped by the engine), so it must be caught and replaced by
+            // the original stack.
+            let message: string;
+            try {
+              message = _.escape(this.sourceMappedStackTrace(e));
+            } catch (mapError) {
+              message = `Source maps unavailable - displaying original error<br>${_.escape(e.stack)}`;
+            }
+            console.log(`<span style='color:red'>${message}</span>`);
           }
         } else {
-          // can't handle it
-          throw e;
+          // Not an Error object (e.g. a thrown string): log it and keep the tick
+          // alive instead of rethrowing, so one bad throw cannot silently halt the
+          // whole colony (and its console channel) for the rest of the run.
+          console.log(`<span style='color:red'>Unhandled non-Error throw: ${_.escape(String(e))}</span>`);
         }
       }
     };

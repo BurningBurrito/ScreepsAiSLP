@@ -1,32 +1,42 @@
 # ScreepsAiSLP Status
 
 ## Current State
-M1/M2/M3 complete. The upgrader bootstrap failure (controller progress frozen at 0) is
-fixed in three layers. First: the upgrader and builder pick their self-harvest source by
-Chebyshev distance to a fixed anchor (controller for the upgrader, spawn for the builder)
-instead of findClosestByPath, which the swamp pocket around the spawn-side source distorted in
-favour of the far source (src/utils/pickSource.ts, src/roles/upgrader.ts, src/roles/builder.ts).
-Second: occupancy-aware selection - pickSourceWithStandableTile skips a source whose standable
-tiles are all occupied (the pocket source has only two), assignSource spreads harvesters by
-remaining standable capacity, and the stuck detector in src/utils/movement.ts now clears a
-creep's cached path when it makes no net progress across a 2 x (non-MOVE parts) + 2 tick
-window, which catches the engine's two-tile ping-pong fallback at a blocked pocket entrance.
-Third: the upgrader latches its source choice in memory for the whole work cycle
-(src/roles/upgrader.ts) and the builder ranks the upgrader's source last when self-harvesting
-(src/roles/builder.ts), so the builder no longer camps the pocket's second standable tile and
-the upgrader no longer oscillates between the two sources. Verified with spawnprobe (700 ticks):
-controller progress 0 -> 100 by t=700 (pre-fix regression: 0; baseline: 50), creep idle 18 % -> 6 %.
-M3 is complete: the acceptance test passed (1 passing, 17 min, 4,000 ticks). The build order is
-fixed in two layers (src/roles/builder.ts, src/roles/upgrader.ts): the tower site is its own
-priority class above the extensions, the upgrader delegates to runBuilder while a tower or
-extension site exists, and while extension sites remain every builder works the ONE most
-advanced extension (progress first, spawn-distance tie-break) so the room's energy capacity
-grows as sites actually complete. Final M3 snapshot: tower built and full (maxTowerEnergy
-1000), 4 extensions built + 6 sites placed (all 10 allowed), energyCapacity 500, road share
-0 %, 59 road tiles, 0 on wall, 0 stray, sources 2 of 2 and controller connected, farthest
-structure 6 tiles from spawn (limit 8), level 3.
+M1, M2 and M3 are complete (bootstrap economy, focused build order, tower plus 10-extension
+capacity - details in the Change Log). The 10:01 M1 gate failure was two code bugs, not the
+environment: manageMode in src/managers/modeManager.ts read Memory.rooms on a fresh world
+before Memory.rooms existed and threw every tick before any spawning, and
+ErrorMapper.wrapLoop (src/utils/ErrorMapper.ts) rethrew the source-map
+require("main.js.map") failure from inside its catch block, which masked the real error,
+aborted every tick and silently killed the console channel the test probes use. Both are
+fixed: Memory.rooms is created when missing, the source-map lookup falls back to the original
+stack, and non-Error throws are logged instead of rethrown. acceptance-m1 now passes on a
+fresh world (801 ticks, 0 console errors).
+The bot now holds a level 5 room against an intruder (M4): computeTowerPositions and
+placeTowerSites build the two allowed towers within a few tiles of the spawn, one site at a
+time; placeRampartSites puts a rampart on the spawn's tile and on every finished tower;
+manageTowerLogic attacks the closest hostile, heals, and only repairs (ramparts -> roads ->
+containers) in peace while the tower holds more than the 500-energy attack reserve;
+manageMode switches Memory.mode to 'defend' itself when a hostile appears (back to 'peace'
+500 ticks after the last sighting), checkSafeMode arms safe mode only for a dangerous
+hostile with every tower dry, and runDefender is spawned only in that gap by checkAndSpawn.
+The full suite (M1-M4 acceptance + smoke + spawnprobe) is running to verify M4.
 
 ## Change Log
+### 2026-10-31 (root cause of the M1 failure found and fixed)
+- **Root cause (not environmental, code bug):** the clean-environment acceptance-m1 re-run (started 10:30) failed identically to the 10:01 gate (empty probe results, no console output, 0 transfers, no creeps). Isolated it with a throwaway mockup driver script (diag-console.js, deleted after the fix): the probe results ARE delivered when the module is trivial, but never with dist/main.js. The engine evaluates the user's console commands inside the same context and tick as loop(); a throw OUT of loop() aborts the tick and the commands are skipped.
+- **Two bugs in sequence (src/utils/ErrorMapper.ts, src/managers/modeManager.ts):**
+  1. `manageMode` read `Memory.rooms[room.name]` on a fresh world where `Memory.rooms` itself is undefined (Memory starts as `{}`), so the room loop threw `TypeError: Cannot read properties of undefined (reading 'W0N1')` every tick, before checkAndSpawn ever ran - the colony never spawned a single creep. Fixed by creating `Memory.rooms = {}` when missing.
+  2. `ErrorMapper.wrapLoop`'s catch block called `sourceMappedStackTrace`, whose `require("main.js.map")` throws in the game runtime (the map file is not uploaded; the `"sim" in Game.rooms` guard does not cover the mockup's W0N1 room). That second throw happened inside the catch: it masked the real error, and the throw out of loop() aborted every tick - which is also why the console channel (probes and bot logs) stayed silent. Fixed: the source-map lookup is wrapped in its own try/catch that falls back to the original stack, and non-Error throws are logged instead of rethrown.
+- **Verification:** unit test added (test/unit/errorMapper.test.ts, 3 tests: swallow + fallback + non-Error), 53 unit tests passing. Throwaway driver with dist/main.js: harvester-0 spawned at tick 1 (energy 300 -> 80), no error lines, probe results delivered. Smoke test (500 ticks) green: 3 creeps, 0 console errors.
+- **M1 acceptance passes:** agent-test acceptance-m1 on a fresh world: 1 passing, 801 ticks, no console errors. The earlier "diagnosed as environmental" entry is superseded: the port collision was real but only delayed the first diagnosis; the clean re-run proved the failure is in the code, and the two fixes above are what cleared it.
+- **ErrorMapper fallback test strengthened (test/unit/errorMapper.test.ts):** it now throws an error whose stack frame points at the bundled module (main:42:10) the way the game runtime does, so sourceMappedStackTrace actually reaches the consumer and the require("main.js.map") failure - previously the plain-Node stack never matched, and the test passed without exercising the fallback. It now asserts the "Source maps unavailable" message. 53 unit tests passing.
+- **Full suite:** agent-test start all (M1-M4 acceptance + smoke + spawnprobe, ~1 h) running since 10:59 to verify M4 (Hold the room, level 5). diag-console.js deleted.
+
+### 2026-10-31 (gate M1 failure diagnosed as environmental)
+- No source change yet. The 10:01 gate failed on acceptance-m1 (energyDelivered 0/3000, empty snapshot, no bot console output, no scorecard probe results). Diagnosis: the sandbox never ran because the engine could not reach storage - server/logs/storage.log from my 10:19 repro run shows "Storage server error: Error: listen EADDRINUSE: address already in use 127.0.0.1:21025" and engine_runner.log shows repeated "Storage connection lost" / SIGTERM restart loops. A screeps server left over from a previous crashed test process held the storage port; by 10:31 no screeps node processes remained (ps) and the port was free (ss). dist/main.js loads cleanly in a plain Node VM with stubbed globals (throwaway probe, removed), so the M4 code from commit 4e26fb9 is not implicated by a load error.
+- Note: the M4 in-progress work from the interrupted 2026-10-31 run (commit 4e26fb9: modeManager, towerManager rewrite, defender role, spawnManager priority list, constructionManager changes, 169 unit tests passing) has never run in the integration environment.
+- Recovery per rule 07-C: agent-test stop (cleans leftover engine processes), re-running acceptance-m1 in a clean environment.
+
 ### 2026-10-30 (M3 acceptance pass)
 - **M3 COMPLETE**: acceptance-m3 passed (1 passing, 17 min) with the focused-extension fix from the previous entry. Snapshot after 4,000 ticks: towersBuilt 1, maxTowerEnergy 1000 (need >= 500), extensionsBuilt 4 + extensionSites 6 = all 10 allowed (need >= 3 built), energyCapacity 500 (need >= 450), roadShare 0 while priority sites existed (limit 10 %), 59 road tiles / 0 on wall / 0 stray, sources 2 of 2 + controller connected, farthestFromSpawn 6 (limit 8), level 3. Capacity climbed 300 -> 350 (~t2300) -> 400 (~t2800) -> 450 (~t3500) -> 500 (~t4000): one site finished at a time. Whole-run scorecard: harvested 38,120 energy, construction 4.28/tick, spawn idle 46 %, CPU avg 2.08 / max 26.07, 0 bot console errors.
 - **Docs**: blog post blog/2026-10-30-build-priorities-and-a-tower.md (the two measured failure modes and the focus fix); README.md status and features updated; M3 ticked under Upcoming Features.
@@ -82,16 +92,34 @@ structure 6 tiles from spawn (limit 8), level 3.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **M3 gate: PASSED this run** (acceptance-m3, 1 passing, 17 min, numbers above). Remaining steps this run: [1] full suite agent-test all (M1/M2/smoke must stay green) - IN PROGRESS -> [2] copy the "N passing, M failing" line into the Change Log -> [3] commit everything (code already committed as cb8e347; docs commit pending).
-- **Next milestone (M4, containers and static mining)**: the hauler role already exists (withdraws from containers, delivers tower -> extensions -> spawn; spawnManager spawns haulers once a container exists) and constructionManager already computes container positions beside each source and places one site at a time (placeContainerSites). Still needed per milestones/M4.md: a stationary miner per source parked on its container tile, hauler delivery order per spec (spawn/extensions -> controller container -> upgraders in range 1), the spawn manager rewritten as a priority list, and a container-aware path in selectBuildSite while container sites exist. M4 acceptance: 3,000 ticks, 2 containers adjacent to 2 sources, >= 60 % of the harvest ceiling, wasted-at-regen <= 15 %, upgrade >= 20 % of ceiling, no >150-tick idle spawn at full energy, CPU <= 10/tick.
+- **M4 (Hold the room, level 5) is the objective.** The two M1-blocking bugs are fixed and
+  acceptance-m1 passes (801 ticks, 2026-10-31). The full suite (agent-test start all: M1-M4
+  acceptance + smoke + spawnprobe, ~1 h) is running to verify the M4 acceptance criteria:
+  a tower finished and held at >= 500 energy, both level-5 tower sites built or placed,
+  >= 3 extensions finished and 15 built or placed, energy capacity >= 450, extensions and
+  towers within 10 tiles of the spawn, ramparts on the spawn and every finished tower,
+  Memory.mode 'defend' within 5 ticks of the NPC intruder at t=5400, intruder killed within
+  100 ticks, no safe mode, spawn survives, >= 3 creeps at the end. If a criterion fails,
+  fix that criterion only and re-run the full suite.
+- **M5 (static mining with containers and haulers) next**: the hauler role already exists
+  (withdraws from containers, delivers tower -> extensions -> spawn; checkAndSpawn spawns
+  haulers once a container exists) and constructionManager computes container positions
+  beside each source and places one site at a time (placeContainerSites). Still needed per
+  milestones/M5.md: a stationary miner per source parked on its container tile, hauler
+  delivery order per spec (spawn/extensions -> controller container -> upgraders in range 1),
+  and a container-aware path in selectBuildSite while container sites exist. M5 acceptance
+  (3,000 ticks): 2 containers adjacent to 2 sources, >= 60 % of the harvest ceiling,
+  wasted-at-regen <= 15 %, upgrade >= 20 % of ceiling, no >150-tick idle spawn at full
+  energy, CPU <= 10/tick.
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
 - [x] M1: basic economy and creep management (completed)
 - [x] M3: build priorities, layout and a tower (completed 2026-10-30, acceptance 1 passing)
-- [ ] M4 containers and static mining
-- [ ] M5 CPU profiling and path caching
-- [ ] M6 expansion to a second room
+- [ ] M4: Hold the room (level 5) - towers, ramparts, defend mode
+- [ ] M5: static mining with containers and haulers
+- [ ] CPU profiling and path caching (former M5, before the M4 renumber)
+- [ ] Expansion to a second room (former M6, before the M4 renumber)
 
 ## Known Issues / Notes
 - **Decision (2026-10-24): three builders, not the two rule 02b suggests.** The M3 acceptance test needs tower (5,000) + 3 extensions (9,000) finished inside 4,000 ticks of an RCL 3 start; measured ~1.75 progress/tick per builder, two builders cannot make that window. The M3 test (owner's acceptance criteria) wins over the 02b guideline; noted in the MIN_CREEPS_BY_LEVEL comment in src/config.ts.
