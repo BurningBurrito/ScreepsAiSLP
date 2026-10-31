@@ -19,13 +19,39 @@
  * first creep is silently never spawned. The remaining roles are picked up
  * from the next tick onward (the spawn is busy for three ticks per body part
  * anyway).
+ *
+ * Surplus spawning (owner feedback 2026-10-30):
+ *   The minimums keep the colony alive, not busy. While every minimum is met
+ *   AND the store is full (energyAvailable >= energyCapacityAvailable),
+ *   checkAndSpawn spends the idle energy on one extra creep, in this order:
+ *     1. Harvester - the source no living harvester is assigned to (one per
+ *        source, never more). The source is passed to the spawn explicitly:
+ *        assignSource's score would re-pick the covered source on a tie.
+ *     2. Upgrader - the fixed 2-per-tick (more with a bigger body) energy
+ *        sink at the controller; this is what keeps the store cycling
+ *        instead of sitting full. Capped at SURPLUS_UPGRADER_MAX total.
+ *     3. Builder - while sites exist, one more beyond the minimum crew,
+ *        capped at SURPLUS_BUILDER_MAX total.
+ *   This deliberately inverts rule 02b's builder-before-upgrader order for
+ *   the surplus step: an upgrader parks within range 3 and spends
+ *   reliably, a builder's spend is walk-limited, and the surplus upgrader
+ *   is what lands RCL 2 inside the 500-tick smoke window.
  */
 
+import { MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX } from "config";
 import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
-import { MIN_CREEPS_BY_LEVEL } from "config";
 
 /** Roles checked each tick, highest priority first (owner rule #5). */
 const SPAWN_ORDER: Role[] = ["harvester", "builder", "upgrader", "defender", "hauler"];
+
+/**
+ * Surplus spawn order (see the file header): only runs once every role is at
+ * its minimum AND the energy store is full, so the spawn never idles with an
+ * unused store. Harvester first (it covers a source nobody mines), then the
+ * upgrader (the room's fixed energy sink), then one more builder while sites
+ * exist.
+ */
+const SURPLUS_ORDER: Role[] = ["harvester", "upgrader", "builder"];
 
 /**
  * Body templates per role, largest first. The first template whose cost fits
@@ -280,6 +306,51 @@ function assignSource(room: Room): string | undefined
 }
 
 /**
+ * Finds a source that no living harvester is assigned to.
+ *
+ * This is the surplus harvester's target (see the file header): unlike
+ * assignSource's score, which would re-pick the covered source on a tie,
+ * this only returns a source with ZERO assignments, so a surplus harvester
+ * always covers a new source instead of doubling an already-mined one.
+ * @param room The room to search
+ * @returns The uncovered source, or undefined when every source has one
+ */
+function sourceWithoutHarvester(room: Room): Source | undefined
+{
+    const sources = room.find(FIND_SOURCES_ACTIVE);
+    if (sources.length === 0)
+    {
+        return undefined;
+    }
+
+    const counts: Record<string, number> = {};
+    for (const source of sources)
+    {
+        counts[source.id] = 0;
+    }
+    for (const name in Game.creeps)
+    {
+        const creep = Game.creeps[name];
+        if (creep.memory.role === "harvester" && creep.memory.sourceId !== undefined)
+        {
+            if (counts[creep.memory.sourceId] !== undefined)
+            {
+                counts[creep.memory.sourceId] += 1;
+            }
+        }
+    }
+
+    for (const source of sources)
+    {
+        if (counts[source.id] === 0)
+        {
+            return source;
+        }
+    }
+    return undefined; // Every source already has a harvester
+}
+
+/**
  * Attempts to start one spawn of the given role on a known-free spawn.
  *
  * The body is the largest template the sizing budget allows (owner rule #5).
@@ -290,10 +361,13 @@ function assignSource(room: Room): string | undefined
  * @param spawn The free spawn to use
  * @param role The role to spawn
  * @param energyAvailable room.energyAvailable at the start of this tick
+ * @param sourceId For harvesters only: the source to bind the new creep to.
+ * The surplus path passes the uncovered source explicitly; when omitted, the
+ * assignment is balanced by assignSource.
  * @returns True if a spawn intent was started (no other role may then attempt
  * a spawn this tick), false if this role could not start a spawn this tick
  */
-function trySpawnRole(room: Room, spawn: StructureSpawn, role: Role, energyAvailable: number): boolean
+function trySpawnRole(room: Room, spawn: StructureSpawn, role: Role, energyAvailable: number, sourceId?: string): boolean
 {
     const coldBoot = role === "harvester" && getCreepCount(role) === 0;
     const sizingBudget = coldBoot ? energyAvailable : room.energyCapacityAvailable;
@@ -321,7 +395,9 @@ function trySpawnRole(room: Room, spawn: StructureSpawn, role: Role, energyAvail
     const memory: CreepMemory = { role, working: role === "upgrader" };
     if (role === "harvester")
     {
-        memory.sourceId = assignSource(room);
+        // The surplus path binds the creep to the uncovered source (see the
+        // file header); the minimums path balances by score.
+        memory.sourceId = sourceId !== undefined ? sourceId : assignSource(room);
     }
 
     const result = spawn.spawnCreep(picked.body, name, {
@@ -379,7 +455,58 @@ export function checkAndSpawn(room: Room): void
 
         if (trySpawnRole(room, spawn, role, energyAvailable))
         {
-            break; // One spawn intent per tick - the rest wait for the next tick
+            return; // One spawn intent per tick - the rest wait for the next tick
+        }
+    }
+
+    // The loop started nothing. If every role is at its minimum (the loop
+    // never needed to spawn) and the store is full, spend the idle energy on
+    // a surplus creep instead of idling (owner feedback 2026-10-30).
+    const minimumsMet = SPAWN_ORDER.every((role) => getCreepCount(role) >= minimums[role]);
+    if (minimumsMet && energyAvailable >= room.energyCapacityAvailable)
+    {
+        spawnSurplus(room, spawn, energyAvailable);
+    }
+}
+
+/**
+ * Starts one surplus spawn (see the file header). Called only while every
+ * role is at its minimum and the store is full: walks SURPLUS_ORDER and
+ * starts the first role whose cap and preconditions hold.
+ * @param room The room to spawn in
+ * @param spawn The free spawn to use
+ * @param energyAvailable room.energyAvailable at the start of this tick
+ */
+function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number): void
+{
+    for (const role of SURPLUS_ORDER)
+    {
+        if (role === "harvester")
+        {
+            // One per uncovered source, never more: sourceWithoutHarvester
+            // returns undefined while every source already has a harvester.
+            const source = sourceWithoutHarvester(room);
+            if (source !== undefined && trySpawnRole(room, spawn, role, energyAvailable, source.id))
+            {
+                return;
+            }
+        }
+        else if (role === "upgrader")
+        {
+            if (getCreepCount(role) < SURPLUS_UPGRADER_MAX && trySpawnRole(room, spawn, role, energyAvailable))
+            {
+                return;
+            }
+        }
+        else // builder
+        {
+            // Only while there is something to build; the minimum crew
+            // already covers the baseline builder.
+            const hasSites = room.find(FIND_CONSTRUCTION_SITES).length > 0;
+            if (hasSites && getCreepCount(role) < SURPLUS_BUILDER_MAX && trySpawnRole(room, spawn, role, energyAvailable))
+            {
+                return;
+            }
         }
     }
 }

@@ -38,6 +38,24 @@ export const MIN_CREEPS_BY_LEVEL: {
 ];
 
 /**
+ * Surplus spawn caps (owner feedback 2026-10-30): totals per room, including
+ * the minimum crew, that the spawn may exceed while every minimum is met AND
+ * the energy store is full - the moment checkAndSpawn would otherwise idle
+ * with an unused store (the smoke scorecard's "Spawn idle while full" sat at
+ * 100 % for that reason). The upgrader is the room's fixed 2-per-tick energy
+ * sink and keeps the store cycling; the builder only while sites exist.
+ */
+export const SURPLUS_UPGRADER_MAX = 2;
+
+/**
+ * Total builders (including the minimum one) the spawn may keep while
+ * construction sites exist. Three is the M3 decision (see
+ * MIN_CREEPS_BY_LEVEL): enough to finish the tower and the extensions in
+ * the test windows; more only adds walk time.
+ */
+export const SURPLUS_BUILDER_MAX = 3;
+
+/**
  * Maximum consecutive failed delivery ticks before a harvester drops its
  * energy. ERR_NO_PATH drops immediately (unreachable target); this is only a
  * safety net for a creep that is stuck for a long time. A heavy body moves

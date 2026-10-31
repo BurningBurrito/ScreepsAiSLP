@@ -54,15 +54,31 @@
  * (an idle creep is a bug).
  *
  * Self-harvest source choice: the source nearest the spawn (Chebyshev) that
- * still has a free tile to stand on - except the upgrader's source. The
- * upgrader anchors on the controller and harvests the source nearest it (see
- * upgrader.ts); that source's standable tiles are scarce (the test world's
- * pocket source has exactly two, one owned by a harvester), so a builder that
- * self-harvests there permanently blocks the upgrader (the controller-progress
- * regression: 50 total -> 0 in 700 ticks). The builder therefore ranks the
- * upgrader's source last and takes the other one, falling back to the
- * upgrader's only when the other has no free tile. The standable-tile filter
- * still applies (see utils/pickSource).
+ * still has a free tile to stand on - except the upgrader's source, while
+ * the upgrader is actually upgrading. The upgrader anchors on the
+ * controller and harvests the source nearest it (see upgrader.ts); that
+ * source's standable tiles are scarce (the test world's pocket source has
+ * exactly two, one owned by a harvester), so a builder that self-harvests
+ * there blocks the upgrader (the controller-progress regression: 50 total
+ * -> 0 in 700 ticks). The builder therefore ranks the upgrader's source
+ * last and takes the other one, falling back to the upgrader's only when
+ * the other has no free tile. While a tower or extension site exists the
+ * upgrader runs this same builder role (see upgrader.ts), so no source is
+ * "the upgrader's" then and the yield is skipped. The standable-tile
+ * filter still applies (see utils/pickSource).
+ *
+ * The choice is latched in memory.sourceId for the whole collect phase and
+ * re-made only when the store empties (the cycle boundary: the builder just
+ * spent its load at a site), or when the latched source vanishes or runs
+ * dry while another source is live. Re-picking every tick against
+ * transient occupancy is what the upgrader's oscillation bug was (see
+ * upgrader.ts): a creep that keeps re-rolling between the two sources walks
+ * the long way forever and harvests nothing. With the latch each builder
+ * keeps its camp for the cycle, so the surplus builders (owner feedback
+ * 2026-10-30: they drain the store, so it no longer pins full and the
+ * builders must self-harvest between full ticks) settle onto the two
+ * sources instead of trading tiles (measured: construction 3.11 ->
+ * 0.19/tick, idle 8 % -> 23 % while they oscillated).
  */
 
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
@@ -211,6 +227,11 @@ export function runBuilder(creep: Creep): void
     const room = creep.room;
     const energy = creep.store[RESOURCE_ENERGY] ?? 0;
 
+    // True on exactly one tick: the first empty tick after the store held
+    // energy - the builder's cycle boundary (it just spent its load at a
+    // site). The self-harvest source latch is (re-)made there (see below).
+    let justEmptied = false;
+
     // --- Phase 1: spend the energy we carry (build first, then upgrade) ---
     if (energy > 0)
     {
@@ -258,6 +279,7 @@ export function runBuilder(creep: Creep): void
         // Empty store: back to collecting. This also clears the old state
         // where a builder that built away its last energy with working=true
         // still set idled forever (nothing ever reset the flag).
+        justEmptied = creep.memory.working === true;
         creep.memory.working = false;
     }
 
@@ -321,15 +343,30 @@ export function runBuilder(creep: Creep): void
     // sources by distance to the spawn - not by path cost, which the swamp
     // pocket around the spawn-side source distorts (see the file header).
     //
-    // Yield the upgrader's source: the upgrader anchors on the controller and
-    // harvests the source nearest it (see upgrader.ts). That source's standable
-    // tiles are scarce, so a builder that camps it blocks the upgrader
-    // (the controller-progress regression). Rank the upgrader's source last;
-    // the builder takes the other source and falls back to the upgrader's only
-    // when the other has no free tile.
-    const sources = room.find(FIND_SOURCES_ACTIVE);
-    if (sources.length > 0)
+    // The choice is latched in memory.sourceId for the whole collect phase
+    // (see the file header for why): it is (re-)made here only on the
+    // cycle-boundary tick (justEmptied), when the latched source is missing
+    // or dry while another source is live, or before the first harvest at
+    // all. Every other tick the builder sticks with its latched source.
+    const sources = room.find(FIND_SOURCES);
+    const activeSources = sources.filter((candidate) => candidate.energy > 0);
+    const pool = activeSources.length > 0 ? activeSources : sources;
+    const latchedId = creep.memory.sourceId;
+    const latched = latchedId !== undefined
+        ? sources.find((candidate) => candidate.id === latchedId)
+        : undefined;
+    const latchedUsable = latched !== undefined
+        && (latched.energy > 0 || activeSources.length === 0);
+    let source: Source | null = null;
+    if (latched === undefined || !latchedUsable || justEmptied)
     {
+        // Yield the upgrader's source, but only while the upgrader is really
+        // upgrading: while a tower or extension site exists every upgrader
+        // runs this same builder role, so no source is "the upgrader's" and
+        // yielding would only push the builders onto the far one. Rank the
+        // upgrader's source last; the builder takes the other source and
+        // falls back to the upgrader's only when the other has no free tile.
+        const skipYield = hasPriorityBuildSites(room);
         const spawn = room.find(FIND_MY_SPAWNS)[0];
         const controller = room.controller;
         const anchor = spawn !== undefined
@@ -337,8 +374,8 @@ export function runBuilder(creep: Creep): void
             : controller !== undefined ? controller.pos : null;
         if (anchor !== null)
         {
-            let candidates = sortSourcesByDistance(sources, anchor);
-            if (controller !== undefined && sources.length > 1)
+            let candidates = sortSourcesByDistance(pool, anchor);
+            if (!skipYield && controller !== undefined && sources.length > 1)
             {
                 const upgraderSource = sortSourcesByDistance(sources, controller.pos)[0];
                 candidates = [
@@ -346,15 +383,21 @@ export function runBuilder(creep: Creep): void
                     upgraderSource,
                 ];
             }
-            // Nearest the spawn first (upgrader's source last), then the
-            // standable-tile filter: a builder that cannot stand next to its
-            // source would oscillate at the entrance (measured 50+ ticks) and
-            // harvest nothing.
-            const source = pickSourceWithStandableTile(candidates, room, creep.id);
-            if (source !== null && creep.harvest(source) === ERR_NOT_IN_RANGE)
-            {
-                moveToToward(creep, source, 1);
-            }
+            // Nearest the spawn first (upgrader's source last, when it is
+            // yielded), then the standable-tile filter: a builder that cannot
+            // stand next to its source would oscillate at the entrance
+            // (measured 50+ ticks) and harvest nothing.
+            source = pickSourceWithStandableTile(candidates, room, creep.id);
         }
+        creep.memory.sourceId = source !== null ? source.id : undefined;
+    }
+    else
+    {
+        source = latched;
+    }
+
+    if (source !== null && creep.harvest(source) === ERR_NOT_IN_RANGE)
+    {
+        moveToToward(creep, source, 1);
     }
 }

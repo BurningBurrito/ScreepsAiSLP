@@ -122,26 +122,40 @@ shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain comple
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **M4 (Hold the room, level 5) is COMPLETE** - acceptance passed 2026-10-31: 1 passing
-  (26m), towersBuilt 2 with ramparts, 30 extensions built or placed, capacity 550,
-  intruder killed in 1 tick, 0 safe-mode ticks. The second-tower fix
-  (src/managers/constructionManager.ts reserves the future tower tiles from the extension
-  and container layout) is covered by 4 regression unit tests (57 unit tests passing).
-  Scorecard, fields the M4 spec lists to watch: construction progress 4.44/tick (baseline
-  4.39), extensions and towers farther than 8 tiles 0 (unchanged), spawn idle while full
-  82 % (baseline 68 % - the run ends in a full-energy build-and-hold phase; flag for M5
-  review, not a failure).
-  Full suite verified: agent-test start all = 8 passing (1h), EXIT 0 (see Change Log).
-- **M5 (static mining with containers and haulers) next**: the hauler role already exists
-  (withdraws from containers, delivers tower -> extensions -> spawn; checkAndSpawn spawns
-  haulers once a container exists) and constructionManager computes container positions
-  beside each source and places one site at a time (placeContainerSites). Still needed per
-  milestones/M5.md: a stationary miner per source parked on its container tile, hauler
-  delivery order per spec (spawn/extensions -> controller container -> upgraders in range 1),
-  and a container-aware path in selectBuildSite while container sites exist. M5 acceptance
-  (3,000 ticks): 2 containers adjacent to 2 sources, >= 60 % of the harvest ceiling,
-  wasted-at-regen <= 15 %, upgrade >= 20 % of ceiling, no >150-tick idle spawn at full
-  energy, CPU <= 10/tick.
+- **Feedback item (2026-10-30): early-game energy usage.** Target: smoke scorecard
+  "Spawn idle while energy is full" below 20 % (baseline 100 %).
+- Baseline 2026-10-31 (smoke, 500 ticks, f606551): spawn idle while full 100 %,
+  harvested 3.46/tick, delivered to spawn/extensions 0/tick, wasted 1,000/200 ticks,
+  controller progress 0.1/tick, construction progress 7.5/tick, CPU 1.8/tick,
+  idle creep 0/200 ticks, console errors 0.
+- Why the spawn idles: at RCL 1 the store is 300 energy and the three minimum roles
+  (1 harvester + 1 builder + 1 upgrader) cost 200-300 per spawn. The upgrader's 2/tick
+  sink is slower than the harvester's ~3.5/tick delivery, so the store sits full for
+  most of the window and checkAndSpawn queues nothing (no hoarding, per owner rules).
+- Fix (feedback order): surplus spawning in checkAndSpawn while every minimum is met
+  AND the store is full (energyAvailable >= energyCapacityAvailable): (1) a second
+  harvester for the source that has no living harvester (source 2, the far pocket),
+  (2) a second upgrader - the fixed 2/tick sink that keeps the store cycling, capped
+  at 2 total - (3) a third builder while sites exist, capped at 3 total. Deliberate
+  deviation from rule 02b's builder-before-upgrader order: the upgrader is the
+  reliable energy sink and is what gets RCL 2 inside the smoke window, while a
+  builder's spend is walk-limited.
+- Plan (each one commit):
+  1. Baseline smoke - done (reports/smoke.md, numbers above).
+  2. Surplus spawning in src/managers/spawnManager.ts + caps in src/config.ts + unit
+     tests in test/unit/spawnManager.test.ts.
+  3. Smoke verification: spawn idle while full below 20 %, no other line regresses.
+  4. Full suite via agent-test start all: M1-M4 + smoke + spawnprobe green.
+  5. Docs: status.md/README update, final commit.
+- **M5 (static mining with containers and haulers): deferred** until the feedback item
+  above is green. The hauler role already exists (withdraws from containers, delivers
+  tower -> extensions -> spawn) and constructionManager computes container positions
+  beside each source and places one site at a time (placeContainerSites). Still needed
+  per milestones/M5.md: a stationary miner per source parked on its container tile,
+  hauler delivery order per spec, and a container-aware path in selectBuildSite. M5
+  acceptance (3,000 ticks): 2 containers adjacent to 2 sources, >= 60 % of the harvest
+  ceiling, wasted-at-regen <= 15 %, upgrade >= 20 % of ceiling, no >150-tick idle spawn
+  at full energy, CPU <= 10/tick. Its acceptance test is not in this copy of the repo.
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
@@ -158,12 +172,20 @@ shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain comple
 - Energy delivery issue: previous scorecard showed 72.7 energy delivered/tick vs ~3 harvested (energy going in circles) - this is now fixed by hauler changes
 
 ## Feedback acknowledged
-- Acknowledged 2026-10-22: hauler.ts makes energy go in circles - done (hauler.ts: removed withdrawal from spawn/extension)
-- Acknowledged 2026-10-22: harvester.ts drops energy too often - done (harvester.ts: fixed moveTo error handling)
-- Acknowledged 2026-10-22: builder.ts empties the spawn - done (builder.ts: only withdraws when room full)
-- Acknowledged 2026-10-22: upgrader.ts walks to controller too early - done (upgrader.ts: uses working flag)
-- Acknowledged 2026-10-22: spawnManager.ts sizes from energyAvailable - done (spawnManager.ts: uses capacity)
-- Acknowledged 2026-10-22: remove console.log calls every tick - done (main.ts, upgrader.ts, spawnManager.ts)
+- Acknowledged 2026-10-31: M4 "Hold the room (level 5)" is a new milestone - done: M4
+  green on 2026-10-31 (acceptance 1 passing, full suite 8 passing; commits 2c081e3,
+  f606551).
+- Acknowledged 2026-10-31: junk files and probe-tmp hygiene - done: probe-tmp
+  diagnostics removed and the folder gitignored (commit 2747be0); the probe-tower test
+  was deleted in the same M4 fix run.
+- Acknowledged 2026-10-31: M4 spec details (structure caps, tower priority, mode
+  switching, safe mode) - done in the M4 work (commits 2e17160, 2c081e3, f606551).
+- Acknowledged 2026-10-31: "worth fixing once M4 is green" - the spawn idles at full
+  energy in the early game - in progress in this run: surplus spawning (second
+  harvester, second upgrader, third builder) in src/managers/spawnManager.ts; target
+  smoke "Spawn idle while energy is full" below 20 % (baseline 100 %).
+- Acknowledged 2026-10-31: rules - never edit protected tests, one commit per fix with
+  scorecard numbers in the message - process rules, followed in this run.
 
 ## Concepts Explained
 - **Creep memory**: Memory structure stored in Memory.creeps[creepName] that persists creep state across ticks

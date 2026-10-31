@@ -238,7 +238,7 @@ describe("spawnManager", () => {
     assert.equal(calls.length, 0);
   });
 
-  it("does not spawn when every role is at its minimum", () => {
+  it("does not spawn when every role is at its minimum and the store is not full", () => {
     addCreeps({
       "harvester-0": {role: "harvester"},
       "harvester-1": {role: "harvester"},
@@ -247,7 +247,7 @@ describe("spawnManager", () => {
     });
     const {room, calls} = makeRoom({
       capacity: 300,
-      available: 300,
+      available: 200,
       sites: 0,
       containers: 0,
       spawning: null,
@@ -257,6 +257,9 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
+    // Minimums are met, and the surplus step (store full AND every minimum
+    // met, owner feedback 2026-10-30) does not run because the store is
+    // not full: nothing is actually sitting idle.
     assert.equal(calls.length, 0);
   });
 
@@ -530,5 +533,180 @@ describe("spawnManager", () => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0].name, "harvester-3");
     assert.equal(calls[0].memory.sourceId, "source-1");
+  });
+
+  // --- Surplus spawning (owner feedback 2026-10-30) -----------------------
+  // The minimums keep the colony alive, not busy: while every minimum is
+  // met AND the store is full, checkAndSpawn spends the idle energy on one
+  // extra creep instead of idling (the smoke scorecard's "Spawn idle while
+  // full" sat at 100 % for exactly this reason).
+
+  it("spawns a surplus harvester bound to the uncovered source when the minimums are met and the store is full", () => {
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "upgrader-1": {role: "upgrader"},
+    });
+    // Two creeps already exist, so the next name uses counter value 2.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 2;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 0,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // RCL 1 wants one harvester and one upgrader: both are alive, so the
+    // surplus step runs. Source 2 has no harvester, and a surplus harvester
+    // covers an uncovered source before any other surplus role (it is the
+    // only surplus creep that adds income instead of only spending).
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "harvester-2");
+    assert.equal(calls[0].memory.role, "harvester");
+    assert.equal(calls[0].memory.sourceId, "source-2");
+  });
+
+  it("spawns a surplus upgrader once every source is covered and the store is full", () => {
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "upgrader-2": {role: "upgrader"},
+    });
+    // Three creeps already exist, so the next name uses counter value 3.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 3;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 0,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // Both sources are covered and the minimums are met: the surplus step
+    // takes the second upgrader - the room's fixed energy sink that keeps
+    // the store cycling instead of sitting full (capped at
+    // SURPLUS_UPGRADER_MAX = 2 total).
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "upgrader-3");
+    assert.equal(calls[0].memory.role, "upgrader");
+    assert.equal(calls[0].memory.working, true);
+    assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
+  });
+
+  it("spawns a surplus builder while sites exist, once the upgrader cap is reached", () => {
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "upgrader-2": {role: "upgrader"},
+      "upgrader-3": {role: "upgrader"},
+      "builder-4": {role: "builder"},
+    });
+    // Five creeps already exist, so the next name uses counter value 5.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 5;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 2,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // Sources covered, both upgraders alive (the cap), one builder (the
+    // minimum): the surplus step adds a second builder because construction
+    // sites exist (capped at SURPLUS_BUILDER_MAX = 3 total).
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "builder-5");
+    assert.equal(calls[0].memory.role, "builder");
+  });
+
+  it("does not spawn a surplus creep while the store is not full", () => {
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "upgrader-1": {role: "upgrader"},
+    });
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 200,
+      sites: 0,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // Minimums met, but the store is not full: the surplus step only applies
+    // when energy is actually sitting unused in the store.
+    assert.equal(calls.length, 0);
+  });
+
+  it("does not spawn a surplus creep while a minimum is still missing", () => {
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+    });
+    // One creep already exists, so the next name uses counter value 1.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 1;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 0,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // The upgrader minimum (1) is not met: the main loop fills it, and the
+    // surplus step never runs - no double-spending while below minimums.
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "upgrader-1");
+    assert.equal(calls[0].memory.role, "upgrader");
+  });
+
+  it("stops spawning once every surplus cap is reached", () => {
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "upgrader-2": {role: "upgrader"},
+      "upgrader-3": {role: "upgrader"},
+      "builder-4": {role: "builder"},
+      "builder-5": {role: "builder"},
+      "builder-6": {role: "builder"},
+    });
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 2,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // Sources covered, two upgraders (the cap), three builders (the cap):
+    // the surplus step has nothing left to spend the idle energy on, so the
+    // spawn idles - correct now, because every sink is busy.
+    assert.equal(calls.length, 0);
   });
 });

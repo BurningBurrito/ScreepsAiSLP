@@ -56,7 +56,11 @@ type CallCounts = {
     lastHarvested?: string;
 };
 
-function makeBuilder(terrain: (x: number, y: number) => number, memory: Record<string, any>):
+function makeBuilder(
+    terrain: (x: number, y: number) => number,
+    memory: Record<string, any>,
+    options: { neighbours?: any[]; sites?: any[]; sources?: any[] } = {},
+):
     { creep: any; calls: CallCounts; sourceA: any; sourceB: any }
 {
     const calls: CallCounts = {};
@@ -64,6 +68,9 @@ function makeBuilder(terrain: (x: number, y: number) => number, memory: Record<s
     const sourceB = { id: "sB", energy: 500, pos: pos(39, 14) }; // open: far from the spawn
     const controller = { my: true, pos: pos(25, 25) };
     const spawn = { pos: pos(13, 20), store: { getFreeCapacity: () => 0 } };
+    const neighbours = options.neighbours ?? [];
+    const sites = options.sites ?? [];
+    const worldSources = options.sources ?? [sourceA, sourceB];
     const creep: any = {
         id: "b1",
         memory: { working: false, role: "builder", ...memory },
@@ -85,18 +92,21 @@ function makeBuilder(terrain: (x: number, y: number) => number, memory: Record<s
         room: {
             find: (type: number) => {
                 if (type === FIND_SOURCES_ACTIVE || type === FIND_SOURCES) {
-                    return [sourceA, sourceB];
+                    return worldSources;
                 }
                 if (type === FIND_MY_SPAWNS) {
                     return [spawn];
                 }
                 if (type === FIND_CREEPS) {
-                    return []; // no neighbours: every source has free tiles
+                    return neighbours; // default: no neighbours, every source has free tiles
                 }
                 if (type === FIND_MY_STRUCTURES) {
                     return [];
                 }
-                return []; // no construction sites in these tests
+                if (type === FIND_CONSTRUCTION_SITES) {
+                    return sites; // default: no construction sites
+                }
+                return [];
             },
             controller,
             getTerrain: () => ({ get: terrain }),
@@ -338,6 +348,76 @@ describe("builder", () => {
         runBuilder(creep);
 
         assert.equal(calls.lastBuilt, "ext1", "equal progress goes to the spawn-side site");
+    });
+
+    it("keeps its latched source mid-cycle instead of re-picking", () => {
+        // The builder latched the open source B last cycle. Mid-cycle the
+        // standable tiles around B fill with passing creeps: the old code
+        // re-ran pickSource every tick and would have switched camps (or
+        // idled at the entrance), trading tiles with other builders. The
+        // latch wins: the builder keeps its camp until its own cycle turns.
+        const ringAroundOpen = [
+            { pos: pos(38, 13) }, { pos: pos(39, 13) }, { pos: pos(40, 13) },
+            { pos: pos(38, 14) }, { pos: pos(40, 14) },
+            { pos: pos(38, 15) }, { pos: pos(39, 15) }, { pos: pos(40, 15) },
+        ];
+        const { creep, calls } = makeBuilder(() => 0, { working: false, sourceId: "sB" }, {
+            neighbours: ringAroundOpen,
+        });
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastHarvested, "sB", "the latch survives a mid-cycle occupancy change");
+        assert.equal(creep.memory.sourceId, "sB", "the latch is untouched");
+    });
+
+    it("re-picks the source on the tick the store empties", () => {
+        // justEmptied (working was true, the store is now empty) is the
+        // builder's cycle boundary: the latch is re-made there, so a source
+        // whose standable tiles filled up mid-cycle is released at the next
+        // cycle start - the builder re-rolls onto the free pocket source.
+        const ringAroundOpen = [
+            { pos: pos(38, 13) }, { pos: pos(39, 13) }, { pos: pos(40, 13) },
+            { pos: pos(38, 14) }, { pos: pos(40, 14) },
+            { pos: pos(38, 15) }, { pos: pos(39, 15) }, { pos: pos(40, 15) },
+        ];
+        const { creep, calls } = makeBuilder(() => 0, { working: true, sourceId: "sB" }, {
+            neighbours: ringAroundOpen,
+        });
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastHarvested, "sA", "the emptied store re-rolls the camp onto the pocket");
+        assert.equal(creep.memory.sourceId, "sA", "the new latch points at the pocket");
+    });
+
+    it("drops a latched source that vanished from the room", () => {
+        // A latch is an id, not an object: after a global reset or a source
+        // leaving vision the id must be validated against the room before it
+        // is trusted, and re-picked when it no longer resolves.
+        const { creep, calls } = makeBuilder(() => 0, { working: false, sourceId: "sA" }, {
+            sources: [{ id: "sB", energy: 500, pos: pos(39, 14) }],
+        });
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastHarvested, "sB", "a missing latched source is re-picked");
+        assert.equal(creep.memory.sourceId, "sB", "the latch now points at the live source");
+    });
+
+    it("takes the spawn-nearest source while priority sites exist", () => {
+        // While a tower or extension site is up every upgrader runs the
+        // builder role, so the pocket source is no longer the upgrader's to
+        // protect: the yield is skipped and the builder camps the fast
+        // pocket source instead of the slow open one.
+        const { creep, calls } = makeBuilder(() => 0, { working: false }, {
+            sites: [{ id: "ext1", structureType: "extension", progress: 0, pos: pos(14, 20) }],
+        });
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastHarvested, "sA", "no yield while the upgrader is building");
+        assert.equal(creep.memory.sourceId, "sA", "the pocket source is latched");
     });
 });
 
