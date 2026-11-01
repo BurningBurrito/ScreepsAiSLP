@@ -275,8 +275,15 @@ describe("builder", () => {
         // builder must withdraw once the room holds at least
         // BUILDER_WITHDRAW_FRACTION of its capacity (0.5 x 300 = 150 here)
         // instead of walking to a distant source to self-harvest (the
-        // regression that dropped construction to 0.19/tick).
+        // regression that dropped construction to 0.19/tick). The hold-back
+        // only applies while the upgrader is missing, so an upgrader is
+        // alive here.
         const { creep, calls } = makeBuilder(() => 0, { working: false });
+        // @ts-ignore : give the room an upgrader so the hold-back does not
+        // apply. Replace the creeps object on the CLONE (lodash's clone is
+        // shallow: mutating creeps in place would leak into the shared mock
+        // and pollute the next test).
+        global.Game.creeps = { u1: { memory: { role: "upgrader" } } };
         creep.room.energyAvailable = 200; // above the 150 floor
         const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
         spawn.store.getFreeCapacity = () => 50; // the spawn can accept energy
@@ -287,6 +294,28 @@ describe("builder", () => {
 
         assert.equal(withdrew, 1, "the builder withdraws from the room above the floor");
         assert.equal(calls.harvest ?? 0, 0, "the builder does not self-harvest when it can withdraw");
+    });
+
+    it("holds back its withdrawal while the upgrader minimum is unmet", () => {
+        // The upgrader's body costs the whole RCL 1 capacity (300), so the
+        // 50% withdrawal floor would pin the store below its spawn cost and
+        // the first upgrader would never spawn (smoke-test regression of
+        // 2026-11-01). While no upgrader is alive the builder must not touch
+        // the room's energy - not even above the floor - and must
+        // self-harvest instead, letting the store climb to the upgrader's
+        // body cost.
+        const { creep, calls } = makeBuilder(() => 0, { working: false });
+        assert.equal(Object.keys(global.Game.creeps).length, 0, "no creeps alive yet");
+        creep.room.energyAvailable = 200; // above the 150 floor
+        const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
+        spawn.store.getFreeCapacity = () => 50; // the spawn can accept energy
+        let withdrew = 0;
+        creep.withdraw = () => { withdrew += 1; return OK; };
+
+        runBuilder(creep);
+
+        assert.equal(withdrew, 0, "the builder does not withdraw while the upgrader is missing");
+        assert.equal(calls.harvest, 1, "the builder self-harvests instead, keeping the store free");
     });
 
     it("falls back to the upgrader's source when the other has no free tile", () => {
@@ -425,17 +454,18 @@ describe("builder", () => {
     });
 
     it("takes the spawn-nearest source while priority sites exist", () => {
-        // While a tower or extension site is up every upgrader runs the
-        // builder role, so the pocket source is no longer the upgrader's to
-        // protect: the yield is skipped and the builder camps the fast
-        // pocket source instead of the slow open one.
+        // M5: the upgrader now runs the builder role only while a tower
+        // site is up (extensions and roads no longer pause it), so the
+        // "no source is the upgrader's to protect" yield-skip applies
+        // only to towers: the builder camps the fast pocket source
+        // instead of the slow open one.
         const { creep, calls } = makeBuilder(() => 0, { working: false }, {
-            sites: [{ id: "ext1", structureType: "extension", progress: 0, pos: pos(14, 20) }],
+            sites: [{ id: "tower1", structureType: "tower", progress: 0, pos: pos(14, 20) }],
         });
 
         runBuilder(creep);
 
-        assert.equal(calls.lastHarvested, "sA", "no yield while the upgrader is building");
+        assert.equal(calls.lastHarvested, "sA", "no yield while the upgrader is building the tower");
         assert.equal(creep.memory.sourceId, "sA", "the pocket source is latched");
     });
 });

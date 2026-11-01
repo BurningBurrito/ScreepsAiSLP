@@ -14,8 +14,9 @@ const MOVE = "move";
 // These numeric values match the real engine constants (see the type
 // definitions); the mock does not declare them, so the tests install them.
 const FIND_MY_SPAWNS = 112;
-const FIND_CONSTRUCTION_SITES = 105;
+const FIND_CONSTRUCTION_SITES = 111;
 const FIND_STRUCTURES = 107;
+const FIND_SOURCES = 105;
 const FIND_SOURCES_ACTIVE = 104;
 const BODYPART_COST = {work: 100, carry: 50, move: 50};
 
@@ -68,6 +69,7 @@ describe("spawnManager", () => {
     global.FIND_MY_SPAWNS = FIND_MY_SPAWNS; // @ts-ignore
     global.FIND_CONSTRUCTION_SITES = FIND_CONSTRUCTION_SITES; // @ts-ignore
     global.FIND_STRUCTURES = FIND_STRUCTURES; // @ts-ignore
+    global.FIND_SOURCES = FIND_SOURCES; // @ts-ignore
     global.FIND_SOURCES_ACTIVE = FIND_SOURCES_ACTIVE; // @ts-ignore
     global.STRUCTURE_CONTAINER = "container"; // @ts-ignore
     global.BODYPART_COST = BODYPART_COST; // @ts-ignore
@@ -115,9 +117,34 @@ describe("spawnManager", () => {
         if (type === FIND_MY_SPAWNS) return options.noSpawn ? [] : [spawn];
         if (type === FIND_CONSTRUCTION_SITES) return new Array(options.sites === undefined ? 0 : options.sites).fill(0);
         if (type === FIND_STRUCTURES) {
-          return new Array(options.containers === undefined ? 0 : options.containers).fill({structureType: "container"});
+          const count = options.containers === undefined ? 0 : options.containers;
+          // Each mock container sits on the tile next to the source at the
+          // same index (Chebyshev distance 1), so the source-split logic in
+          // minCreepsPerRole sees a container on that source and none on the
+          // rest. getRangeTo mirrors the engine's Chebyshev metric.
+          return Array.from({length: count}, (_, i) => {
+            const src = sources[i] === undefined ? sources[0] : sources[i];
+            const cx = src.pos.x + 1;
+            const cy = src.pos.y;
+            return {
+              structureType: "container",
+              pos: {
+                x: cx,
+                y: cy,
+                // The engine's getRangeTo accepts a RoomPosition OR any
+                // object that carries a pos (line 4788 of the types) - the
+                // spawn manager passes a whole Source, so unwrap .pos when
+                // present. Mirrors the engine's Chebyshev metric.
+                getRangeTo: (other: {x?: number; y?: number; pos?: {x: number; y: number}}) => {
+                  const tx = other.pos !== undefined ? other.pos.x : (other.x ?? 0);
+                  const ty = other.pos !== undefined ? other.pos.y : (other.y ?? 0);
+                  return Math.max(Math.abs(tx - cx), Math.abs(ty - cy));
+                },
+              },
+            };
+          });
         }
-        if (type === FIND_SOURCES_ACTIVE) {
+        if (type === FIND_SOURCES_ACTIVE || type === FIND_SOURCES) {
           return sources;
         }
         return [];
@@ -293,15 +320,17 @@ describe("spawnManager", () => {
   });
 
   it("spawns a hauler once a container exists and haulers are below minimum", () => {
+    // M5: the container'd source is now served by a stationary miner, so the
+    // miner minimum is met here (miner-3) and the spawn falls through to the
+    // hauler - the role that only exists once a container is built.
     addCreeps({
-      "harvester-0": {role: "harvester"},
-      "harvester-1": {role: "harvester"},
-      "harvester-2": {role: "harvester"},
-      "upgrader-3": {role: "upgrader"},
+      "harvester-0": {role: "harvester", sourceId: "source-2"},
+      "miner-1": {role: "miner", sourceId: "source-1"},
+      "upgrader-2": {role: "upgrader"},
     });
-    // Four creeps already exist, so the next name uses counter value 4.
+    // Three creeps already exist, so the next name uses counter value 3.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 4;
+    (global as any).Memory.creepCounter = 3;
     const {room, calls} = makeRoom({
       capacity: 300,
       available: 300,
@@ -315,20 +344,24 @@ describe("spawnManager", () => {
     checkAndSpawn(room);
 
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "hauler-4");
+    assert.equal(calls[0].name, "hauler-3");
     assert.equal(calls[0].memory.role, "hauler");
     assert.deepEqual(calls[0].body, [CARRY, CARRY, MOVE, MOVE]);
   });
 
-  it("scales the harvester minimum with the controller level (RCL 2 wants three)", () => {
+  it("spawns one harvester per container-less source (the M5 source-state split)", () => {
+    // M5: the source-worker minimum is no longer the level table row - it is
+    // one worker per source, and the worker's role depends on the source's
+    // state. Both sources here are container-less, so both want a harvester;
+    // only one is alive, and harvesters come before builders in the spawn
+    // order.
     addCreeps({
-      "harvester-0": {role: "harvester"},
-      "harvester-1": {role: "harvester"},
-      "upgrader-2": {role: "upgrader"},
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "upgrader-1": {role: "upgrader"},
     });
-    // Three creeps already exist, so the next name uses counter value 3.
+    // Two creeps already exist, so the next name uses counter value 2.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 3;
+    (global as any).Memory.creepCounter = 2;
     const {room, calls} = makeRoom({
       capacity: 300,
       available: 300,
@@ -342,25 +375,24 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
-    // Two of the three RCL 2 harvesters are alive, and harvesters come
-    // before builders in the spawn order (owner rule #5).
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "harvester-3");
+    assert.equal(calls[0].name, "harvester-2");
     assert.equal(calls[0].memory.role, "harvester");
   });
 
-  it("scales the harvester minimum with the controller level (RCL 3 wants five)", () => {
+  it("spawns one harvester per container-less source, even at RCL 3", () => {
+    // M5: the source-worker minimum is one per source, not the level row.
+    // Both sources are container-less, so both want a harvester; only one is
+    // alive. Harvesters come before builders in the spawn order, so the
+    // missing harvester spawns even though a builder slot is also open.
     addCreeps({
-      "harvester-0": {role: "harvester"},
-      "harvester-1": {role: "harvester"},
-      "harvester-2": {role: "harvester"},
-      "harvester-3": {role: "harvester"},
-      "upgrader-4": {role: "upgrader"},
-      "builder-5": {role: "builder"},
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "upgrader-1": {role: "upgrader"},
+      "builder-2": {role: "builder"},
     });
-    // Six creeps already exist, so the next name uses counter value 6.
+    // Three creeps already exist, so the next name uses counter value 3.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 6;
+    (global as any).Memory.creepCounter = 3;
     const {room, calls} = makeRoom({
       capacity: 300,
       available: 300,
@@ -374,20 +406,23 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
-    // Four of the five RCL 3 harvesters are alive; the missing one spawns
-    // even though a builder slot is also open (harvesters first).
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "harvester-6");
+    assert.equal(calls[0].name, "harvester-3");
     assert.equal(calls[0].memory.role, "harvester");
   });
 
-  it("keeps the bootstrap queue short at RCL 1: no second harvester, builder next", () => {
+  it("keeps the bootstrap queue short at RCL 1: both sources covered, builder next", () => {
+    // M5: one source worker per container-less source, so both sources need
+    // a harvester at bootstrap. With both covered the builder is next, so the
+    // upgrader follows right behind and can show controller progress within
+    // the smoke test's 500 ticks.
     addCreeps({
-      "harvester-0": {role: "harvester"},
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
     });
-    // One creep already exists, so the next name uses counter value 1.
+    // Two creeps already exist, so the next name uses counter value 2.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 1;
+    (global as any).Memory.creepCounter = 2;
     const {room, calls} = makeRoom({
       capacity: 300,
       available: 300,
@@ -401,11 +436,9 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
-    // The RCL 1 row wants one harvester (alive) and one builder (none):
-    // the builder is next, so the upgrader follows right behind and can
-    // show controller progress within the smoke test's 500 ticks.
+    // Both sources are covered, so the builder is next.
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "builder-1");
+    assert.equal(calls[0].name, "builder-2");
     assert.equal(calls[0].memory.role, "builder");
     assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
   });
@@ -472,17 +505,16 @@ describe("spawnManager", () => {
   }
 
   it("keeps a new harvester off a pocket source whose standable tiles are full", () => {
-    // source-1 is a pocket with exactly two standable tiles, and both are
-    // taken by harvesters already assigned to it. source-2 is open ground.
+    // source-1 is a pocket with exactly two standable tiles, and one
+    // harvester is already assigned to it. source-2 is open ground. Both
+    // sources are container-less, so the missing source-worker slot must go
+    // to the open source-2, not the pocket.
     addCreeps({
       "harvester-0": {role: "harvester", sourceId: "source-1"},
-      "harvester-1": {role: "harvester", sourceId: "source-1"},
-      "harvester-2": {role: "harvester", sourceId: "source-2"},
-      "harvester-3": {role: "harvester", sourceId: "source-2"},
     });
-    // Four creeps already exist, so the next name uses counter value 4.
+    // One creep already exists, so the next name uses counter value 1.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 4;
+    (global as any).Memory.creepCounter = 1;
     const {room, calls} = makeRoom({
       capacity: 300,
       available: 300,
@@ -496,12 +528,13 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
-    // RCL 3 wants five harvesters, so the fifth spawns. The pocket's score
-    // is 2 standable - 2 assigned = 0, the open source's 8 - 2 = 6: the new
-    // harvester must not be sent to a source it could never stand next to
-    // (it would oscillate at the pocket entrance instead of harvesting).
+    // The pocket's score is 2 standable - 1 assigned = 1, the open source's
+    // 8 - 0 = 8: the new harvester must not be sent to a source it could
+    // never stand next to (it would oscillate at the pocket entrance instead
+    // of harvesting).
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "harvester-4");
+    assert.equal(calls[0].name, "harvester-1");
+    assert.equal(calls[0].memory.role, "harvester");
     assert.equal(calls[0].memory.sourceId, "source-2");
   });
 
@@ -657,12 +690,17 @@ describe("spawnManager", () => {
   });
 
   it("does not spawn a surplus creep while a minimum is still missing", () => {
+    // M5: both sources are container-less, so both need a harvester. With
+    // both covered the upgrader minimum (1) is the missing one: the main
+    // loop fills it, and the surplus step never runs - no double-spending
+    // while below minimums.
     addCreeps({
       "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
     });
-    // One creep already exists, so the next name uses counter value 1.
+    // Two creeps already exist, so the next name uses counter value 2.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 1;
+    (global as any).Memory.creepCounter = 2;
     const {room, calls} = makeRoom({
       capacity: 300,
       available: 300,
@@ -678,7 +716,7 @@ describe("spawnManager", () => {
     // The upgrader minimum (1) is not met: the main loop fills it, and the
     // surplus step never runs - no double-spending while below minimums.
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "upgrader-1");
+    assert.equal(calls[0].name, "upgrader-2");
     assert.equal(calls[0].memory.role, "upgrader");
   });
 

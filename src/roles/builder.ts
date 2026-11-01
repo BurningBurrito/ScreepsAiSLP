@@ -12,6 +12,16 @@
  *   completely full and the full-room gate starved the builders into the
  *   far-source self-harvest loop - see config.ts for the numbers.)
  *
+ *   Upgrader hold-back: while fewer upgraders are alive than the minimum
+ *   (upgraderBelowMinimum in managers/spawnManager), the builder does not
+ *   withdraw at any store level - the room's energy belongs to the next
+ *   upgrader spawn. The upgrader's body costs the whole RCL 1 capacity
+ *   (300), and the 50% withdrawal floor pins the store below that, so
+ *   without the hold-back the first upgrader never spawns and the smoke
+ *   test's controller-progress criterion fails (run of 2026-11-01). The
+ *   builder self-harvests during the window, exactly like the original
+ *   full-room gate; once the upgrader is alive the floor applies again.
+ *
  * Build priority (M4):
  *   1. In defend or war mode, rampart sites: the shield the spawn and the
  *      towers sit behind is finished before anything else, tower site
@@ -23,12 +33,16 @@
  *   3. Rampart sites (peace): one on the spawn's tile and one on each
  *      finished tower's tile. Each costs only 300 energy for 10,000 hits -
  *      cheap insurance, and the M4 spec puts them right after the towers.
- *   4. Extension sites, all builders on ONE of them: the most advanced
+ *   4. Container sites (M5): the first container is what unlocks the
+ *      stationary miner, so it is the economy's bottleneck and gets the
+ *      whole crew's attention. The list is empty in bootstrap (no container
+ *      site at RCL 1), so the M1/M2 order is untouched there; from RCL 2 on
+ *      the container is finished before the extension queue resumes.
+ *   5. Extension sites, all builders on ONE of them: the most advanced
  *      (highest build progress, ties broken by closeness to the spawn).
  *      The room state is shared, so every builder computes the same focus
  *      without any memory - and the choice survives a global reset.
- *   5. Road sites.
- *   6. Container sites.
+ *   6. Road sites.
  *
  *   The tower used to share its class with the extensions ("closest
  *   priority site wins"), and that is exactly how it starved in the first
@@ -46,13 +60,13 @@
  *   extension was still more than 2,000 energy short at the end of the
  *   window. One shared focus per extension fixes that.
  *
- *   Roads sit above containers because that is the only moment they get
- *   built at all: in bootstrap (no tower or extension site yet) the first
- *   finished road is what M2 measures within 3,000 ticks of an RCL 1 start,
- *   and while priority sites exist, builders never reach the road list -
- *   the 3,000-energy extension sites keep them busy for the whole M3 window.
- *   Containers are the long-term fallback; M4 redesigns logistics around
- *   them and revisits this order.
+ *   Roads sit at the bottom: in bootstrap (no tower, container, or
+ *   extension site yet) the first finished road is what M2 measures within
+ *   3,000 ticks of an RCL 1 start, and while priority sites exist, builders
+ *   never reach the road list - the 3,000-energy extension sites keep them
+ *   busy for the whole M3 window. Containers now lead the queue from RCL 2
+ *   on (M5): they are what unlocks the stationary miner, so they are the
+ *   long-term fallback no longer - they are the next step.
  *
  * With no sites left, a builder upgrades the controller instead of idling
  * (an idle creep is a bug).
@@ -88,6 +102,7 @@
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
 import { BUILDER_WITHDRAW_FRACTION } from "config";
 import { moveToToward } from "utils/movement";
+import { upgraderBelowMinimum } from "managers/spawnManager";
 
 /**
  * Selects the next construction site for a builder.
@@ -159,6 +174,18 @@ function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
         return rampart;
     }
 
+    // M5: containers come before extensions and roads. The first container
+    // is what unlocks the stationary miner (the M5 milestone), so it is the
+    // economy's bottleneck and gets the whole crew's attention. At RCL 1 the
+    // construction manager has not placed any container site yet, so this
+    // branch is empty in bootstrap and the M1/M2 order is untouched; from
+    // RCL 2 on the container is finished before the extension queue resumes.
+    const containerSites = sitesOf(STRUCTURE_CONTAINER);
+    if (containerSites.length > 0)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
+    }
+
     // Extensions: the whole crew works ONE site at a time - the most
     // advanced one (highest build progress; a tie goes to the site closest
     // to the spawn). All builders see the same progress numbers, so they
@@ -178,38 +205,34 @@ function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
         )[0];
     }
 
-    // Roads come before containers: in bootstrap (no tower or extension
-    // site) the first finished road is what M2 measures within 3,000 ticks
-    // of an RCL 1 start, and while priority sites exist builders never
-    // reach this list again. Containers are the long-term fallback (M4).
+    // Roads come after containers and extensions: in bootstrap (no tower or
+    // container or extension site) the first finished road is what M2
+    // measures within 3,000 ticks of an RCL 1 start, and while priority
+    // sites exist builders never reach this list again.
     const roadSites = sitesOf(STRUCTURE_ROAD);
     if (roadSites.length > 0)
     {
         return creep.pos.findClosestByPath<ConstructionSite>(roadSites);
     }
 
-    const containerSites = sitesOf(STRUCTURE_CONTAINER);
-    if (containerSites.length > 0)
-    {
-        return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
-    }
-
     return null;
 }
 
 /**
- * Checks whether the room has a priority build site: an unfinished tower or
- * extension. The upgrader uses this to pause RCL work and help building
- * instead (see upgrader.ts), so the WORK energy goes into the structures
- * the milestone actually needs rather than into the controller.
+ * Checks whether the room has a build site that should pause the upgrader:
+ * an unfinished tower. The upgrader's WORK parts belong to the tower while it
+ * is still a site (M3: the 5,000-energy tower must finish inside the test
+ * window, and a fourth builder is the difference). From M5 on the upgrader
+ * resumes upgrading for every other site type (extension, container, road):
+ * the colony's long-term growth is RCL, and the M5 test measures controller
+ * progress per tick - pausing for the extension queue would stall it.
  * @param room The room to search
- * @returns True when at least one tower or extension site exists
+ * @returns True when at least one tower site exists
  */
 export function hasPriorityBuildSites(room: Room): boolean
 {
     return room.find(FIND_CONSTRUCTION_SITES).some(
-        (site) => site.structureType === STRUCTURE_TOWER
-            || site.structureType === STRUCTURE_EXTENSION,
+        (site) => site.structureType === STRUCTURE_TOWER,
     );
 }
 
@@ -312,7 +335,13 @@ export function runBuilder(creep: Creep): void
     // (construction 3.11 -> 0.19/tick). The floor still leaves enough energy
     // for the spawn to queue a minimum-crew respawn between delivery ticks
     // (owner rule #3, relaxed - see config.ts for the numbers).
-    if (room.energyAvailable >= room.energyCapacityAvailable * BUILDER_WITHDRAW_FRACTION)
+    //
+    // The upgrader hold-back wins over the floor: while the upgrader minimum
+    // is unmet, the room's energy is left alone so the store can reach the
+    // upgrader's body cost (see the file header). The builder refuels from a
+    // source itself instead, which never blocks the spawn.
+    const holdingForUpgrader = upgraderBelowMinimum(room);
+    if (!holdingForUpgrader && room.energyAvailable >= room.energyCapacityAvailable * BUILDER_WITHDRAW_FRACTION)
     {
         const spawns = room.find(FIND_MY_SPAWNS);
         for (const spawn of spawns)

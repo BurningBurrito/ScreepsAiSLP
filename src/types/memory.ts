@@ -7,7 +7,7 @@ declare global {
   /**
    * Role type definition for creep roles
    */
-  type Role = "harvester" | "upgrader" | "builder" | "hauler" | "defender";
+  type Role = "harvester" | "upgrader" | "builder" | "hauler" | "defender" | "miner";
 
   /**
    * The colony-wide threat state (M4). 'peace' is the default, 'defend' is

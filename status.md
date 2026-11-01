@@ -26,10 +26,72 @@ computed up front and the road network plus every future tower tile is reserved 
 excludeTiles) to computeExtensionPositions and computeContainerPositions; placeTowerSites
 still places one site at a time. Regression test test/unit/constructionManager.test.ts
 (4 tests) fails without the fix and passes with it; 57 unit tests pass; smoke (500 ticks)
-shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain complete. Full suite verified the same day: agent-test start all (M1-M4 acceptance + smoke + spawnprobe) = 8 passing (1h), EXIT 0, re-confirming the M4 snapshot in-run (towersBuilt 2, towersWithRampart 2, extensionsBuilt 5 + extensionSites 25, energyCapacity 550, maxTowerEnergy 540, firstHostile/firstDefend 5401, intruderGoneAfterTicks 1, safeModeTicks 0, 10 creeps, 0 console errors). M5
-(static mining with containers and haulers) is next.
+shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain complete. Full suite verified the same day: agent-test start all (M1-M4 acceptance + smoke + spawnprobe) = 8 passing (1h), EXIT 0, re-confirming the M4 snapshot in-run (towersBuilt 2, towersWithRampart 2, extensionsBuilt 5 + extensionSites 25, energyCapacity 550, maxTowerEnergy 540, firstHostile/firstDefend 5401, intruderGoneAfterTicks 1, safeModeTicks 0, 10 creeps, 0 console errors).
+M5 (static mining with containers and haulers) is implemented and its smoke failure is
+fixed (2026-11-01): a stationary miner role per source (src/roles/miner.ts), M5
+source-state spawn minimums in src/managers/spawnManager.ts (miners where a container is
+built, bootstrap harvesters elsewhere, haulers once a container exists), and a
+container-first branch in selectBuildSite (src/roles/builder.ts). The smoke test's
+controller-progress criterion failed before the fix because the builder's 50 % withdrawal
+floor pinned the store below the upgrader's 300-energy body cost (the whole RCL 1
+capacity), so the upgrader never spawned in 500 ticks. The fix (upgrader hold-back in
+src/roles/builder.ts, upgraderBelowMinimum in src/managers/spawnManager.ts): while fewer
+upgraders are alive than the minimum, the builder does not withdraw at any store level and
+self-harvests instead, so the store can reach the upgrader's cost; once the upgrader is
+alive the floor applies again. Smoke now passes (1 passing, 2m, 0 console errors):
+controller progress 0.1 -> 0.25/tick (50 total at tick 500), harvested 3.3 -> 3.86/tick,
+construction 3.75 -> 2.01/tick (builders self-harvest during the hold-back window and the
+window's build energy now goes to the container site - 401 - instead of roads, the M5
+bottleneck), spawn idle while full 0 % -> 1 %, CPU 1.39 -> 1.52/tick, creep idle
+8 % -> 22 % (under investigation, see Known Issues). 69 unit tests pass. The M5
+acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
+(test/integration holds acceptance-m1..m4 only), so M5 is not ticked in Upcoming Features
+yet.
 
 ## Change Log
+### 2026-11-01 (M5 static mining implemented; M5 smoke failure fixed with upgrader hold-back)
+- **M5 implementation (from the previous run, verified green this run):**
+  - New src/roles/miner.ts: a stationary miner per source. Parked on (or next to) the
+    container tile beside its source, it only harvests; energy it cannot carry drops into
+    the container. Before any container exists it falls back to harvesting at the source
+    (bootstrap-compatible). Dispatched by role in src/main.ts.
+  - src/managers/spawnManager.ts: M5 spawn minimums are source-state aware - a source with
+    a finished container wants a miner, a source without one wants a bootstrap harvester,
+    and a hauler is spawned once any container exists. MIN_UPGRADERS_BY_LEVEL is exposed to
+    the builder through upgraderBelowMinimum (see below).
+  - src/roles/builder.ts: selectBuildSite gained a container-first branch (M5 priority:
+    containers are the stage-2 bottleneck, built before extensions and roads) and
+    hasPriorityBuildSites for the upgrader's tower-site pause.
+  - src/roles/hauler.ts delivery order per M5 spec (containers -> tower -> extensions ->
+    spawn); src/roles/harvester.ts keeps feeding containers while they are being built.
+  - src/config.ts: MIN_HAULERS (1), MIN_UPGRADERS_BY_LEVEL (RCL 1-2: 1), body templates.
+- **M5 smoke failure, root cause:** the smoke test asserts controller progress > 0 within
+  500 ticks. Before the fix the upgrader never spawned: at RCL 1 the room capacity is 300
+  and the upgrader body ([WORK, WORK, CARRY, MOVE]) costs 300, but the builder's 50 %
+  withdrawal floor (added 2026-10-31 for construction rate) drained the store to ~146-196,
+  and spawn priorities (harvester -> builder -> upgrader) meant the 300-energy upgrader was
+  never queued. Measured (failed smoke, 32706ac): controller progress 0.1/tick, RCL
+  1/progress 50 at tick 500, creeps at end builder 1 + harvester 2.
+- **Fix (upgrader hold-back, src/roles/builder.ts + src/managers/spawnManager.ts):**
+  while upgraderBelowMinimum(room) (alive upgraders < MIN_UPGRADERS_BY_LEVEL[RCL]), the
+  builder's withdraw gate is skipped at every store level, so the builder self-harvests and
+  the store is allowed to fill to the upgrader's cost; once an upgrader is alive the 50 %
+  floor applies again and construction resumes at the old rate.
+- **Tests:** test/unit/builder.test.ts - the withdraw test now mocks an alive upgrader
+  (Game.creeps replaced, not mutated, to avoid cross-test pollution through the shared
+  reference) and a new test covers the hold-back (upgrader minimum unmet -> builder does
+  not withdraw even at a full store). 69 unit tests pass; lint and build clean.
+- **Smoke scorecard (500 ticks, this commit vs the failed run 32706ac):** 1 passing (2m),
+  0 console errors. Controller progress 0.1 -> 0.25/tick (50 total at tick 500),
+  harvested 3.3 -> 3.86/tick, delivered 3.1 -> 3.5/tick, wasted 1.2 -> 1.3/tick,
+  construction 3.75 -> 2.01/tick, spawn idle while full 0 % -> 1 %, CPU 1.39 -> 1.52/tick
+  (max 22.28 -> 20.35), creep idle 8 % -> 22 %, creeps at end 3 -> 6 (builder 2,
+  harvester 2, upgrader 2), build energy in window: road 1194 -> container 401.
+  Interpretation: the construction drop is the intended hold-back trade (builders
+  self-harvest for ~150 ticks until the first upgrader, and only one builder is active in
+  the last-200-tick window); the build energy now goes to the container site, which is the
+  structure M5's acceptance test actually requires. The idle rise is under investigation
+  (Known Issues).
 ### 2026-10-31 (construction-rate regression fixed: builder withdrawal floor)
 - **Root cause of the construction-rate regression (3.11 -> 0.19/tick):** the
   builder's energy withdrawal was gated on the room being completely full
@@ -149,56 +211,58 @@ shows 0 console errors and no scorecard regressions. M1, M2 and M3 remain comple
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **Feedback item (2026-10-30): early-game energy usage.** Target: smoke scorecard
-  "Spawn idle while energy is full" below 20 % (baseline 100 %).
-- Baseline 2026-10-31 (smoke, 500 ticks, f606551): spawn idle while full 100 %,
-  harvested 3.46/tick, delivered to spawn/extensions 0/tick, wasted 1,000/200 ticks,
-  controller progress 0.1/tick, construction progress 7.5/tick, CPU 1.8/tick,
-  idle creep 0/200 ticks, console errors 0.
-- Why the spawn idles: at RCL 1 the store is 300 energy and the three minimum roles
-  (1 harvester + 1 builder + 1 upgrader) cost 200-300 per spawn. The upgrader's 2/tick
-  sink is slower than the harvester's ~3.5/tick delivery, so the store sits full for
-  most of the window and checkAndSpawn queues nothing (no hoarding, per owner rules).
-- Fix (feedback order): surplus spawning in checkAndSpawn while every minimum is met
-  AND the store is full (energyAvailable >= energyCapacityAvailable): (1) a second
-  harvester for the source that has no living harvester (source 2, the far pocket),
-  (2) a second upgrader - the fixed 2/tick sink that keeps the store cycling, capped
-  at 2 total - (3) a third builder while sites exist, capped at 3 total. Deliberate
-  deviation from rule 02b's builder-before-upgrader order: the upgrader is the
-  reliable energy sink and is what gets RCL 2 inside the smoke window, while a
-  builder's spend is walk-limited.
-- Plan (each one commit):
-  1. Baseline smoke - done (reports/smoke.md, numbers above).
-  2. Surplus spawning in src/managers/spawnManager.ts + caps in src/config.ts + unit
-     tests in test/unit/spawnManager.test.ts.
-  3. Smoke verification: spawn idle while full below 20 % - DONE (0 %, baseline 100
-     %). The surplus spawning had regressed construction to 0.19/tick (builder
-     withdrawal gated on the room being completely full); fixed with the
-     BUILDER_WITHDRAW_FRACTION (0.5) floor in src/roles/builder.ts + src/config.ts.
-     Construction recovered to 3.75/tick (was 0.19, baseline 3.11), creep idle 8 %
-     (was 23 %). See the Change Log entry for the full scorecard.
-  4. Full suite via agent-test start all: M1-M4 + smoke + spawnprobe green.
-  5. Docs: status.md/README update, final commit.
-- **M5 (static mining with containers and haulers): deferred** until the feedback item
-  above is green. The hauler role already exists (withdraws from containers, delivers
-  tower -> extensions -> spawn) and constructionManager computes container positions
-  beside each source and places one site at a time (placeContainerSites). Still needed
-  per milestones/M5.md: a stationary miner per source parked on its container tile,
-  hauler delivery order per spec, and a container-aware path in selectBuildSite. M5
-  acceptance (3,000 ticks): 2 containers adjacent to 2 sources, >= 60 % of the harvest
-  ceiling, wasted-at-regen <= 15 %, upgrade >= 20 % of ceiling, no >150-tick idle spawn
-  at full energy, CPU <= 10/tick. Its acceptance test is not in this copy of the repo.
+- **M5 (static mining with containers and haulers): smoke fixed, full-suite verification next.**
+  Plan (each one commit):
+  1. M5 core (miner role, source-state spawn minimums, container-first build priority) -
+     done in the previous run, uncommitted; verified green this run (lint, build, 69 unit
+     tests).
+  2. Fix the M5 smoke failure (controller progress > 0 in 500 ticks) - DONE: upgrader
+     hold-back in src/roles/builder.ts + upgraderBelowMinimum in
+     src/managers/spawnManager.ts. Smoke 1 passing (2m), 0 console errors; controller
+     progress 0.1 -> 0.25/tick. Scorecard details in the 2026-11-01 Change Log entry.
+  3. agent-test start all (M1-M4 acceptance + smoke + spawnprobe + integration) to prove
+     the hold-back regressed nothing; compare the spawnprobe scorecard against the
+     pre-fix baseline (2026-11-01, 700 ticks, 32706ac): harvested 3.9/tick, controller
+     progress 0.18/tick, construction 0/tick (no sites in that probe window), CPU
+     1.44/tick, creep idle 6 %, spawn idle while full 0 %.
+  4. Docs + final commit.
+- M5 acceptance (owner's, 3,000 ticks): 2 containers adjacent to 2 sources, >= 60 % of the
+  harvest ceiling, wasted-at-regen <= 15 %, upgrade >= 20 % of ceiling, no >150-tick idle
+  spawn at full energy, CPU <= 10/tick. Its acceptance test is not in this copy of the
+  repo (test/integration holds acceptance-m1..m4 only), so M5 stays unchecked in Upcoming
+  Features until the owner's test can be run.
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
 - [x] M1: basic economy and creep management (completed)
 - [x] M3: build priorities, layout and a tower (completed 2026-10-30, acceptance 1 passing)
 - [x] M4: Hold the room (level 5) - towers, ramparts, defend mode (completed 2026-10-31, acceptance 1 passing)
-- [ ] M5: static mining with containers and haulers
+- [ ] M5: static mining with containers and haulers (implemented, smoke green 2026-11-01; owner's acceptance test not in this repo copy)
 - [ ] CPU profiling and path caching (former M5, before the M4 renumber)
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
 
 ## Known Issues / Notes
+- **Creep idle rose 8 % -> 22 % in the 500-tick smoke window (2026-11-01, post
+  upgrader-hold-back).** The scorecard counts a creep tick as idle after 5+ consecutive
+  ticks with no action event and no position change. The window is the last 200 ticks,
+  and in this run the second builder and second upgrader spawn near its end (timeline:
+  builder 2 and upgrader 2 first appear at tick 500, store pinned at 2/300 while the
+  spawns process), while pre-fix only 3 creeps existed the whole window. My read: the
+  late-window new creeps plus the store cycling 300 -> 2 on spawn costs (versus the
+  pre-fix steady 146-196) create more stand-still stretches, e.g. a harvester arriving
+  at a full spawn while the builder is away self-harvesting (store below the 150
+  withdraw floor). Not yet decomposed per creep - the full suite's 700-tick spawnprobe
+  (pre-fix baseline: idle 6 %) is the next measurement. If it stays in the single digits
+  the 22 % is a short-window artifact of the late spawns; if it jumps, dig in with the
+  per-tick creep status the scorecard already records (this.creepStatus in
+  test/integration/scorecard.ts).
+- **Construction 3.75 -> 2.01/tick in the same window (2026-11-01):** intended hold-back
+  trade, not a regression to fix - builders self-harvest while the upgrader minimum is
+  unmet (~tick 150-300) and only one builder is active in the last-200-tick window. The
+  window's build energy now goes to the container site (401, 100 % of build energy)
+  instead of roads (pre-fix: 1194 on roads, 0 on the container), which is the structure
+  M5's acceptance test requires. RCL 2 (energy capacity 800) re-opens the builder's
+  withdraw path with a 400-energy floor, so the rate should recover in longer runs.
 - **Decision (2026-10-24): three builders, not the two rule 02b suggests.** The M3 acceptance test needs tower (5,000) + 3 extensions (9,000) finished inside 4,000 ticks of an RCL 3 start; measured ~1.75 progress/tick per builder, two builders cannot make that window. The M3 test (owner's acceptance criteria) wins over the 02b guideline; noted in the MIN_CREEPS_BY_LEVEL comment in src/config.ts.
 - **Decision (2026-10-24): containers are the lowest build priority.** With roads above containers, a bootstrap colony finishes the first road before it touches the container site. That is what M2 (a finished road within 3,000 ticks of an RCL 1 start) requires. The trade-off is visible for M4, which needs containers adjacent to both sources by tick 3,000: when M4 work starts, selectBuildSite in builder.ts must gain a container-first path for the stage-2 economy (M4 spec redesigns the spawn manager into a priority list anyway).
 - Energy delivery issue: previous scorecard showed 72.7 energy delivered/tick vs ~3 harvested (energy going in circles) - this is now fixed by hauler changes

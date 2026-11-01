@@ -41,8 +41,11 @@
 import { MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX } from "config";
 import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
 
-/** Roles checked each tick, highest priority first (owner rule #5). */
-const SPAWN_ORDER: Role[] = ["harvester", "builder", "upgrader", "defender", "hauler"];
+/** Roles checked each tick, highest priority first (owner rule #5). The miner
+ *  leads from M5 on: once a source has a built container its worker is the
+ *  stationary miner, and it must be out before another bootstrap harvester is
+ *  queued for the still-container-less source. */
+const SPAWN_ORDER: Role[] = ["miner", "harvester", "builder", "upgrader", "defender", "hauler"];
 
 /**
  * Surplus spawn order (see the file header): only runs once every role is at
@@ -67,6 +70,19 @@ const SURPLUS_ORDER: Role[] = ["harvester", "upgrader", "builder"];
 function bodyTemplates(): Record<Role, BodyPartConstant[][]>
 {
     return {
+    miner: [
+        // Stationary miner (M5): five WORK empties a source in exactly its
+        // 300-tick refill cycle, so the source never accumulates energy that
+        // the refill would waste. The CARRY buffer only sets how often the
+        // miner pauses to dump into its container; one MOVE reaches the
+        // container tile and the miner never moves again.
+        [WORK, WORK, WORK, WORK, WORK, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE], // 800
+        [WORK, WORK, WORK, WORK, WORK, CARRY, CARRY, CARRY, MOVE], // 700
+        [WORK, WORK, WORK, WORK, CARRY, CARRY, CARRY, MOVE], // 600
+        [WORK, WORK, WORK, CARRY, CARRY, MOVE], // 450
+        [WORK, WORK, CARRY, CARRY, MOVE], // 350
+        [WORK, CARRY, MOVE], // 200
+    ],
     harvester: [
         [WORK, WORK, WORK, CARRY, CARRY, MOVE, MOVE], // 500
         [WORK, WORK, WORK, CARRY, MOVE], // 400
@@ -219,6 +235,33 @@ function minCreepsPerRole(room: Room): Record<Role, number>
         filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
     }).length;
 
+    // M5: split the source workers by source state instead of a level table.
+    // A source that has a built container on a neighbour tile is mined by a
+    // stationary miner; every other source is still served by a bootstrap
+    // harvester. The two counts sum to the number of sources, so the colony
+    // transitions source by source as the containers come up - there is never
+    // an unmined source (waste) and never a miner and a harvester stacked on
+    // the same source. Until the first container this is simply "all
+    // harvesters", which keeps the M1-M4 bootstrap unchanged.
+    const sources = room.find(FIND_SOURCES);
+    const containers = room.find(FIND_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
+    });
+    let minerCount = 0;
+    let harvesterCount = 0;
+    for (const source of sources)
+    {
+        const hasContainer = containers.some((container) => container.pos.getRangeTo(source) <= 1);
+        if (hasContainer)
+        {
+            minerCount += 1;
+        }
+        else
+        {
+            harvesterCount += 1;
+        }
+    }
+
     // M4: a defender is a last-resort attacker. It exists only while the
     // colony is in defend or war mode AND no tower can fire - if any tower
     // still has a shot, the tower handles the hostile and the energy stays
@@ -227,12 +270,31 @@ function minCreepsPerRole(room: Room): Record<Role, number>
     const defender = mode !== "peace" ? (towerCanFire(room) ? 0 : 1) : 0;
 
     return {
-        harvester: row.harvester,
+        miner: minerCount,
+        harvester: harvesterCount,
         builder: siteCount > 0 ? row.builder : 0,
         upgrader: row.upgrader,
         hauler: containerCount > 0 ? row.hauler : 0,
         defender,
     };
+}
+
+/**
+ * True while fewer upgraders are alive than this room's minimum.
+ *
+ * The builder reads this to hold back its energy withdrawals (see the
+ * energy-loop paragraph in src/roles/builder.ts): the upgrader's body costs
+ * the whole RCL 1 capacity (300), and the builder's 50% withdrawal floor
+ * pins the store below that, so without the hold-back the first upgrader -
+ * and with it the controller progress the smoke test measures - never
+ * spawns. Same minimum the spawn manager itself enqueues against, so the
+ * hold-back ends exactly when the upgrader can spawn.
+ * @param room The room to check
+ * @returns True when the alive upgrader count is below its minimum
+ */
+export function upgraderBelowMinimum(room: Room): boolean
+{
+    return getCreepCount("upgrader") < minCreepsPerRole(room).upgrader;
 }
 
 /**
@@ -351,6 +413,55 @@ function sourceWithoutHarvester(room: Room): Source | undefined
 }
 
 /**
+ * Assigns a source to a new miner (M5).
+ *
+ * A miner can only work a source that already has a built container on a
+ * neighbour tile, and each such source takes exactly one miner. The counts
+ * come from the living miners' memory, so a dead miner frees its source for
+ * the next spawn. Returns undefined when every container'd source already has
+ * a miner; the caller then skips the spawn for this tick.
+ *
+ * @param room The room to assign a source in
+ * @returns The id of the chosen source, or undefined when none is free
+ */
+function assignMinerSource(room: Room): string | undefined
+{
+    const sources = room.find(FIND_SOURCES);
+    const containers = room.find(FIND_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
+    });
+
+    const counts: Record<string, number> = {};
+    for (const source of sources)
+    {
+        // -1 marks a source without a container: it is never a miner target,
+        // it belongs to the harvester side of the split.
+        const hasContainer = containers.some((container) => container.pos.getRangeTo(source) <= 1);
+        counts[source.id] = hasContainer ? 0 : -1;
+    }
+    for (const name in Game.creeps)
+    {
+        const creep = Game.creeps[name];
+        if (creep.memory.role === "miner" && creep.memory.sourceId !== undefined)
+        {
+            if (counts[creep.memory.sourceId] !== undefined && counts[creep.memory.sourceId] >= 0)
+            {
+                counts[creep.memory.sourceId] += 1;
+            }
+        }
+    }
+
+    for (const source of sources)
+    {
+        if (counts[source.id] === 0)
+        {
+            return source.id;
+        }
+    }
+    return undefined; // Every container'd source already has a miner
+}
+
+/**
  * Attempts to start one spawn of the given role on a known-free spawn.
  *
  * The body is the largest template the sizing budget allows (owner rule #5).
@@ -385,19 +496,36 @@ function trySpawnRole(room: Room, spawn: StructureSpawn, role: Role, energyAvail
         return false;
     }
 
+    // A miner must be bound to a free container'd source before it can be
+    // named. If none is free (a dying miner still holds its slot in memory)
+    // the spawn is skipped for this tick and retried once the slot frees.
+    if (role === "miner" && sourceId === undefined)
+    {
+        sourceId = assignMinerSource(room);
+        if (sourceId === undefined)
+        {
+            return false;
+        }
+    }
+
     ensureCreepCounter();
     const name = `${role}-${Memory.creepCounter}`;
     Memory.creepCounter += 1;
 
     // Upgraders start with working=true (straight to the controller once
-    // they have energy); all other roles start collecting. Harvesters get a
-    // fixed source assignment so the sources are split evenly (see above).
+    // they have energy); all other roles start collecting. Harvesters and
+    // miners get a fixed source assignment so the sources are split evenly
+    // (see above).
     const memory: CreepMemory = { role, working: role === "upgrader" };
     if (role === "harvester")
     {
         // The surplus path binds the creep to the uncovered source (see the
         // file header); the minimums path balances by score.
         memory.sourceId = sourceId !== undefined ? sourceId : assignSource(room);
+    }
+    else if (role === "miner")
+    {
+        memory.sourceId = sourceId;
     }
 
     const result = spawn.spawnCreep(picked.body, name, {

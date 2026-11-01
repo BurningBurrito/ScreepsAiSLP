@@ -10,6 +10,7 @@ import { runBuilder } from "roles/builder";
 import { runDefender } from "roles/defender";
 import { runHarvester } from "roles/harvester";
 import { runHauler } from "roles/hauler";
+import { runMiner } from "roles/miner";
 import { runUpgrader } from "roles/upgrader";
 
 /**
@@ -48,6 +49,9 @@ function mainLoop(): void
                     break;
                 case "hauler":
                     runHauler(creep);
+                    break;
+                case "miner":
+                    runMiner(creep);
                     break;
                 case "defender":
                     runDefender(creep);

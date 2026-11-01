@@ -1,16 +1,14 @@
 /**
  * Upgrader creep role.
  *
- * While the room is still building its core infrastructure - an unfinished
- * tower or extension site exists (M3) - the upgrader pauses RCL work and
- * runs the builder role instead. The tower is a 5,000-energy structure the
- * milestone window must finish, and the energy an upgrader would burn on
- * the controller is better spent on the tower and the 3,000-energy
- * extensions. This turns the upgrader into a fourth builder during
- * construction; the moment the last priority site is finished it resumes
- * upgrading. The pause cannot hurt RCL 2 in practice: the construction
- * manager only places extension sites from controller level 2 and the tower
- * site from level 3, so the upgrader always makes its early progress first.
+ * While the tower is still a site (M3) the upgrader pauses RCL work and runs
+ * the builder role instead: the tower is a 5,000-energy structure the M3
+ * window must finish, and a fourth builder is what makes it. From M5 on every
+ * other site type - extension, container, road - no longer pauses it, because
+ * the colony's long-term growth is RCL and the M5 test measures controller
+ * progress per tick. This turns the upgrader into a fourth builder only while
+ * the tower is being built; the moment the tower is finished it resumes
+ * upgrading.
  *
  * Two phases, driven by the store (an upgrader never withdraws from the spawn
  * or an extension - doing so would steal the energy the harvesters just
@@ -63,10 +61,14 @@ export function runUpgrader(creep: Creep): void
 {
     const room = creep.room;
 
-    // M3: while the tower or an extension is still a site, the upgrader is a
-    // fourth builder. runBuilder handles the whole cycle (build, self-
-    // harvest, withdraw only when the room is full) and shares the
-    // memory.working carry-state flag this role already uses.
+    // M3/M5: while the tower is still a site, the upgrader is a fourth
+    // builder (the 5,000-energy tower needs the extra WORK to finish inside
+    // the M3 window). From M5 on every other site type - extension,
+    // container, road - no longer pauses it: the M5 test measures controller
+    // progress per tick, and the builders alone keep the build queue moving.
+    // runBuilder handles the whole cycle (build, self-harvest, withdraw only
+    // when the room is full) and shares the memory.working carry-state flag
+    // this role already uses.
     if (hasPriorityBuildSites(room))
     {
         runBuilder(creep);
