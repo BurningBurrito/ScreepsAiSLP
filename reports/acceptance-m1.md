@@ -1,20 +1,20 @@
-# Scorecard: acceptance-m1 · 2026-11-01 11:49 · 801 ticks · commit c2b9f5c
+# Scorecard: acceptance-m1 · 2026-11-01 12:56 · 801 ticks · commit 9f0abcf
 
-| Metric (last 320 ticks unless noted) | This run | Previous run (2026-11-01 10:20, eff4edb) | Change |
+| Metric (last 320 ticks unless noted) | This run | Previous run (2026-11-01 11:49, c2b9f5c) | Change |
 | --- | --- | --- | --- |
-| Energy harvested / tick | 6.28 | 6.09 | +0.19 |
+| Energy harvested / tick | 6.28 | 6.28 | 0 |
 | Energy wasted at source regeneration (sum) | 4,204 | 4,204 | 0 |
 | Controller progress / tick | 0.39 | 0.39 | 0 |
-| Construction progress / tick | 3.24 | 1.63 | +1.61 |
+| Construction progress / tick | 3.24 | 3.24 | 0 |
 | Energy delivered to spawn and extensions / tick | 1.69 | 1.69 | 0 |
 | Spawn idle while energy is full | 51 % | 51 % | 0 pts |
 | Spawn busy | 7 % | 7 % | 0 pts |
-| Creep ticks idle (no action, no move for 5+ ticks) | 20 % | 22 % | -2 pts |
-| CPU / tick (average, max) | 1.84, 20.36 | 1.72, 20.32 | +0.12 |
+| Creep ticks idle (no action, no move for 5+ ticks) | 20 % | 20 % | 0 pts |
+| CPU / tick (average, max) | 1.78, 21.41 | 1.84, 20.36 | -0.06 |
 | RCL / progress at end (whole run) | 1 / 174 | 1 / 174 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
-| Energy harvested (whole run) | 3,760 | 3,700 | +60 |
-| Build energy spent on roads (share of all build energy) | 98 % | 0 % | +98 pts |
+| Energy harvested (whole run) | 3,760 | 3,760 | 0 |
+| Build energy spent on roads (share of all build energy) | 98 % | 98 % | 0 pts |
 | Road tiles: total / on wall / disconnected from the spawn network (end) | 59 / 0 / 0 | 59 / 0 / 0 | 0 |
 | Roads reach (end): sources, controller | 2 of 2, yes | 2 of 2, yes |  |
 | Extensions and towers farther than 8 tiles from the spawn (end) | 0 | 0 | 0 |
@@ -30,11 +30,11 @@ Bot console: 15 lines, 0 with errors (reports/acceptance-m1-console.log). Probe 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
       100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.4
-      200 | builder 1, harvester 2                   |   3.7 |     0 |   196/300 | idle | 1.4
-      300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.4
-      400 | builder 1, harvester 2, upgrader 1       |   2.5 |   0.5 |   175/300 | idle | 1.5
+      200 | builder 1, harvester 2                   |   3.7 |     0 |   196/300 | idle | 1.3
+      300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.5
+      400 | builder 1, harvester 2, upgrader 1       |   2.5 |   0.5 |   175/300 | idle | 1.4
       500 | builder 2, harvester 2, upgrader 2       |   5.2 |     0 |     2/300 | busy | 1.5
-      600 | builder 3, harvester 2, upgrader 2       |   4.2 |   0.9 |   131/300 | idle | 1.7
-      700 | builder 3, harvester 2, upgrader 2       |   6.6 |   0.1 |   300/300 | idle | 1.9
-      800 | builder 3, harvester 2, upgrader 2       |   8.5 |   0.2 |   300/300 | idle | 2.1
-      801 | builder 3, harvester 2, upgrader 2       |    12 |     2 |   300/300 | idle | 2.1
+      600 | builder 3, harvester 2, upgrader 2       |   4.2 |   0.9 |   131/300 | idle | 1.6
+      700 | builder 3, harvester 2, upgrader 2       |   6.6 |   0.1 |   300/300 | idle | 1.8
+      800 | builder 3, harvester 2, upgrader 2       |   8.5 |   0.2 |   300/300 | idle | 2
+      801 | builder 3, harvester 2, upgrader 2       |    12 |     2 |   300/300 | idle | 1.9

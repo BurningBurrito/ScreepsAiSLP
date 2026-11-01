@@ -1,6 +1,6 @@
-# Scorecard: smoke · 2026-11-01 11:26 · 500 ticks · commit 3e696af
+# Scorecard: smoke · 2026-11-01 13:55 · 500 ticks · commit 9f0abcf
 
-| Metric (last 200 ticks unless noted) | This run | Previous run (2026-11-01 09:46, 4372bc9) | Change |
+| Metric (last 200 ticks unless noted) | This run | Previous run (2026-11-01 11:26, 3e696af) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 3.86 | 3.86 | 0 |
 | Energy wasted at source regeneration (sum) | 948 | 948 | 0 |
@@ -10,11 +10,11 @@
 | Spawn idle while energy is full | 1 % | 1 % | 0 pts |
 | Spawn busy | 7 % | 7 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 22 % | 22 % | 0 pts |
-| CPU / tick (average, max) | 1.53, 20.44 | 1.52, 20.35 | +0.01 |
+| CPU / tick (average, max) | 1.48, 20.38 | 1.53, 20.44 | -0.05 |
 | RCL / progress at end (whole run) | 1 / 50 | 1 / 50 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
 | Energy harvested (whole run) | 1,824 | 1,824 | 0 |
-| Build energy spent on roads (share of all build energy) | 100 % | 0 % | +100 pts |
+| Build energy spent on roads (share of all build energy) | 100 % | 100 % | 0 pts |
 | Road tiles: total / on wall / disconnected from the spawn network (end) | 59 / 0 / 0 | 59 / 0 / 0 | 0 |
 | Roads reach (end): sources, controller | 2 of 2, yes | 2 of 2, yes |  |
 | Extensions and towers farther than 8 tiles from the spawn (end) | 0 | 0 | 0 |
@@ -30,7 +30,7 @@ Bot console: 11 lines, 0 with errors (reports/smoke-console.log). Probe results 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
       100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.5
-      200 | builder 1, harvester 2                   |   3.7 |     0 |   196/300 | idle | 1.3
+      200 | builder 1, harvester 2                   |   3.7 |     0 |   196/300 | idle | 1.4
       300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.4
       400 | builder 1, harvester 2, upgrader 1       |   2.5 |   0.5 |   175/300 | idle | 1.5
-      500 | builder 2, harvester 2, upgrader 2       |   5.2 |     0 |     2/300 | busy | 1.6
+      500 | builder 2, harvester 2, upgrader 2       |   5.2 |     0 |     2/300 | busy | 1.5
