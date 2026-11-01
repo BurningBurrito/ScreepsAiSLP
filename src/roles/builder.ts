@@ -33,11 +33,20 @@
  *   3. Rampart sites (peace): one on the spawn's tile and one on each
  *      finished tower's tile. Each costs only 300 energy for 10,000 hits -
  *      cheap insurance, and the M4 spec puts them right after the towers.
- *   4. Container sites (M5): the first container is what unlocks the
- *      stationary miner, so it is the economy's bottleneck and gets the
- *      whole crew's attention. The list is empty in bootstrap (no container
- *      site at RCL 1), so the M1/M2 order is untouched there; from RCL 2 on
- *      the container is finished before the extension queue resumes.
+ *   4. Container sites (M5) - but only while containerFirstForRoom says so.
+ *      The first container is what unlocks the stationary miner, so once it
+ *      is right to build containers first, the crew stays on them: while a
+ *      container is ALREADY BUILT (rule 02b's stage boundary - bootstrap
+ *      ends when the first container exists, and the remaining container
+ *      queue then matters as much as the first one), and in a level 1-2
+ *      room once the FIRST extension and road are finished (the M2 layout
+ *      minimum is met, so the container may take the crew). The M1/M2/M3
+ *      order otherwise keeps containers behind extensions and roads: the
+ *      unconditional container-first of 2026-11-01 pinned the whole crew on
+ *      the first 5,000-energy container site from ~tick 400 (the
+ *      construction manager places a container site from RCL 1) and left
+ *      M2 with 0 finished extensions and 0 finished roads at tick 3,000
+ *      (gate failure of 2026-11-01).
  *   5. Extension sites, all builders on ONE of them: the most advanced
  *      (highest build progress, ties broken by closeness to the spawn).
  *      The room state is shared, so every builder computes the same focus
@@ -99,8 +108,13 @@
  * 0.19/tick, idle 8 % -> 23 % while they oscillated).
  */
 
+import {
+    BUILDER_WITHDRAW_FRACTION,
+    CONTAINER_BOOST_MAX_LEVEL,
+    CONTAINER_BOOST_MIN_EXTENSIONS,
+    CONTAINER_BOOST_MIN_ROADS,
+} from "config";
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
-import { BUILDER_WITHDRAW_FRACTION } from "config";
 import { moveToToward } from "utils/movement";
 import { upgraderBelowMinimum } from "managers/spawnManager";
 
@@ -108,10 +122,12 @@ import { upgraderBelowMinimum } from "managers/spawnManager";
  * Selects the next construction site for a builder.
  *
  * Priority (M4): in defend or war mode the rampart sites come first;
- * otherwise the tower site on its own, then ramparts, then ONE extension
- * (the most advanced, so the whole crew converges on it and actually
- * finishes it), then roads, then containers. Within a priority class the
- * tie-breakers are progress and distance, never a free-for-all.
+ * otherwise the tower site on its own, then ramparts, then - while
+ * containerFirstForRoom applies - ONE container (the nearest one), then ONE
+ * extension (the most advanced, so the whole crew converges on it and
+ * actually finishes it), then roads, and containers last of all. Within a
+ * priority class the tie-breakers are progress and distance, never a
+ * free-for-all.
  * @param creep The builder that needs a target (used for pathing)
  * @param room The room to search
  * @returns The selected site, or null when nothing is under construction
@@ -174,14 +190,12 @@ function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
         return rampart;
     }
 
-    // M5: containers come before extensions and roads. The first container
-    // is what unlocks the stationary miner (the M5 milestone), so it is the
-    // economy's bottleneck and gets the whole crew's attention. At RCL 1 the
-    // construction manager has not placed any container site yet, so this
-    // branch is empty in bootstrap and the M1/M2 order is untouched; from
-    // RCL 2 on the container is finished before the extension queue resumes.
+    // M5: containers come before extensions and roads - but only while
+    // containerFirstForRoom applies (see it for the gate and why the
+    // unconditional container-first of 2026-11-01 broke M2). Without the
+    // gate, containers fall to the very end of the queue, behind roads.
     const containerSites = sitesOf(STRUCTURE_CONTAINER);
-    if (containerSites.length > 0)
+    if (containerSites.length > 0 && containerFirstForRoom(room))
     {
         return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
     }
@@ -215,7 +229,74 @@ function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
         return creep.pos.findClosestByPath<ConstructionSite>(roadSites);
     }
 
+    // Containers last (the pre-M5 fallback): the gate above keeps the crew
+    // on extensions and roads in bootstrap until M2's minimum is met, and a
+    // room that has run out of extension and road sites still finishes its
+    // container sites here instead of letting the builders upgrade.
+    if (containerSites.length > 0)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
+    }
+
     return null;
+}
+
+/**
+ * Decides whether container sites lead the build queue in this room (M5).
+ *
+ * The unconditional container-first of 2026-11-01 pinned the whole crew on
+ * the first 5,000-energy container site as soon as the construction manager
+ * placed one - at RCL 1, ~400 ticks in (smoke: 401 build energy on the
+ * container at tick 500) - so in the 3,000-tick M2 window neither an
+ * extension nor a road ever finished (gate failure of 2026-11-01: 0 of
+ * each). Containers now lead only in the two situations where nothing M2 or
+ * M3 measures can starve:
+ *   1. A container is already BUILT: rule 02b's stage boundary - bootstrap
+ *      ends when the first container exists, and from there the remaining
+ *      container queue matters as much as the first one (its miner is what
+ *      pays for it).
+ *   2. The room is at controller level CONTAINER_BOOST_MAX_LEVEL (2) or
+ *      below and has already finished at least CONTAINER_BOOST_MIN_EXTENSIONS
+ *      extension and CONTAINER_BOOST_MIN_ROADS road: the M2 layout minimum
+ *      ("extension built >= 1" and "road built >= 1") is met, so the
+ *      container may take the crew - that is what unlocks the stationary
+ *      miner inside the M2/M5 window.
+ * At controller level 3 and up the tower-plus-extension density contract
+ * (M3/M4) owns the crew instead, and containers wait for case 1.
+ * @param room The room to check
+ * @returns True when container sites lead the build queue
+ */
+export function containerFirstForRoom(room: Room): boolean
+{
+    // FIND_STRUCTURES, not FIND_MY_STRUCTURES: in @types/screeps the
+    // MY_STRUCTURES union excludes containers and roads (AnyOwnedStructure),
+    // and the rest of the codebase (spawnManager, constructionManager)
+    // counts built containers/roads the same way. One find, reused for
+    // every check below (CPU: the builders call this once per tick each
+    // while a container site exists).
+    const structures = room.find(FIND_STRUCTURES);
+    const builtContainer = structures.some(
+        (structure) => structure.structureType === STRUCTURE_CONTAINER,
+    );
+    if (builtContainer)
+    {
+        return true;
+    }
+    // Same undefined guard as spawnManager: a room without a visible
+    // controller counts as level 1 for this check.
+    const level = room.controller !== undefined ? room.controller.level : 1;
+    if (level > CONTAINER_BOOST_MAX_LEVEL)
+    {
+        return false;
+    }
+    const builtExtensions = structures.filter(
+        (structure) => structure.structureType === STRUCTURE_EXTENSION,
+    ).length;
+    const builtRoads = structures.filter(
+        (structure) => structure.structureType === STRUCTURE_ROAD,
+    ).length;
+    return builtExtensions >= CONTAINER_BOOST_MIN_EXTENSIONS
+        && builtRoads >= CONTAINER_BOOST_MIN_ROADS;
 }
 
 /**

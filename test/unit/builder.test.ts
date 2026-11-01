@@ -13,6 +13,7 @@ const FIND_DROPPED_RESOURCES = 106;
 const FIND_CONSTRUCTION_SITES = 111;
 const FIND_MY_SPAWNS = 112;
 const FIND_MY_STRUCTURES = 108;
+const FIND_STRUCTURES = 107;
 const FIND_CREEPS = 101;
 const STRUCTURE_EXTENSION = "extension";
 const STRUCTURE_TOWER = "tower";
@@ -138,14 +139,21 @@ function makeBuilder(
  * the tests exercise the priority classes, not the mock. room.find honours
  * the filter option, exactly like the real API does.
  * @param sites The construction sites present in the room.
+ * @param options Room state: already-built structures (FIND_STRUCTURES -
+ *        the MY_STRUCTURES union excludes containers and roads in
+ *        @types/screeps) and the controller level - both drive the
+ *        container-priority gate (containerFirstForRoom).
  * @returns The mock creep and its call counters (lastBuilt names the site built).
  */
-function makeCarryingBuilder(sites: any[]): { creep: any; calls: { build?: number; lastBuilt?: string } }
+function makeCarryingBuilder(
+    sites: any[],
+    options: { structures?: any[]; level?: number } = {},
+): { creep: any; calls: { build?: number; lastBuilt?: string } }
 {
     const calls: { build?: number; lastBuilt?: string } = {};
     const sourceA = { id: "sA", energy: 500, pos: pos(14, 18) };
     const sourceB = { id: "sB", energy: 500, pos: pos(39, 14) };
-    const controller = { my: true, pos: pos(25, 25) };
+    const controller = { my: true, level: options.level ?? 1, pos: pos(25, 25) };
     const spawn = { pos: pos(13, 20), store: { getFreeCapacity: () => 0 } };
     const creep: any = {
         id: "b1",
@@ -197,6 +205,13 @@ function makeCarryingBuilder(sites: any[]): { creep: any; calls: { build?: numbe
                         ? sites.filter(opts.filter)
                         : sites;
                 }
+                if (type === FIND_STRUCTURES)
+                {
+                    const structures = options.structures ?? [];
+                    return opts !== undefined && opts.filter !== undefined
+                        ? structures.filter(opts.filter)
+                        : structures;
+                }
                 return [];
             },
             controller,
@@ -235,6 +250,8 @@ describe("builder", () => {
         global.FIND_MY_SPAWNS = FIND_MY_SPAWNS;
         // @ts-ignore
         global.FIND_MY_STRUCTURES = FIND_MY_STRUCTURES;
+        // @ts-ignore
+        global.FIND_STRUCTURES = FIND_STRUCTURES;
         // @ts-ignore
         global.FIND_CREEPS = FIND_CREEPS;
         // @ts-ignore
@@ -396,6 +413,120 @@ describe("builder", () => {
         runBuilder(creep);
 
         assert.equal(calls.lastBuilt, "ext1", "equal progress goes to the spawn-side site");
+    });
+
+    it("keeps the extension ahead of a container site in a fresh bootstrap room", () => {
+        // M2 gate fix (2026-11-01): a fresh RCL 1 room has no built
+        // container, extension or road, so containerFirstForRoom is false
+        // and the container site must wait behind the extension queue. The
+        // unconditional container-first of the M5 commit broke M2 here: the
+        // whole crew camped the first 5,000-energy container site and 0
+        // extensions and 0 roads were finished after 3,000 ticks.
+        const { creep, calls } = makeCarryingBuilder(
+            [
+                { id: "road1", structureType: "road", progress: 0, pos: pos(14, 20) },
+                { id: "ext1", structureType: "extension", progress: 0, pos: pos(18, 25) },
+                { id: "con1", structureType: "container", progress: 0, pos: pos(13, 20) }, // range 0: closest, must still lose
+            ],
+            { level: 1 },
+        );
+
+        runBuilder(creep);
+
+        assert.equal(calls.build, 1, "the builder builds while a container site exists");
+        assert.equal(calls.lastBuilt, "ext1", "the extension beats the closer container while no container is built");
+    });
+
+    it("leads with the container once a built container exists, at any level", () => {
+        // M5 stage 2 (rule 02b: bootstrap ends when the first container
+        // exists): the remaining container queue leads again - here at
+        // level 3, where the bootstrap boost does not apply at all.
+        const { creep, calls } = makeCarryingBuilder(
+            [
+                { id: "ext1", structureType: "extension", progress: 2000, pos: pos(14, 20) },
+                { id: "con2", structureType: "container", progress: 0, pos: pos(18, 25) },
+            ],
+            { level: 3, structures: [{ id: "conB", structureType: "container" }] },
+        );
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "con2", "a built container re-arms the container-first order");
+    });
+
+    it("keeps level-3 rooms on extensions while no container is built", () => {
+        // M3/M4 contract: at controller level 3 and up the tower-plus-
+        // extension density owns the crew, so a not-yet-built container
+        // site waits behind the extension queue (the bootstrap boost does
+        // not apply at level 3).
+        const { creep, calls } = makeCarryingBuilder(
+            [
+                { id: "ext1", structureType: "extension", progress: 2000, pos: pos(14, 20) },
+                { id: "con1", structureType: "container", progress: 0, pos: pos(18, 25) },
+            ],
+            { level: 3 },
+        );
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "ext1", "no container boost at level 3 without a built container");
+    });
+
+    it("hands the crew to the container once the bootstrap minimum is met", () => {
+        // The M2 layout minimum is finished: one extension AND one road
+        // are built, at level 2. The container may take the crew now -
+        // that is what unlocks the stationary miner inside the M2/M5
+        // window - even though a more advanced extension sits closer.
+        const { creep, calls } = makeCarryingBuilder(
+            [
+                { id: "ext2", structureType: "extension", progress: 2000, pos: pos(14, 20) },
+                { id: "con1", structureType: "container", progress: 0, pos: pos(18, 25) },
+            ],
+            {
+                level: 2,
+                structures: [
+                    { id: "extB", structureType: "extension" },
+                    { id: "roadB", structureType: "road" },
+                ],
+            },
+        );
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "con1", "the finished extension + road minimum re-arms the container");
+    });
+
+    it("keeps the extension ahead of the container until the road minimum is built", () => {
+        // One built extension but no built road yet (level 2): the boost
+        // is not armed, the container stays in the fallback slot behind
+        // the extension queue.
+        const { creep, calls } = makeCarryingBuilder(
+            [
+                { id: "ext2", structureType: "extension", progress: 2000, pos: pos(14, 20) },
+                { id: "con1", structureType: "container", progress: 0, pos: pos(18, 25) },
+            ],
+            { level: 2, structures: [{ id: "extB", structureType: "extension" }] },
+        );
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "ext2", "the missing built road keeps the container in the fallback slot");
+    });
+
+    it("keeps the extension ahead of the container until the extension minimum is built", () => {
+        // One built road but no built extension yet (level 2): same
+        // contract from the other side - both minimums must be met.
+        const { creep, calls } = makeCarryingBuilder(
+            [
+                { id: "ext2", structureType: "extension", progress: 2000, pos: pos(14, 20) },
+                { id: "con1", structureType: "container", progress: 0, pos: pos(18, 25) },
+            ],
+            { level: 2, structures: [{ id: "roadB", structureType: "road" }] },
+        );
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "ext2", "the missing built extension keeps the container in the fallback slot");
     });
 
     it("keeps its latched source mid-cycle instead of re-picking", () => {

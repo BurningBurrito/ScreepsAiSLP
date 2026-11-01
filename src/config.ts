@@ -171,3 +171,32 @@ export const RAMPART_MIN_LEVEL = 3;
  * incursions the towers are built for, without sitting idle above it.
  */
 export const TOWER_ENERGY_RESERVE = 500;
+
+/**
+ * M5 container-priority gate (see containerFirstForRoom in roles/builder.ts):
+ * the highest controller level at which the bootstrap container boost applies.
+ * At level 3 and up the tower-plus-extension density contract (M3/M4) owns the
+ * builder crew, so container sites wait behind extensions and roads until a
+ * container is actually built. Levels 1-2 are the M2/M5 bootstrap worlds,
+ * where the layout queue is small (five extensions, the road network) and the
+ * first container - once the layout minimum is finished - may take the crew.
+ */
+export const CONTAINER_BOOST_MAX_LEVEL = 2;
+
+/**
+ * M5 container-priority gate (bootstrap case): the number of FINISHED
+ * extensions the room must have before a container site may take the whole
+ * builder crew at levels 1-2. One is exactly the M2 acceptance minimum
+ * ("extension built >= 1 after 3,000 ticks"): the crew switches to the
+ * container only after M2's extension criterion is already met, so the
+ * container-first order cannot starve it.
+ */
+export const CONTAINER_BOOST_MIN_EXTENSIONS = 1;
+
+/**
+ * M5 container-priority gate (bootstrap case): the number of FINISHED roads
+ * the room must have before a container site may take the whole builder crew
+ * at levels 1-2. Same M2 contract as CONTAINER_BOOST_MIN_EXTENSIONS: the
+ * container takes over only after "road built >= 1" is already satisfied.
+ */
+export const CONTAINER_BOOST_MIN_ROADS = 1;

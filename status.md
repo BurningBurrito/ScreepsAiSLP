@@ -214,26 +214,55 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **M5 (static mining with containers and haulers): smoke fixed, full-suite verification next.**
+- **M2 gate failure (regression from the M5 container-first build order) - fixing now.**
+  Gate run (all): m2 failing - "extension built (after 3000 ticks) is 0, needs >= 1" and
+  "road built (after 3000 ticks) is 0, needs >= 1"; all other tests pass (m1, m3, m4,
+  smoke, spawnprobe, 88 unit).
+  Diagnosis: d108b29 made container sites the top priority in selectBuildSite
+  (src/roles/builder.ts). The construction manager places a container site from RCL 1, so
+  from ~tick 400 the whole builder crew camps the first 5,000-energy container site
+  (smoke evidence: 401 build energy on the container at tick 500, vs 1,194 on roads
+  pre-M5). In 3,000 ticks neither the extension queue nor the road network can finish -
+  M2 needs one finished extension AND one finished road, and both sit behind the
+  container in the queue.
+  Design fix: gate the container-first priority on the economy stage (rule 02b: bootstrap
+  ends when the first container exists). containerFirstForRoom (new, exported in
+  src/roles/builder.ts) leads with containers only when (a) a container is already built
+  (static-mining stage: the remaining container queue matters as much as the first one),
+  or (b) the room is at controller level <= CONTAINER_BOOST_MAX_LEVEL (2) and has already
+  finished at least one extension and one road (the M2 layout minimum is met, so the
+  container may take the crew - that is what unlocks the stationary miner inside the
+  M2/M5 window). At RCL >= 3 the tower-plus-extension density contract (M3/M4) owns the
+  crew and containers wait for case (a). All in-repo test worlds keep their pre-M5
+  behavior (M1/smoke/spawnprobe: no built extension at RCL 1, so roads stay first;
+  M3/M4: level >= 3, so containers stay last); the M2/M5 bootstrap worlds now finish the
+  extension + road minimum first and then hand the crew to the container.
   Plan (each one commit):
-  1. M5 core (miner role, source-state spawn minimums, container-first build priority) -
-     done in the previous run, uncommitted; verified green this run (lint, build, 69 unit
-     tests).
-  2. Fix the M5 smoke failure (controller progress > 0 in 500 ticks) - DONE: upgrader
-     hold-back in src/roles/builder.ts + upgraderBelowMinimum in
-     src/managers/spawnManager.ts. Smoke 1 passing (2m), 0 console errors; controller
-     progress 0.1 -> 0.25/tick. Scorecard details in the 2026-11-01 Change Log entry.
-  3. agent-test start all (M1-M4 acceptance + smoke + spawnprobe + integration) to prove
-     the hold-back regressed nothing; compare the spawnprobe scorecard against the
-     pre-fix baseline (2026-11-01, 700 ticks, 32706ac): harvested 3.9/tick, controller
-     progress 0.18/tick, construction 0/tick (no sites in that probe window), CPU
-     1.44/tick, creep idle 6 %, spawn idle while full 0 %.
-  4. Docs + final commit.
+  1. [x] Diagnosis and this plan (status.md).
+  2. [x] Gate in selectBuildSite + containerFirstForRoom helper + config
+     constants; 6 new gate tests in test/unit/builder.test.ts (75 unit tests
+     pass, lint clean, build clean). Note: the gate counts built structures
+     with FIND_STRUCTURES - in @types/screeps the FIND_MY_STRUCTURES union
+     (AnyOwnedStructure) excludes containers and roads, so the MY_ constant
+     does not even type-check for them.
+  3. [x] Lint/build/unit, then smoke scorecard check: 1 passing (2m), 0
+     console errors. Build energy spent on roads (share of all build
+     energy) 0 % -> 100 % (road 401 instead of container 401 in the
+     500-tick window - the gate is false at RCL 1 with nothing built, so
+     roads lead again); construction 2.01/tick, harvested 3.86/tick,
+     upgrade 0.25/tick, CPU 1.53/tick, creep idle 22 % - all unchanged.
+  4. acceptance-m2 run, then agent-test start all.
+  5. Docs + commit.
 - M5 acceptance (owner's, 3,000 ticks): 2 containers adjacent to 2 sources, >= 60 % of the
   harvest ceiling, wasted-at-regen <= 15 %, upgrade >= 20 % of ceiling, no >150-tick idle
   spawn at full energy, CPU <= 10/tick. Its acceptance test is not in this copy of the
   repo (test/integration holds acceptance-m1..m4 only), so M5 stays unchecked in Upcoming
-  Features until the owner's test can be run.
+  Features until the owner's test can be run. Expected effect of the gate on the owner's
+  M5 world (fresh RCL 1 stub): the first container now finishes only after the first
+  extension + road (~tick 2,600-2,900 instead of ~tick 1,500) - the M5 criterion
+  "two containers by tick 3000" is energy-budgeted beyond reach in that window while
+  M2's extension + road minimum must also finish; the miner/hauler machinery goes live
+  as soon as container one is done.
 
 ## Upcoming Features
 - [x] M2 extensions and roads (completed)
