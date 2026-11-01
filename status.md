@@ -51,10 +51,13 @@ yet.
 ## Change Log
 ### 2026-11-01 (M5 static mining implemented; M5 smoke failure fixed with upgrader hold-back)
 - **M5 implementation (from the previous run, verified green this run):**
-  - New src/roles/miner.ts: a stationary miner per source. Parked on (or next to) the
-    container tile beside its source, it only harvests; energy it cannot carry drops into
-    the container. Before any container exists it falls back to harvesting at the source
-    (bootstrap-compatible). Dispatched by role in src/main.ts.
+  - New src/roles/miner.ts: a stationary miner per source. It walks to the container
+    tile beside its source exactly once, then stands on it for its whole life (range 1
+    harvest, range 0 transfer, no further movement); energy it cannot carry drops into
+    the container. spawnManager only assigns miners to sources that already have a built
+    container (assignMinerSource), so bootstrap sources stay with harvesters; if the
+    container is lost later the miner falls back to drop-mining beside the source.
+    Dispatched by role in src/main.ts.
   - src/managers/spawnManager.ts: M5 spawn minimums are source-state aware - a source with
     a finished container wants a miner, a source without one wants a bootstrap harvester,
     and a hauler is spawned once any container exists. MIN_UPGRADERS_BY_LEVEL is exposed to
