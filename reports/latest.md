@@ -1,19 +1,19 @@
-# Scorecard: acceptance-m1 · 2026-10-31 23:27 · 801 ticks · commit 10f6552
+# Scorecard: spawnprobe · 2026-11-01 00:40 · 700 ticks · commit be35fc7
 
-| Metric (last 320 ticks unless noted) | This run | Previous run (2026-10-31 18:18, f606551) | Change |
+| Metric (last 280 ticks unless noted) | This run | Previous run (2026-10-31 19:19, f606551) | Change |
 | --- | --- | --- | --- |
-| Energy harvested / tick | 3.88 | 3.88 | 0 |
+| Energy harvested / tick | 3.9 | 3.9 | 0 |
 | Energy wasted at source regeneration (sum) | 1,784 | 1,784 | 0 |
-| Controller progress / tick | 0.31 | 0.31 | 0 |
-| Construction progress / tick | 4.53 | 3.38 | +1.15 |
-| Energy delivered to spawn and extensions / tick | 3.59 | 0 | +3.59 |
+| Controller progress / tick | 0.18 | 0.18 | 0 |
+| Construction progress / tick | 4.43 | 3.3 | +1.13 |
+| Energy delivered to spawn and extensions / tick | 3.57 | 0 | +3.57 |
 | Spawn idle while energy is full | 0 % | 100 % | -100 pts |
 | Spawn busy | 0 % | 0 % | 0 pts |
-| Creep ticks idle (no action, no move for 5+ ticks) | 5 % | 5 % | 0 pts |
-| CPU / tick (average, max) | 1.56, 20.63 | 1.4, 20.2 | +0.16 |
-| RCL / progress at end (whole run) | 1 / 150 | 1 / 150 | 0 |
+| Creep ticks idle (no action, no move for 5+ ticks) | 6 % | 6 % | 0 pts |
+| CPU / tick (average, max) | 1.44, 20.4 | 1.42, 20.15 | +0.02 |
+| RCL / progress at end (whole run) | 1 / 100 | 1 / 100 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
-| Energy harvested (whole run) | 2,828 | 2,860 | -32 |
+| Energy harvested (whole run) | 2,452 | 2,488 | -36 |
 | Build energy spent on roads (share of all build energy) | 96 % | 99 % | -2 pts |
 | Road tiles: total / on wall / disconnected from the spawn network (end) | 59 / 0 / 0 | 59 / 0 / 0 | 0 |
 | Roads reach (end): sources, controller | 2 of 2, yes | 2 of 2, yes |  |
@@ -23,18 +23,16 @@
 | Creeps at end (peak) | 3 (3) | 3 (3) | 0 |
 
 Creeps at end by role: builder 1, harvester 1, upgrader 1.
-Structures at end: road 8, spawn 1. Construction sites: 52 (container 1, road 51). Build energy in the window by target: completed 52, road 1398.
+Structures at end: road 6, spawn 1. Construction sites: 54 (container 1, road 53). Build energy in the window by target: completed 46, road 1194.
 Room energy capacity 300; source capacity 3000 and 3000; Memory 1 KB; bucket 10000.
-Bot console: 11 lines, 0 with errors (reports/acceptance-m1-console.log). Probe results missing for 0 ticks.
+Bot console: 742 lines, 0 with errors (reports/spawnprobe-console.log). Probe results missing for 0 ticks.
 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
       100 | builder 1, harvester 1                   |   3.2 |     0 |    67/300 | idle | 1.4
-      200 | builder 1, harvester 1, upgrader 1       |   4.2 |     0 |   196/300 | idle | 1.4
-      300 | builder 1, harvester 1, upgrader 1       |   2.6 |   0.3 |   146/300 | idle | 1.5
-      400 | builder 1, harvester 1, upgrader 1       |   2.9 |   0.2 |   146/300 | idle | 1.5
-      500 | builder 1, harvester 1, upgrader 1       |   3.7 |     0 |   146/300 | idle | 1.5
-      600 | builder 1, harvester 1, upgrader 1       |   3.8 |   0.5 |   196/300 | idle | 1.6
-      700 | builder 1, harvester 1, upgrader 1       |   4.1 |     0 |   146/300 | idle | 1.6
-      800 | builder 1, harvester 1, upgrader 1       |   3.7 |   0.5 |   196/300 | idle | 1.5
-      801 | builder 1, harvester 1, upgrader 1       |     4 |     0 |   197/300 | idle | 1.5
+      200 | builder 1, harvester 1, upgrader 1       |   4.2 |     0 |   196/300 | idle | 1.3
+      300 | builder 1, harvester 1, upgrader 1       |   2.6 |   0.3 |   146/300 | idle | 1.4
+      400 | builder 1, harvester 1, upgrader 1       |   2.9 |   0.2 |   146/300 | idle | 1.4
+      500 | builder 1, harvester 1, upgrader 1       |   3.7 |     0 |   146/300 | idle | 1.4
+      600 | builder 1, harvester 1, upgrader 1       |   3.8 |   0.5 |   196/300 | idle | 1.5
+      700 | builder 1, harvester 1, upgrader 1       |   4.1 |     0 |   146/300 | idle | 1.4
