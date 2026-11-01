@@ -1,6 +1,6 @@
-# Scorecard: smoke · 2026-11-01 04:10 · 500 ticks · commit cf253c1
+# Scorecard: smoke · 2026-11-01 05:58 · 500 ticks · commit 32706ac
 
-| Metric (last 200 ticks unless noted) | This run | Previous run (2026-11-01 00:37, be35fc7) | Change |
+| Metric (last 200 ticks unless noted) | This run | Previous run (2026-11-01 04:10, cf253c1) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 3.3 | 3.3 | 0 |
 | Energy wasted at source regeneration (sum) | 1,000 | 1,000 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 0 % | 0 % | 0 pts |
 | Spawn busy | 0 % | 0 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 8 % | 8 % | 0 pts |
-| CPU / tick (average, max) | 1.52, 22.72 | 1.39, 20.3 | +0.13 |
+| CPU / tick (average, max) | 1.39, 22.28 | 1.52, 22.72 | -0.13 |
 | RCL / progress at end (whole run) | 1 / 50 | 1 / 50 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
 | Energy harvested (whole run) | 1,660 | 1,660 | 0 |
@@ -29,8 +29,8 @@ Bot console: 8 lines, 0 with errors (reports/smoke-console.log). Probe results m
 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
-      100 | builder 1, harvester 1                   |   3.2 |     0 |    67/300 | idle | 1.5
-      200 | builder 1, harvester 1, upgrader 1       |   4.2 |     0 |   196/300 | idle | 1.4
-      300 | builder 1, harvester 1, upgrader 1       |   2.6 |   0.3 |   146/300 | idle | 1.5
-      400 | builder 1, harvester 1, upgrader 1       |   2.9 |   0.2 |   146/300 | idle | 1.5
-      500 | builder 1, harvester 1, upgrader 1       |   3.7 |     0 |   146/300 | idle | 1.5
+      100 | builder 1, harvester 1                   |   3.2 |     0 |    67/300 | idle | 1.4
+      200 | builder 1, harvester 1, upgrader 1       |   4.2 |     0 |   196/300 | idle | 1.3
+      300 | builder 1, harvester 1, upgrader 1       |   2.6 |   0.3 |   146/300 | idle | 1.4
+      400 | builder 1, harvester 1, upgrader 1       |   2.9 |   0.2 |   146/300 | idle | 1.4
+      500 | builder 1, harvester 1, upgrader 1       |   3.7 |     0 |   146/300 | idle | 1.4
