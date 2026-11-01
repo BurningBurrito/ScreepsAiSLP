@@ -11,14 +11,23 @@
  *   income at all, so the first harvester is sized down to what the store
  *   holds right now - otherwise nothing would ever be spawned.
  *
- * Spawn order (owner rule #5): harvester, then builder, then upgrader, then
- * defender, then hauler. At most ONE spawn is started per tick: a spawnCreep
- * call is stored as an engine "intent" that only resolves at the end of the
- * tick, and the engine keeps at most one createCreep intent per spawn - a
- * second spawnCreep call in the same tick overwrites the first one and the
- * first creep is silently never spawned. The remaining roles are picked up
- * from the next tick onward (the spawn is busy for three ticks per body part
- * anyway).
+ * Spawn order (owner rule #5, M5): upgrader, miner, harvester, hauler,
+ * builder, then defender. The upgrader leads because its presence is the
+ * room's rate limiter: the M5 criterion needs 4+ controller progress/tick,
+ * and a 3-WORK upgrader with one MOVE part takes ~120 ticks to walk back to
+ * the controller after it dies - every respawn slot it misses behind other
+ * roles costs ~1 progress/tick across the test window. The miner is next:
+ * once a source has a built container its worker is the stationary miner,
+ * and it must be out before another bootstrap harvester is queued for the
+ * still-container-less source. At most ONE spawn is started per tick: a
+ * spawnCreep call is stored as an engine "intent" that only resolves at the
+ * end of the tick, and the engine keeps at most one createCreep intent per
+ * spawn - a second spawnCreep call in the same tick overwrites the first
+ * one and the first creep is silently never spawned. The remaining roles are
+ * picked up from the next tick onward (the spawn is busy for three ticks per
+ * body part anyway). The cold-boot override (see trySpawnRole) still forces
+ * the very first creeps to be harvesters: before income exists, nothing else
+ * can ever spawn.
  *
  * Surplus spawning (owner feedback 2026-10-30):
  *   The minimums keep the colony alive, not busy. While every minimum is met
@@ -38,7 +47,7 @@
  *   is what lands RCL 2 inside the 500-tick smoke window.
  */
 
-import { MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX } from "config";
+import { MIN_CREEPS_BY_LEVEL, MIN_MINERS_PER_SOURCE, MIN_HARVESTERS_PER_SOURCE, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX } from "config";
 import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
 
 /** Roles checked each tick, highest priority first (owner rule #5). The miner

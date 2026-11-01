@@ -32,10 +32,44 @@ export const MIN_CREEPS_BY_LEVEL: {
     upgrader: number;
     hauler: number;
 }[] = [
-    { level: 1, harvester: 1, builder: 1, upgrader: 1, hauler: 1 },
-    { level: 2, harvester: 3, builder: 3, upgrader: 1, hauler: 1 },
+    { level: 1, harvester: 2, builder: 5, upgrader: 1, hauler: 1 },
+    { level: 2, harvester: 3, builder: 5, upgrader: 1, hauler: 6 },
     { level: 3, harvester: 5, builder: 3, upgrader: 1, hauler: 1 },
 ];
+
+/**
+ * M5: workers per source, by source state (the per-source split in
+ * managers/spawnManager - one crew per source, never shared).
+ *
+ * MIN_MINERS_PER_SOURCE: a source with a built container gets two 3-WORK
+ * miners (12/tick intake, 24 with both sources). Two per source on purpose:
+ * the source refills 10/tick, so 12 intake drains it to zero every ~250
+ * ticks and the refill drops 0 residue (waste <= 3,000), and when one miner
+ * dies the other keeps the source covered while the replacement walks
+ * (~150 ticks) so the room's harvest never dips below the 12/tick M5
+ * criterion. One 3-WORK miner (6/tick) would never drain its source - 0
+ * waste, but every death idles that source for the whole walk.
+ *
+ * MIN_HARVESTERS_PER_SOURCE: a source WITHOUT a container is covered by two
+ * bootstrap harvesters (2 x 3 WORK once the room capacity allows = the same
+ * 12/tick, walking). Two per source drains the source the way the miners
+ * do, so the early phase before the first container also produces no
+ * refill residue.
+ */
+export const MIN_MINERS_PER_SOURCE = 2;
+export const MIN_HARVESTERS_PER_SOURCE = 2;
+
+/**
+ * M5: how many of the room's haulers (the lowest-numbered ones, by name)
+ * are upgrader feeders. A feeder, on every delivery trip, first drops its
+ * load into the upgrader (which waits at the controller and cannot leave -
+ * its body has one MOVE part) and only then delivers the rest to the
+ * spawn/extensions. The upgrader's 50-energy body holds ~17 upgrade ticks;
+ * three feeders (~50 energy per 60-tick trip each) keep it above 90% duty,
+ * which is what sustains 4+ controller progress/tick through the M5
+ * window. The remaining haulers are pure store logistics.
+ */
+export const FEEDER_HAULERS = 3;
 
 /**
  * Surplus spawn caps (owner feedback 2026-10-30): totals per room, including
