@@ -262,6 +262,22 @@ function minCreepsPerRole(room: Room): Record<Role, number>
         }
     }
 
+    // While no container is built (bootstrap stage), the level-table row
+    // adds surplus harvesters on top of the per-source coverage: the
+    // pre-M5 economy. The M3 contract (tower plus extensions before roads
+    // inside 4,000 ticks from an RCL 3 start) was tuned to the level 3 row
+    // (five harvesters feeding the builder crew); the per-source split alone
+    // leaves two harvesters in that world and ends the run with one finished
+    // extension and capacity 350 instead of 3 (M3 regression of 2026-11-01,
+    // introduced by the source-state minimums of d108b29). Once the first
+    // container is up, the miners take the covered sources over and the
+    // split alone suffices again - a surplus harvester on a mined source
+    // would only fight the stationary miner (M5 design).
+    if (containerCount === 0)
+    {
+        harvesterCount = Math.max(harvesterCount, row.harvester);
+    }
+
     // M4: a defender is a last-resort attacker. It exists only while the
     // colony is in defend or war mode AND no tower can fire - if any tower
     // still has a shot, the tower handles the hostile and the energy stays

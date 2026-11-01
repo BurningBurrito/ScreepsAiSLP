@@ -1,6 +1,25 @@
 # ScreepsAiSLP Status
 
 ## Current State
+M3 regression fixed (2026-11-01): the M5 merge's source-state spawn minimums
+replaced the level-table harvester row with a per-source split, which left an
+RCL 3 room without containers at two harvesters and starved the M3
+tower-plus-extension window (failing run: 1 extension, capacity 350 at tick
+4,000). minCreepsPerRole (src/managers/spawnManager.ts) now uses
+max(per-source split, level-table row) while no container is built - the
+pre-M5 bootstrap economy - and the M5 split once a container exists.
+acceptance-m3 PASSES again (18m, 4,001 ticks, EXIT 0): 3 extensions + 7 sites,
+capacity 450, tower built with maxTowerEnergy 500, roads to both sources and
+the controller, 10 creeps, 0 console errors; harvested 10.46 -> 11.12/tick and
+construction 4.06 -> 4.17/tick vs the pre-M5 baseline.
+M2 regression fixed (2026-11-01): the M5 unconditional container-first build order
+(d108b29) pinned the whole builder crew on the first 5,000-energy container site from
+~tick 400 and failed the 05:33 gate's M2 with 0 finished extensions and 0 finished
+roads at tick 3,000. containerFirstForRoom (src/roles/builder.ts) now gates the
+container-first branch: containers lead only once a container is built, or at
+controller level <= 2 after one extension AND one road are finished. acceptance-m2
+PASSES again (EXIT 0, 3,001 ticks): level 2, extensionsBuilt 1, extensionSites 4,
+roadsBuilt 3, energyCapacity 350, creeps 7; ticks to RCL 2 improved 945 -> 813.
 M1, M2 and M3 are complete (bootstrap economy, focused build order, tower plus 10-extension
 capacity - details in the Change Log). The 10:01 M1 gate failure was two code bugs, not the
 environment: manageMode in src/managers/modeManager.ts read Memory.rooms on a fresh world
@@ -49,6 +68,78 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-01 (M3 regression: no-container rooms keep the level-table harvester minimum)
+- Full suite after the M2 gate fix (agent-test start all) bailed at M3:
+  "at least 3 extensions are finished - actual 1, expected 3" (capacity 350 vs the
+  required 450); M1 and M2 passed, M4/smoke/spawnprobe did not run (mocha --bail).
+- Root cause: M3 had never been run against the M5 code. reports/history.csv shows
+  its last run at 2026-11-01 05:30 on commit 32706ac, BEFORE the M5 merge d108b29,
+  passing with builder 3 + harvester 5 + upgrader 2, 10.46 harvested per tick, 4.06
+  construction per tick, 4 extensions and capacity 500 at the end. d108b29's
+  source-state spawn minimums replaced the level-table harvester row (5 at RCL 3)
+  with the per-source split: two container-less sources -> two harvesters. In the
+  M3 world (RCL 3, containers last in the builder queue, so no container is ever
+  built) the economy stayed at two harvesters for the whole 4,000-tick window:
+  ~26,600 total build energy vs ~34,700 pre-M5, ending at 1 extension / capacity
+  350. The containerFirstForRoom gate is inactive in M3 (level 3 >
+  CONTAINER_BOOST_MAX_LEVEL = 2), so the M2 gate fix is not the cause.
+- Fix (src/managers/spawnManager.ts, minCreepsPerRole): while no container is
+  built, the harvester minimum is max(per-source split, level-table row) - the
+  pre-M5 bootstrap economy (5 at RCL 3, 3 at RCL 2, 2 at RCL 1 where the split
+  wins); once the first container is built the M5 per-source split applies again
+  (miners take the covered sources; a surplus harvester would fight the
+  stationary miner). M1/smoke/spawnprobe (RCL 1) are unchanged (2 = the split);
+  M2 now runs three harvesters from the moment it reaches level 2 - the pre-M5
+  M2 run had exactly three and passed.
+- Lint clean, build clean, 75 unit tests passing.
+- acceptance-m3 PASSED (18m, 4,001 ticks, EXIT 0): snapshot
+  {"level":3, "towersBuilt":1, "towerSites":0, "extensionsBuilt":3,
+  "extensionSites":7, "energyCapacity":450, "creeps":10, "roadTiles":59,
+  "roadsOnWalls":0, "strayRoads":0, "sources":2, "sourcesConnected":2,
+  "controllerConnected":true, "farthestFromSpawn":6}, maxTowerEnergy 500,
+  roadShare 0 - all 13 criteria met. Crew was builder 3 + harvester 5 +
+  upgrader 2 for the whole run (the pre-M5 passing composition). Scorecard vs
+  the pre-M5 baseline (32706ac): harvested 10.46 -> 11.12/tick, construction
+  4.06 -> 4.17/tick, wasted 9,704 -> 9,136, controller progress 0 -> 0.15/tick
+  (RCL 3 / 251 at the end), CPU 2.11 -> 2.15/tick, creep idle 30 % -> 30 %,
+  0 console errors. Capacity went 300 -> 350 between ticks 2,200-2,300,
+  -> 400 between 2,700-2,800 and -> 450 between 3,600-3,700; the failing run
+  ended its whole 4,000 ticks at 350 with one finished extension.
+- Full suite (agent-test start all) running to confirm M1/M2/M4/smoke/
+  spawnprobe against the new minimums.
+### 2026-11-01 (M2 regression fixed: container-first build priority gated behind the bootstrap minimum)
+- Fix (src/roles/builder.ts, commit c2b9f5c): containerFirstForRoom now gates the
+  container-first branch of selectBuildSite. M5's unconditional container-first
+  (d108b29) put a container site above the extension and road queues, and the
+  construction manager places a container site from RCL 1, so from ~tick 400 the
+  whole crew camped the first 5,000-energy container site: the 05:33 gate failed
+  M2 with extensionsBuilt 0 and roadsBuilt 0 at tick 3,000 (snapshot level 2,
+  energyCapacity 300, 5 extension sites, 59 road sites, 0 of each built).
+  Containers now lead only when (a) a container is already built, or (b) the
+  controller is at level <= CONTAINER_BOOST_MAX_LEVEL (2) with at least
+  CONTAINER_BOOST_MIN_EXTENSIONS (1) extension and CONTAINER_BOOST_MIN_ROADS (1)
+  road finished. Built structures are counted with FIND_STRUCTURES: in
+  @types/screeps the FIND_MY_STRUCTURES union (AnyOwnedStructure) excludes
+  containers and roads, so the MY_ constant does not type-check for them (and the
+  rest of the codebase counts them the same way).
+- 6 new gate tests in test/unit/builder.test.ts (75 unit tests passing); lint
+  clean; build clean; smoke (500 ticks): 1 passing, 0 console errors, build
+  energy on roads 0 % -> 100 %.
+- acceptance-m2 PASSED (17m, 3,001 ticks, EXIT 0): snapshot {"level":2,
+  "extensionsBuilt":1, "extensionSites":4, "roadsBuilt":3, "roadSites":56,
+  "energyCapacity":350, "creeps":7} - all seven criteria met (level >= 2;
+  extensionsBuilt >= 1; roadsBuilt >= 1; extensionBuilt+sites >= 5;
+  roadBuilt+sites >= 5; energyCapacity >= 350; creeps >= 3). In-run behavior:
+  roads lead from ~tick 400 (3 finished by tick 3,000), extension one finishes
+  ~tick 2,150 (capacity 300 -> 350), then the gate opens and the crew moves to
+  the container (2,835 build energy in the last 1,000 ticks). Scorecard vs the
+  pre-M5 2026-11-01 05:12 run: harvested 6.64 -> 7.09/tick, controller progress
+  0 -> 0.3/tick, ticks to RCL 2 945 -> 813, RCL 2 progress at end 0 -> 846,
+  construction 4.35 -> 3.23/tick, CPU 1.84 -> 1.95/tick, creep idle 22 % ->
+  26 %, spawn idle while full 31 % -> 86 %, wasted at regen 10,066 -> 11,632
+  (none of these is an M2 criterion; the last three trade the store for the
+  container build).
+- Full suite (agent-test start all) running after this entry.
 ### 2026-11-01 (M5 static mining implemented; M5 smoke failure fixed with upgrader hold-back)
 - **M5 implementation (from the previous run, verified green this run):**
   - New src/roles/miner.ts: a stationary miner per source. It walks to the container
@@ -214,45 +305,35 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **M2 gate failure (regression from the M5 container-first build order) - fixing now.**
-  Gate run (all): m2 failing - "extension built (after 3000 ticks) is 0, needs >= 1" and
-  "road built (after 3000 ticks) is 0, needs >= 1"; all other tests pass (m1, m3, m4,
-  smoke, spawnprobe, 88 unit).
-  Diagnosis: d108b29 made container sites the top priority in selectBuildSite
-  (src/roles/builder.ts). The construction manager places a container site from RCL 1, so
-  from ~tick 400 the whole builder crew camps the first 5,000-energy container site
-  (smoke evidence: 401 build energy on the container at tick 500, vs 1,194 on roads
-  pre-M5). In 3,000 ticks neither the extension queue nor the road network can finish -
-  M2 needs one finished extension AND one finished road, and both sit behind the
-  container in the queue.
-  Design fix: gate the container-first priority on the economy stage (rule 02b: bootstrap
-  ends when the first container exists). containerFirstForRoom (new, exported in
-  src/roles/builder.ts) leads with containers only when (a) a container is already built
-  (static-mining stage: the remaining container queue matters as much as the first one),
-  or (b) the room is at controller level <= CONTAINER_BOOST_MAX_LEVEL (2) and has already
-  finished at least one extension and one road (the M2 layout minimum is met, so the
-  container may take the crew - that is what unlocks the stationary miner inside the
-  M2/M5 window). At RCL >= 3 the tower-plus-extension density contract (M3/M4) owns the
-  crew and containers wait for case (a). All in-repo test worlds keep their pre-M5
-  behavior (M1/smoke/spawnprobe: no built extension at RCL 1, so roads stay first;
-  M3/M4: level >= 3, so containers stay last); the M2/M5 bootstrap worlds now finish the
-  extension + road minimum first and then hand the crew to the container.
+- **M3 regression (spawn minimums after the M5 merge) - fixing now.**
+  Full suite after the M2 gate fix: M1 passing, M2 passing, M3 failing with
+  "at least 3 extensions are finished - actual 1, expected 3" (and capacity 350 vs
+  the required 450); the suite bailed at M3 (M4/smoke/spawnprobe did not run).
+  Root cause (found via reports/history.csv and the pre-M5 scorecards, not the
+  gate): M3 had never been run against the M5 code - its last run was
+  2026-11-01 05:30 on commit 32706ac, BEFORE the M5 merge d108b29, and it passed
+  with 5 harvesters / 10.46 harvested per tick / 4.06 construction per tick /
+  4 extensions / capacity 500 at the end. d108b29 replaced the level-table
+  harvester row (5 at RCL 3) with the per-source split: two container-less
+  sources -> two harvesters. In the M3 world (RCL 3, containers last in the
+  builder queue, so no container is ever built) the economy stayed at two
+  harvesters for the whole 4,000-tick window: ~26,600 total build energy vs
+  ~34,700 pre-M5, ending at 1 extension / capacity 350. The
+  containerFirstForRoom gate is inactive in M3 (level 3 > CONTAINER_BOOST_MAX_LEVEL),
+  so the M2 gate fix is not the cause.
+  Fix: in minCreepsPerRole (src/managers/spawnManager.ts), while no container is
+  built the harvester minimum is max(per-source split, level-table row) - the
+  pre-M5 bootstrap economy (5 at RCL 3, 3 at RCL 2, 2 at RCL 1 = the split);
+  once a container is built the M5 split applies (miners take the covered
+  sources, no stacking a harvester on a mined source).
   Plan (each one commit):
-  1. [x] Diagnosis and this plan (status.md).
-  2. [x] Gate in selectBuildSite + containerFirstForRoom helper + config
-     constants; 6 new gate tests in test/unit/builder.test.ts (75 unit tests
-     pass, lint clean, build clean). Note: the gate counts built structures
-     with FIND_STRUCTURES - in @types/screeps the FIND_MY_STRUCTURES union
-     (AnyOwnedStructure) excludes containers and roads, so the MY_ constant
-     does not even type-check for them.
-  3. [x] Lint/build/unit, then smoke scorecard check: 1 passing (2m), 0
-     console errors. Build energy spent on roads (share of all build
-     energy) 0 % -> 100 % (road 401 instead of container 401 in the
-     500-tick window - the gate is false at RCL 1 with nothing built, so
-     roads lead again); construction 2.01/tick, harvested 3.86/tick,
-     upgrade 0.25/tick, CPU 1.53/tick, creep idle 22 % - all unchanged.
-  4. acceptance-m2 run, then agent-test start all.
-  5. Docs + commit.
+  1. [x] Root cause via history.csv + pre-M5 scorecards + builder/spawn diffs.
+  2. [x] Fix in minCreepsPerRole + config comment; lint clean, build clean, 75
+     unit tests pass (the L2/L3 unit tests assert single-spawn decisions that
+     hold for the higher minimum too).
+  3. [x] acceptance-m3: PASSED (18m, 4,001 ticks, EXIT 0) - snapshot in the
+     Change Log above; all 13 criteria met.
+  4. [ ] agent-test start all (running now), then docs + commit.
 - M5 acceptance (owner's, 3,000 ticks): 2 containers adjacent to 2 sources, >= 60 % of the
   harvest ceiling, wasted-at-regen <= 15 %, upgrade >= 20 % of ceiling, no >150-tick idle
   spawn at full energy, CPU <= 10/tick. Its acceptance test is not in this copy of the
