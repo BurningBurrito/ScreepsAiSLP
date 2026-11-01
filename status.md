@@ -11,7 +11,10 @@ pre-M5 bootstrap economy - and the M5 split once a container exists.
 acceptance-m3 PASSES again (18m, 4,001 ticks, EXIT 0): 3 extensions + 7 sites,
 capacity 450, tower built with maxTowerEnergy 500, roads to both sources and
 the controller, 10 creeps, 0 console errors; harvested 10.46 -> 11.12/tick and
-construction 4.06 -> 4.17/tick vs the pre-M5 baseline.
+construction 4.06 -> 4.17/tick vs the pre-M5 baseline. Full suite re-verified
+the same day (agent-test start all, 65m, EXIT 0): 75 passing (unit) + 8
+passing (integration), 0 failing - M1-M4 acceptance, smoke and spawnprobe all
+pass against the new minimums.
 M2 regression fixed (2026-11-01): the M5 unconditional container-first build order
 (d108b29) pinned the whole builder crew on the first 5,000-energy container site from
 ~tick 400 and failed the 05:33 gate's M2 with 0 finished extensions and 0 finished
@@ -105,8 +108,27 @@ yet.
   0 console errors. Capacity went 300 -> 350 between ticks 2,200-2,300,
   -> 400 between 2,700-2,800 and -> 450 between 3,600-3,700; the failing run
   ended its whole 4,000 ticks at 350 with one finished extension.
-- Full suite (agent-test start all) running to confirm M1/M2/M4/smoke/
-  spawnprobe against the new minimums.
+- Full suite (agent-test start all, 65m, EXIT 0) after the fix: 75 passing
+  (unit, 22ms) + 8 passing (integration, 1h), 0 failing. M3 re-passed in the
+  same run with the identical snapshot (3/251, capacity 450, 10 creeps, 0
+  console errors).
+  - M2 (3,001 ticks): level 2, extensionsBuilt 1 + 4 sites, roadsBuilt 3,
+    energyCapacity 350, creeps 9 (builder 3, harvester 2, hauler 1, miner 1,
+    upgrader 2 - the M5 miner/hauler handoff happened in-run, tick ~2,400,
+    right after the first container finished). Scorecard vs the pre-M5 run:
+    harvested 7.09 -> 9.83/tick, total 19,060 -> 25,016, wasted 11,632 ->
+    9,112, delivered to spawn 0.56 -> 0.98/tick; ticks to RCL 2 unchanged at
+    813, 0 console errors.
+  - M4 (6,001 ticks): level 5 / 444, towersBuilt 2 with ramparts, capacity
+    550, 11 creeps, 0 console errors. Scorecard vs the pre-M5 run (32706ac):
+    harvested 11 -> 12.66/tick, wasted 8,268 -> 6,968, construction 5.11 ->
+    5.26/tick. Defense: firstHostile 5401, Memory.mode 'defend' from the same
+    tick, intruderGoneAfterTicks 1, safeModeTicks 0, spawnHits 5,000
+    (spawn survived).
+  - smoke (500 ticks): 0 console errors, 6 creeps, harvested 1,824,
+    progress 50, CPU 1.48/tick.
+  - spawnprobe (700 ticks): 0 console errors, RCL 1 / 150, 7 creeps,
+    harvested 5.43/tick in the window.
 ### 2026-11-01 (M2 regression fixed: container-first build priority gated behind the bootstrap minimum)
 - Fix (src/roles/builder.ts, commit c2b9f5c): containerFirstForRoom now gates the
   container-first branch of selectBuildSite. M5's unconditional container-first
@@ -305,7 +327,7 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **M3 regression (spawn minimums after the M5 merge) - fixing now.**
+- **M3 regression (spawn minimums after the M5 merge) - DONE 2026-11-01.**
   Full suite after the M2 gate fix: M1 passing, M2 passing, M3 failing with
   "at least 3 extensions are finished - actual 1, expected 3" (and capacity 350 vs
   the required 450); the suite bailed at M3 (M4/smoke/spawnprobe did not run).
@@ -333,7 +355,9 @@ yet.
      hold for the higher minimum too).
   3. [x] acceptance-m3: PASSED (18m, 4,001 ticks, EXIT 0) - snapshot in the
      Change Log above; all 13 criteria met.
-  4. [ ] agent-test start all (running now), then docs + commit.
+  4. [x] Full suite PASSED (75 + 8 passing, EXIT 0, 65m) - M1-M4 acceptance,
+     smoke and spawnprobe all pass against the new minimums; scorecard numbers
+     in the Change Log.
 - M5 acceptance (owner's, 3,000 ticks): 2 containers adjacent to 2 sources, >= 60 % of the
   harvest ceiling, wasted-at-regen <= 15 %, upgrade >= 20 % of ceiling, no >150-tick idle
   spawn at full energy, CPU <= 10/tick. Its acceptance test is not in this copy of the
