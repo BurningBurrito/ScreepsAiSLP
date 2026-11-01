@@ -1,6 +1,17 @@
 # ScreepsAiSLP Status
 
 ## Current State
+Gate state verified (2026-11-01, run 37 round 2): the 05:33 gate failed on M2
+(0 finished extensions). The fix (c2b9f5c, 9f0abcf) was verified in this run by
+a full-suite pass on the current src/ (agent-test start all, started 07:53,
+4,325 s, EXIT 0: "8 passing (1h)" integration + 75 passing unit; M2 now
+extensionsBuilt 1 / roadsBuilt 3, M3 capacity 450, M4 2 towers with ramparts,
+0 console errors). HEAD (870f347) changed nothing in src/ since that run
+(git diff 9f0abcf..HEAD touches only reports/ and status.md), and
+lint/build/75 unit tests were re-verified clean in round 2, so the gate will
+push the exact code that passed. M5 (static mining) remains the open milestone
+but is blocked: the owner's M5 acceptance test is not in this repo copy.
+
 M3 regression fixed (2026-11-01): the M5 merge's source-state spawn minimums
 replaced the level-table harvester row with a per-source split, which left an
 RCL 3 room without containers at two harvesters and starved the M3
@@ -71,6 +82,33 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-01 (run 37 round 2: gate state verified, no code changes; M5 blocked)
+- The 05:33 gate failure (M2: "at least one extension is finished", 0 built)
+  was fixed in round 1 of this run (c2b9f5c container-first gate, 9f0abcf
+  harvester minimums) and verified by the full suite against this exact src/:
+  agent-test start all, started 07:53, 4,325 s, EXIT 0 - "8 passing (1h)"
+  integration plus 75 passing unit. Snapshots: M2 level 2, extensionsBuilt 1,
+  roadsBuilt 3 (gate run: 0 / 0), M3 3 extensions + 7 sites / capacity 450 /
+  tower 500, M4 2 towers with ramparts / 5 extensions + 25 sites, smoke
+  harvested 3.86/tick / 0 console errors, spawnprobe 700 ticks clean.
+- Round 2 re-verified HEAD (870f347): lint 0 errors, build OK, 75 unit tests
+  passing; src/ is byte-identical to the commit the suite passed on, so the
+  gate will re-run and push that same code.
+- Fresh smoke at HEAD (agent-test, 500 ticks, "1 passing (2m)", EXIT 0):
+  harvested 3.86/tick, upgrade 0.25/tick (50 at tick 500), spawn idle while
+  full 1 % (target below 20 %), CPU 1.49/tick, 0 console errors - identical to
+  the 07:53 suite's smoke numbers, confirming code and test environment are
+  stable at the handoff point.
+- M5 stays unchecked: the owner's acceptance test is not in this repo copy
+  (test/integration holds acceptance-m1..m4 only) and agent-test only accepts
+  test/integration or test/unit paths, so the candidate in
+  test/candidates/acceptance-m4.candidate.test.ts cannot be run. Copying it
+  into test/integration/ would add it to the gate's npm test (mocha
+  'test/integration/**/*.ts'), and its criterion 1 (two containers by tick
+  3000) is not yet energy-budgeted inside M2's extension + road window - that
+  would fail the gate. Decision: no code changes this round; the
+  verified-green state is handed to the gate as-is.
+
 ### 2026-11-01 (M3 regression: no-container rooms keep the level-table harvester minimum)
 - Full suite after the M2 gate fix (agent-test start all) bailed at M3:
   "at least 3 extensions are finished - actual 1, expected 3" (capacity 350 vs the
@@ -327,6 +365,18 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **M5 (static mining) - BLOCKED on the owner's acceptance test (run 37 round
+  2, 2026-11-01).** The test is not in this copy and agent-test refuses
+  test/candidates/ paths, so M5 cannot be measured or ticked from this repo
+  state. Next run, in order: (1) if the owner's acceptance-m5 test appears in
+  test/integration/, run it with agent-test and fix the first failing
+  criterion; (2) otherwise work criterion 1's energy budget - two containers
+  adjacent to both sources within 3,000 ticks of an RCL 1 start while M2's
+  extension + road minimum still finishes (10,000 energy of containers plus
+  the extension, the road and all spawn costs out of ~12,000-18,000 harvest) -
+  likely by splitting the builder crew across both container sites earlier
+  instead of serializing them after every road; verify with the M2 and M3
+  acceptance tests after any such change.
 - **M3 regression (spawn minimums after the M5 merge) - DONE 2026-11-01.**
   Full suite after the M2 gate fix: M1 passing, M2 passing, M3 failing with
   "at least 3 extensions are finished - actual 1, expected 3" (and capacity 350 vs
@@ -414,9 +464,12 @@ yet.
 - Acknowledged 2026-10-31: M4 spec details (structure caps, tower priority, mode
   switching, safe mode) - done in the M4 work (commits 2e17160, 2c081e3, f606551).
 - Acknowledged 2026-10-31: "worth fixing once M4 is green" - the spawn idles at full
-  energy in the early game - in progress in this run: surplus spawning (second
-  harvester, second upgrader, third builder) in src/managers/spawnManager.ts; target
-  smoke "Spawn idle while energy is full" below 20 % (baseline 100 %).
+  energy in the early game - done (commits d108b29, c2b9f5c, 9f0abcf): the M5
+  minimums plus the container-first gate hold the smoke scorecard's "Spawn idle
+  while energy is full" at 1 % (target below 20 %; 07:53 full-suite run, 500
+  ticks, 0 console errors). The 700-tick spawnprobe window still shows 23 % - a
+  longer window dominated by the late builder/upgrader spawns, tracked in Known
+  Issues.
 - Acknowledged 2026-10-31: rules - never edit protected tests, one commit per fix with
   scorecard numbers in the message - process rules, followed in this run.
 
