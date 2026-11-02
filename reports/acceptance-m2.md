@@ -1,6 +1,6 @@
-# Scorecard: acceptance-m2 · 2026-11-02 11:05 · 3001 ticks · commit 88fda14
+# Scorecard: acceptance-m2 · 2026-11-02 16:34 · 3001 ticks · commit b9016ba
 
-| Metric (last 1000 ticks unless noted) | This run | Previous run (2026-11-02 05:37, 6003f9d) | Change |
+| Metric (last 1000 ticks unless noted) | This run | Previous run (2026-11-02 11:05, 88fda14) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 9.83 | 9.83 | 0 |
 | Energy wasted at source regeneration (sum) | 9,112 | 9,112 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 79 % | 79 % | 0 pts |
 | Spawn busy | 5 % | 5 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 38 % | 38 % | 0 pts |
-| CPU / tick (average, max) | 2.12, 20.44 | 2.13, 20.44 | -0.01 |
+| CPU / tick (average, max) | 2.12, 20.48 | 2.12, 20.44 | 0 |
 | RCL / progress at end (whole run) | 2 / 150 | 2 / 150 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | 813 / - | 813 / - | 0 |
 | Energy harvested (whole run) | 25,016 | 25,016 | 0 |
@@ -32,7 +32,7 @@ Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tic
       100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.4
       200 | builder 1, harvester 2                   |   3.7 |     0 |   196/300 | idle | 1.3
       300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.3
-      400 | builder 1, harvester 2, upgrader 1       |   2.5 |   0.5 |   175/300 | idle | 1.4
+      400 | builder 1, harvester 2, upgrader 1       |   2.5 |   0.5 |   175/300 | idle | 1.5
       500 | builder 2, harvester 2, upgrader 2       |   5.2 |     0 |     2/300 | busy | 1.5
       600 | builder 3, harvester 2, upgrader 2       |   4.2 |   0.9 |   131/300 | idle | 1.6
       700 | builder 3, harvester 2, upgrader 2       |   6.6 |   0.1 |   300/300 | idle | 1.8
@@ -55,7 +55,7 @@ Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tic
      2400 | builder 3, harvester 2, hauler 1, miner 1, upgrader 2 |     6 |   0.5 |   126/350 | idle | 2
      2500 | builder 3, harvester 2, hauler 1, miner 1, upgrader 2 |   6.2 |     0 |   350/350 | idle | 2
      2600 | builder 3, harvester 2, hauler 1, miner 1, upgrader 2 |  11.2 |     0 |   350/350 | idle | 2.1
-     2700 | builder 3, harvester 2, hauler 1, miner 1, upgrader 2 |  11.4 |     0 |   350/350 | idle | 2.2
+     2700 | builder 3, harvester 2, hauler 1, miner 1, upgrader 2 |  11.4 |     0 |   350/350 | idle | 2.3
      2800 | builder 3, harvester 2, hauler 1, miner 1, upgrader 2 |  11.4 |     0 |   350/350 | idle | 2.2
      2900 | builder 3, harvester 2, hauler 1, miner 1, upgrader 2 |  11.4 |     0 |   350/350 | idle | 2.2
      3000 | builder 3, harvester 2, hauler 1, miner 1, upgrader 2 |  11.4 |     0 |   350/350 | idle | 2.2
