@@ -770,6 +770,56 @@ function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomP
         {
             positions.push(bestPos);
         }
+        else if (Game.time % 100 === 0)
+        {
+            // TEMP DIAG: every adjacent tile rejected - log why, once per 100
+            // ticks, so the smoke console pinpoints the failing check.
+            const reasons: string[] = [];
+            for (let dx = -1; dx <= 1; dx++)
+            {
+                for (let dy = -1; dy <= 1; dy++)
+                {
+                    if (dx === 0 && dy === 0)
+                    {
+                        continue;
+                    }
+                    const nx = source.pos.x + dx;
+                    const ny = source.pos.y + dy;
+                    let reason = "oob";
+                    if (isValidTile(nx, ny))
+                    {
+                        const cp = new RoomPosition(nx, ny, room.name);
+                        if (isWallPosition(cp, room))
+                        {
+                            reason = "wall";
+                        }
+                        else if (excludeTiles.has(`${nx},${ny}`))
+                        {
+                            reason = "excl";
+                        }
+                        else if (cp.lookFor(LOOK_STRUCTURES).length > 0)
+                        {
+                            reason = "struct:" + cp.lookFor(LOOK_STRUCTURES).map((s) => s.structureType).join("/");
+                        }
+                        else if (cp.lookFor(LOOK_CONSTRUCTION_SITES).length > 0)
+                        {
+                            reason = "site:" + cp.lookFor(LOOK_CONSTRUCTION_SITES).map((s) => s.structureType).join("/");
+                        }
+                        else
+                        {
+                            reason = "OK d" + cp.getRangeTo(spawn);
+                        }
+                    }
+                    reasons.push(`(${nx},${ny})=${reason}`);
+                }
+            }
+            console.log("[DIAG2] src " + source.pos.x + "," + source.pos.y + " excluded=" + excludeTiles.size + " " + reasons.join(" "));
+        }
+    }
+
+    if (Game.time % 100 === 0)
+    {
+        console.log("[DIAG] container positions: " + positions.map((p) => `${p.x},${p.y}`).join(" | ") + " for " + sources.length + " sources");
     }
 
     return positions;
@@ -800,7 +850,11 @@ function placeContainerSites(room: Room, containerPositions: RoomPosition[]): vo
 
         if (!hasContainer && !hasSite)
         {
-            room.createConstructionSite(pos, STRUCTURE_CONTAINER);
+            const result = room.createConstructionSite(pos, STRUCTURE_CONTAINER);
+            if (Game.time < 200)
+            {
+                console.log("[DIAG] placeContainerSites at " + pos.x + "," + pos.y + " -> " + result);
+            }
             return; // Only place one container at a time
         }
     }

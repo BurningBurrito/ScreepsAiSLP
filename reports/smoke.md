@@ -1,6 +1,6 @@
-# Scorecard: smoke · 2026-11-02 22:19 · 500 ticks · commit e1ec27d
+# Scorecard: smoke · 2026-11-02 23:17 · 500 ticks · commit f6f8fc0
 
-| Metric (last 200 ticks unless noted) | This run | Previous run (2026-11-01 16:17, 437872d) | Change |
+| Metric (last 200 ticks unless noted) | This run | Previous run (2026-11-02 23:06, f6f8fc0) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 3.86 | 3.86 | 0 |
 | Energy wasted at source regeneration (sum) | 948 | 948 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 1 % | 1 % | 0 pts |
 | Spawn busy | 7 % | 7 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 22 % | 22 % | 0 pts |
-| CPU / tick (average, max) | 1.46, 20.47 | 1.57, 21.74 | -0.11 |
+| CPU / tick (average, max) | 1.57, 20.61 | 1.55, 20.41 | +0.02 |
 | RCL / progress at end (whole run) | 1 / 50 | 1 / 50 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
 | Energy harvested (whole run) | 1,824 | 1,824 | 0 |
@@ -25,12 +25,12 @@
 Creeps at end by role: builder 2, harvester 2, upgrader 2.
 Structures at end: spawn 1. Construction sites: 60 (container 1, road 59). Build energy in the window by target: road 401.
 Room energy capacity 300; source capacity 3000 and 3000; Memory 1 KB; bucket 10000.
-Bot console: 11 lines, 0 with errors (reports/smoke-console.log). Probe results missing for 0 ticks.
+Bot console: 22 lines, 0 with errors (reports/smoke-console.log). Probe results missing for 0 ticks.
 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
-      100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.4
-      200 | builder 1, harvester 2                   |   3.7 |     0 |   196/300 | idle | 1.3
-      300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.3
-      400 | builder 1, harvester 2, upgrader 1       |   2.5 |   0.5 |   175/300 | idle | 1.4
-      500 | builder 2, harvester 2, upgrader 2       |   5.2 |     0 |     2/300 | busy | 1.5
+      100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.5
+      200 | builder 1, harvester 2                   |   3.7 |     0 |   196/300 | idle | 1.4
+      300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.4
+      400 | builder 1, harvester 2, upgrader 1       |   2.5 |   0.5 |   175/300 | idle | 1.6
+      500 | builder 2, harvester 2, upgrader 2       |   5.2 |     0 |     2/300 | busy | 1.6
