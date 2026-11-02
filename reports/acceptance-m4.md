@@ -1,6 +1,6 @@
-# Scorecard: acceptance-m4 · 2026-11-02 17:17 · 6001 ticks · commit b9016ba
+# Scorecard: acceptance-m4 · 2026-11-02 22:17 · 6001 ticks · commit e1ec27d
 
-| Metric (last 1000 ticks unless noted) | This run | Previous run (2026-11-02 11:49, 88fda14) | Change |
+| Metric (last 1000 ticks unless noted) | This run | Previous run (2026-11-02 17:17, b9016ba) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 12.66 | 12.66 | 0 |
 | Energy wasted at source regeneration (sum) | 6,968 | 6,968 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 68 % | 68 % | 0 pts |
 | Spawn busy | 5 % | 5 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 38 % | 38 % | 0 pts |
-| CPU / tick (average, max) | 2.14, 28.18 | 2.14, 28.13 | 0 |
+| CPU / tick (average, max) | 2.14, 27.98 | 2.14, 28.18 | 0 |
 | RCL / progress at end (whole run) | 5 / 444 | 5 / 444 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | 0 / 0 | 0 / 0 | 0 |
 | Energy harvested (whole run) | 58,342 | 58,342 | 0 |
@@ -32,18 +32,18 @@ Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tic
       100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.5
       200 | harvester 3                              |     5 |     0 |   296/300 | idle | 1.3
       300 | harvester 4                              |   2.4 |     0 |   296/300 | idle | 1.3
-      400 | builder 1, harvester 5                   |   4.7 |     0 |   166/300 | idle | 1.4
+      400 | builder 1, harvester 5                   |   4.7 |     0 |   166/300 | idle | 1.5
       500 | builder 3, harvester 5                   |   9.4 |     0 |   230/300 | idle | 2
       600 | builder 3, harvester 5, upgrader 2       |   9.5 |     0 |   300/300 | idle | 2
       700 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   300/300 | idle | 2.4
-      800 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.6
+      800 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.7
       900 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.4
      1000 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.3
      1100 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   300/300 | idle | 2.5
      1200 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.5
      1300 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   300/300 | idle | 2.5
      1400 | builder 3, harvester 5, upgrader 2       |     5 |     0 |   300/300 | idle | 1.9
-     1500 | builder 3, harvester 5, upgrader 2       |     6 |     0 |   300/300 | idle | 1.8
+     1500 | builder 3, harvester 5, upgrader 2       |     6 |     0 |   300/300 | idle | 1.9
      1600 | builder 3, harvester 5, upgrader 2       |   9.4 |     0 |    56/300 | busy | 2.2
      1700 | builder 3, harvester 5, upgrader 2       |   8.1 |     0 |   235/300 | idle | 2.2
      1800 | builder 3, harvester 5, upgrader 2       |   7.4 |     0 |   300/300 | idle | 2.2
@@ -58,19 +58,19 @@ Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tic
      2700 | builder 3, harvester 5, upgrader 2       |   5.8 |     0 |   300/300 | idle | 2.1
      2800 | builder 3, harvester 5, upgrader 2       |   8.4 |   0.5 |   300/300 | idle | 2.1
      2900 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   300/300 | idle | 2.3
-     3000 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.3
+     3000 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.4
      3100 | builder 3, harvester 5, upgrader 2       |   8.9 |     0 |   300/300 | idle | 2.2
-     3200 | builder 3, harvester 5, upgrader 2       |   8.4 |   0.5 |   224/300 | idle | 2.2
+     3200 | builder 3, harvester 5, upgrader 2       |   8.4 |   0.5 |   224/300 | idle | 2.1
      3300 | builder 3, harvester 5, upgrader 2       |   7.4 |     0 |   300/300 | idle | 2.1
      3400 | builder 3, harvester 5, upgrader 2       |   7.2 |     0 |   350/350 | idle | 2
      3500 | builder 3, harvester 5, upgrader 2       |   8.3 |     0 |    58/350 | busy | 2
      3600 | builder 3, harvester 5, upgrader 2       |   9.4 |   0.4 |   222/350 | idle | 2.1
-     3700 | builder 3, harvester 5, upgrader 2       |  10.8 |     0 |   350/350 | idle | 2.2
+     3700 | builder 3, harvester 5, upgrader 2       |  10.8 |     0 |   350/350 | idle | 2.1
      3800 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   350/350 | idle | 2.3
      3900 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   350/350 | idle | 2.3
      4000 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   350/350 | idle | 2.2
-     4100 | builder 3, harvester 5, upgrader 2       |  10.8 |     0 |   400/400 | idle | 2.3
-     4200 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   400/400 | idle | 2.3
+     4100 | builder 3, harvester 5, upgrader 2       |  10.8 |     0 |   400/400 | idle | 2.2
+     4200 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   400/400 | idle | 2.4
      4300 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   400/400 | idle | 2.4
      4400 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   400/400 | idle | 2.5
      4500 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   400/450 | idle | 2.4
@@ -78,7 +78,7 @@ Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tic
      4700 | builder 3, harvester 5, upgrader 2       |   8.2 |   0.5 |   113/450 | busy | 2.1
      4800 | builder 3, harvester 5, upgrader 2       |   7.8 |     0 |   418/450 | idle | 1.8
      4900 | builder 3, harvester 5, upgrader 2       |   8.4 |     0 |   429/450 | idle | 2
-     5000 | builder 3, harvester 5, upgrader 2       |   9.8 |   0.5 |   336/450 | idle | 2.2
+     5000 | builder 3, harvester 5, upgrader 2       |   9.8 |   0.5 |   336/450 | idle | 2.1
      5100 | builder 3, harvester 5, upgrader 1       |   9.2 |     0 |    44/450 | busy | 2
      5200 | builder 3, harvester 5, upgrader 2       |     7 |     0 |   280/450 | idle | 1.8
      5300 | builder 3, harvester 5, upgrader 2       |  12.6 |   0.4 |   450/450 | idle | 2
@@ -87,6 +87,6 @@ Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tic
      5600 | builder 3, defender 1, harvester 5, upgrader 2 |   7.5 |     0 |   500/500 | idle | 2
      5700 | builder 3, defender 1, harvester 5, upgrader 2 |  16.2 |   0.7 |   500/500 | idle | 2.4
      5800 | builder 3, defender 1, harvester 5, upgrader 2 |  16.2 |   0.3 |   500/500 | idle | 2.3
-     5900 | builder 3, defender 1, harvester 5, upgrader 2 |  16.2 |     0 |   500/500 | idle | 2.2
-     6000 | builder 3, defender 1, harvester 5, upgrader 2 |  14.9 |     0 |   500/550 | idle | 2.1
-     6001 | builder 3, defender 1, harvester 5, upgrader 2 |     0 |     0 |   500/550 | idle | 1.8
+     5900 | builder 3, defender 1, harvester 5, upgrader 2 |  16.2 |     0 |   500/500 | idle | 2.3
+     6000 | builder 3, defender 1, harvester 5, upgrader 2 |  14.9 |     0 |   500/550 | idle | 2.2
+     6001 | builder 3, defender 1, harvester 5, upgrader 2 |     0 |     0 |   500/550 | idle | 2
