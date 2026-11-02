@@ -10,6 +10,14 @@ the new (f695cfd). Unit suite is 78 passing (was 75); lint and build are clean. 
 mining + surplus-energy spend) remains the open milestone but its acceptance test is not in
 this repo copy (only test/integration/m5-candidate.test.ts), so it is measured by the
 candidate/smoke/spawnprobe scorecards, not an acceptance gate.
+Full suite verified this run (agent-test start all, EXIT 1 only from the M5 draft candidate):
+acceptance-m1..m4 all PASS with scorecards byte-for-byte identical to the 21d2356 baseline
+(M1 6.28/tick L1/174, M2 9.83/tick L2/150, M3 11.12/tick L3/251, M4 12.66/tick L5/444), smoke
+and spawnprobe pass, 78 unit passing, lint and build clean. The single red is
+test/integration/m5-candidate.test.ts, the human's M5 static-mining draft (header: "not a
+replacement", "must not edit"); it fails because M5 is not implemented (1 of 2 containers,
+1 miner, 9.82 vs required 12 harvested/tick) and it is unchanged by the run 38 fixes -
+expected, not a regression.
 
 Gate state verified (2026-11-01, run 37 round 2): the 05:33 gate failed on M2
 (0 finished extensions). The fix (c2b9f5c, 9f0abcf) was verified in this run by
@@ -123,6 +131,14 @@ yet.
   Verified against the owner's bar: on the unguarded 9df73af constructionManager the edge
   test throws the live crash; on the fixed code the full unit suite is 78 passing (was 75).
 - Unit suite: 78 passing (75 original + 3 new edge tests); lint clean, build clean.
+- **Full suite verified (agent-test start all, commit 5d4eae6, ~73 min).** Integration
+  "6 passing, 1 failing"; the 6 passing are acceptance-m1, m2, m3, m4, smoke and spawnprobe.
+  The M1-M4 acceptance scorecards are byte-for-byte identical to the 21d2356 baseline
+  (reports/history.csv), so the config revert and the isValidTile guard changed no acceptance
+  behaviour. The single failure is m5-candidate.test.ts, the human's M5 static-mining draft
+  candidate (fails on 1 of 2 containers, 1 miner, 9.82 vs 12 harvested/tick, 0.05 vs 4
+  controller progress/tick): M5 is not implemented, it is not an acceptance gate, and it is
+  unchanged by the run 38 fixes - expected, not a regression.
 
 ### 2026-11-01 (run 37 round 2: gate state verified, no code changes; M5 blocked)
 - The 05:33 gate failure (M2: "at least one extension is finished", 0 built)
@@ -414,7 +430,11 @@ yet.
   out-of-bounds like the real game, and three tests (x=3, y=46, corner 4,4)
   fail on the unguarded code and pass on the fixed code (78 unit passing, was
   75). The 20:16 gate failure (unvalidated RCL 1 builder minimum 5 + surplus cap
-  300) was reverted to the verified-green 9df73af in 54fb465. Remaining: M5 +
+  300) was reverted to the verified-green 9df73af in 54fb465. Full suite verified this run:
+  acceptance-m1..m4, smoke and spawnprobe all pass and the M1-M4 scorecards are byte-for-byte
+  identical to the 21d2356 baseline, so the run 38 fixes changed no acceptance behaviour; the
+  only failure is the M5 draft candidate (m5-candidate.test.ts), expected because M5 is
+  unimplemented and it is not an acceptance gate. Remaining: M5 +
   surplus-energy spend (see the M5 item below) - no M5 acceptance test in this
   repo, so validate via the candidate/smoke/spawnprobe scorecards.
 - **M5 (static mining) - BLOCKED on the owner's acceptance test (run 37 round
@@ -481,6 +501,16 @@ yet.
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
 
 ## Known Issues / Notes
+- **m5-candidate.test.ts fails in the full suite - expected, not a regression (2026-11-01,
+  run 38).** It is the human reviewer's DRAFT candidate for the M5 static-mining milestone
+  (header: "not a replacement for it", "The agent must not edit this file"). It is not named
+  acceptance-* and status.md records it as measured by scorecards, "not an acceptance gate".
+  It fails because M5 (static mining on both sources) is not implemented: the 3,000-tick run
+  ends at 1 of 2 containers, 1 miner, 9.82 harvested/tick (needs 12) and 0.05 controller
+  progress/tick (needs 4). The M1-M4 acceptance scorecards are byte-for-byte identical to the
+  21d2356 baseline, so the run 38 fixes (config revert + isValidTile guard) did not cause it.
+  It will turn green when M5 is implemented; do not satisfy it by editing the test or by
+  building M5 as part of the crash/gate-fix task.
 - **Creep idle rose 8 % -> 22 % in the 500-tick smoke window (2026-11-01, post
   upgrader-hold-back).** The scorecard counts a creep tick as idle after 5+ consecutive
   ticks with no action event and no position change. The window is the last 200 ticks,
