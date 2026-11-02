@@ -22,6 +22,7 @@
  */
 
 import { RAMPART_MIN_LEVEL } from "config";
+import { isValidTile } from "utils/positions";
 
 // TEMP-DEBUG (remove before commit): dedupe container placement diagnostics
 let lastContainerDebugSig = "";
@@ -201,13 +202,20 @@ function computeExtensionPositions(room: Room, excludeTiles: Set<string>, limit:
             const dy1 = range - Math.abs(dx);
             if (dy1 >= 0)
             {
-                // Top and bottom positions
-                const pos1 = new RoomPosition(spawn.x + dx, spawn.y + dy1, room.name);
-                const pos2 = new RoomPosition(spawn.x + dx, spawn.y - dy1, room.name);
-                positionsAtRange.push(pos1);
-                if (dy1 > 0)
+                // Top and bottom positions. isValidTile checks the numbers
+                // BEFORE the RoomPosition constructor: the constructor
+                // throws for coordinates outside 0..49, and a spawn near
+                // the room edge pushes the ring off the map.
+                const x = spawn.x + dx;
+                const topY = spawn.y + dy1;
+                if (isValidTile(x, topY))
                 {
-                    positionsAtRange.push(pos2);
+                    positionsAtRange.push(new RoomPosition(x, topY, room.name));
+                }
+                const bottomY = spawn.y - dy1;
+                if (dy1 > 0 && isValidTile(x, bottomY))
+                {
+                    positionsAtRange.push(new RoomPosition(x, bottomY, room.name));
                 }
             }
         }
@@ -216,7 +224,7 @@ function computeExtensionPositions(room: Room, excludeTiles: Set<string>, limit:
         for (const pos of positionsAtRange)
         {
             // Skip if out of bounds
-            if (pos.x < 0 || pos.x >= 49 || pos.y < 0 || pos.y >= 49)
+            if (!isValidTile(pos.x, pos.y))
             {
                 continue;
             }
@@ -316,19 +324,25 @@ function computeTowerPositions(room: Room, excludeTiles: Set<string>, maxTowers:
             const dy = range - Math.abs(dx);
             if (dy >= 0)
             {
-                const pos1 = new RoomPosition(spawn.x + dx, spawn.y + dy, room.name);
-                const pos2 = new RoomPosition(spawn.x + dx, spawn.y - dy, room.name);
-                positionsAtRange.push(pos1);
-                if (dy > 0)
+                // Same bounds guard as the extension search: never call the
+                // RoomPosition constructor with coordinates outside 0..49.
+                const x = spawn.x + dx;
+                const topY = spawn.y + dy;
+                if (isValidTile(x, topY))
                 {
-                    positionsAtRange.push(pos2);
+                    positionsAtRange.push(new RoomPosition(x, topY, room.name));
+                }
+                const bottomY = spawn.y - dy;
+                if (dy > 0 && isValidTile(x, bottomY))
+                {
+                    positionsAtRange.push(new RoomPosition(x, bottomY, room.name));
                 }
             }
         }
 
         for (const pos of positionsAtRange)
         {
-            if (pos.x < 0 || pos.x >= 49 || pos.y < 0 || pos.y >= 49)
+            if (!isValidTile(pos.x, pos.y))
             {
                 continue;
             }
@@ -711,14 +725,20 @@ function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomP
                     continue; // Skip source tile itself
                 }
                 
-                const containerPos = new RoomPosition(source.pos.x + dx, source.pos.y + dy, room.name);
-                
-                // Skip if out of bounds
-                if (containerPos.x < 0 || containerPos.x >= 49 || containerPos.y < 0 || containerPos.y >= 49)
+                const nx = source.pos.x + dx;
+                const ny = source.pos.y + dy;
+
+                // Skip if out of bounds. The numbers are checked BEFORE the
+                // RoomPosition constructor: it throws for coordinates
+                // outside 0..49, so constructing first would abort the
+                // whole placement loop (owner feedback 2026-11-01).
+                if (!isValidTile(nx, ny))
                 {
-                    rejections.push(`${source.pos.x + dx},${source.pos.y + dy}:oob`);
+                    rejections.push(`${nx},${ny}:oob`);
                     continue;
                 }
+
+                const containerPos = new RoomPosition(nx, ny, room.name);
                 
                 // Skip if on wall terrain
                 if (isWallPosition(containerPos, room))

@@ -47,7 +47,7 @@
  *   is what lands RCL 2 inside the 500-tick smoke window.
  */
 
-import { MIN_CREEPS_BY_LEVEL, MIN_MINERS_PER_SOURCE, MIN_HARVESTERS_PER_SOURCE, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX } from "config";
+import { MIN_CREEPS_BY_LEVEL, MIN_HARVESTERS_PER_SOURCE, MIN_MINERS_PER_SOURCE, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX } from "config";
 import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
 
 /** Roles checked each tick, highest priority first (owner rule #5). The miner
