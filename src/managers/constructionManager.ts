@@ -24,10 +24,6 @@
 import { RAMPART_MIN_LEVEL } from "config";
 import { isValidTile } from "utils/positions";
 
-// TEMP-DEBUG (remove before commit): dedupe container placement diagnostics
-let lastContainerDebugSig = "";
-const lastNoPositionDebug: string[] = [];
-
 /** Get the spawn position in this room */
 function getSpawnPosition(room: Room): RoomPosition | null
 {
@@ -714,7 +710,6 @@ function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomP
         // We'll try all 8 adjacent tiles and find the one closest to spawn
         let bestPos: RoomPosition | null = null;
         let bestDistance = 1000;
-        const rejections: string[] = [];
         
         for (let dx = -1; dx <= 1; dx++)
         {
@@ -734,7 +729,6 @@ function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomP
                 // whole placement loop (owner feedback 2026-11-01).
                 if (!isValidTile(nx, ny))
                 {
-                    rejections.push(`${nx},${ny}:oob`);
                     continue;
                 }
 
@@ -743,7 +737,6 @@ function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomP
                 // Skip if on wall terrain
                 if (isWallPosition(containerPos, room))
                 {
-                    rejections.push(`${source.pos.x + dx},${source.pos.y + dy}:wall`);
                     continue;
                 }
 
@@ -751,7 +744,6 @@ function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomP
                 // a hole in the road flood-fill.
                 if (excludeTiles.has(`${containerPos.x},${containerPos.y}`))
                 {
-                    rejections.push(`${source.pos.x + dx},${source.pos.y + dy}:excl`);
                     continue;
                 }
                 
@@ -761,7 +753,6 @@ function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomP
                 
                 if (structures.length > 0 || sites.length > 0)
                 {
-                    rejections.push(`${source.pos.x + dx},${source.pos.y + dy}:occ(${structures.length},${sites.length})`);
                     continue;
                 }
                 
@@ -778,27 +769,9 @@ function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomP
         if (bestPos !== null)
         {
             positions.push(bestPos);
-            // console.log(`[Construction] Container position for source ${source.id}: ${bestPos.x},${bestPos.y} (dist=${bestDistance})`);
-        }
-        else
-        {
-            // TEMP-DEBUG
-            const rejSig = `no:${source.pos.x},${source.pos.y}:${rejections.join(" ")}`;
-            if (lastNoPositionDebug.indexOf(rejSig) === -1)
-            {
-                lastNoPositionDebug.push(rejSig);
-                console.log(`[cdbg] ${rejSig}`);
-            }
         }
     }
 
-    // TEMP-DEBUG
-    const dbgSig = `srcs=[${sources.map((s) => String(s.pos.x) + "," + String(s.pos.y)).join(";")}] pos=[${positions.map((p) => String(p.x) + "," + String(p.y)).join(";")}] excl=${excludeTiles.size} exist=${existingContainerPositions.size}`;
-    if (dbgSig !== lastContainerDebugSig)
-    {
-        lastContainerDebugSig = dbgSig;
-        console.log(`[cdbg] ${dbgSig}`);
-    }
     return positions;
 }
 
@@ -827,9 +800,7 @@ function placeContainerSites(room: Room, containerPositions: RoomPosition[]): vo
 
         if (!hasContainer && !hasSite)
         {
-            const result = room.createConstructionSite(pos, STRUCTURE_CONTAINER);
-            // TEMP-DEBUG
-            console.log(`[cdbg] createContainerSite ${pos.x},${pos.y} -> ${result}`);
+            room.createConstructionSite(pos, STRUCTURE_CONTAINER);
             return; // Only place one container at a time
         }
     }
