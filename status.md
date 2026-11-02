@@ -1,6 +1,16 @@
 # ScreepsAiSLP Status
 
 ## Current State
+Current state after run 38 (2026-11-01): the 20:16 gate failure is fixed (reverted the
+unvalidated RCL 1 builder-minimum / surplus-cap config to the verified-green 9df73af, commit
+54fb465) and the owner's URGENT edge-position crash is fully addressed: isValidTile bounds
+guard in constructionManager (08424f2), per-room try/catch in main.ts (08424f2), TEMP-DEBUG
+removed (6a038a1), and three edge-position unit tests that fail on the old code and pass on
+the new (f695cfd). Unit suite is 78 passing (was 75); lint and build are clean. M5 (static
+mining + surplus-energy spend) remains the open milestone but its acceptance test is not in
+this repo copy (only test/integration/m5-candidate.test.ts), so it is measured by the
+candidate/smoke/spawnprobe scorecards, not an acceptance gate.
+
 Gate state verified (2026-11-01, run 37 round 2): the 05:33 gate failed on M2
 (0 finished extensions). The fix (c2b9f5c, 9f0abcf) was verified in this run by
 a full-suite pass on the current src/ (agent-test start all, started 07:53,
@@ -82,6 +92,38 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-01 (run 38: gate failure fixed by revert; owner's URGENT edge-crash fix completed)
+- **Gate failure root cause and fix (commit 54fb465).** The 20:16 gate failed on a unit
+  test (spawnManager "spawns a fifth worker from the surplus energy"). A previous run's
+  leftover working tree (committed as 08424f2 "auto-commit leftover changes") had raised the
+  bootstrap surplus cap 100 -> 300 and the RCL 1 builder minimum 1 -> 5 in src/config.ts,
+  plus a matching minCreepsPerRole change in src/managers/spawnManager.ts. At RCL 1 the
+  surplus formula is energyAvailable - used, so with 300 energy the cap was 0 (300 - 300)
+  while the new builder minimum alone was 500; the test (energyAvailable 500, expects a
+  worker) instead spawned the extra builder and failed. 9df73af (run 37 round 2, verified
+  "8 + 75 passing, EXIT 0") did not have these changes, which is why the earlier full-suite
+  pass and this gate run disagreed. Reverted both files to 9df73af; the spawnManager suite
+  is back to 13 passing.
+- **Owner URGENT crash items 1 + 2 (in 08424f2, kept) and TEMP-DEBUG removal (commit
+  6a038a1).** constructionManager's computeTowerPositions and computeRoadEndpoints built
+  new RoomPosition(x, y, roomName) from raw arithmetic with no range check; near the room
+  edge the range-2 / range-8 search walked off the map and threw "Invalid arguments in
+  RoomPosition constructor" (the real game rejects x/y outside 0..49), killing the loop and
+  leaving the room with no sites. An isValidTile(x, y) helper (0 <= x <= 49 && 0 <= y <=
+  49) now guards both loops, so off-map candidates are skipped, not thrown. src/main.ts
+  wraps each room in try/catch and logs the error (previously a constructionManager throw
+  took down the whole tick). The TEMP-DEBUG [cdbg] instrumentation left by the
+  investigation was removed in the same file.
+- **Owner URGENT crash item 3: edge-position unit tests (commit f695cfd).** The PositionMock
+  now throws "Invalid arguments in RoomPosition constructor" for coordinates outside 0..49,
+  exactly like the real game (it used to accept any number, which is why the crash was
+  invisible in tests). A makeEdgeRoom helper moves only the spawn to the edge so the
+  range-8 extension search walks off the map; three tests cover x=3, y=46 and the corner
+  4,4, asserting manageConstruction does not throw and every placed site stays inside 1..48.
+  Verified against the owner's bar: on the unguarded 9df73af constructionManager the edge
+  test throws the live crash; on the fixed code the full unit suite is 78 passing (was 75).
+- Unit suite: 78 passing (75 original + 3 new edge tests); lint clean, build clean.
+
 ### 2026-11-01 (run 37 round 2: gate state verified, no code changes; M5 blocked)
 - The 05:33 gate failure (M2: "at least one extension is finished", 0 built)
   was fixed in round 1 of this run (c2b9f5c container-first gate, 9f0abcf
@@ -365,6 +407,16 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **Run 38 (2026-11-01): owner's URGENT edge-crash fix COMPLETE, gate fixed.**
+  Items 1 + 2 (isValidTile bounds guard in constructionManager + main.ts
+  per-room try/catch) were already in tree as 08424f2; kept. Item 3
+  (edge-position unit tests) added in f695cfd: the PositionMock now throws for
+  out-of-bounds like the real game, and three tests (x=3, y=46, corner 4,4)
+  fail on the unguarded code and pass on the fixed code (78 unit passing, was
+  75). The 20:16 gate failure (unvalidated RCL 1 builder minimum 5 + surplus cap
+  300) was reverted to the verified-green 9df73af in 54fb465. Remaining: M5 +
+  surplus-energy spend (see the M5 item below) - no M5 acceptance test in this
+  repo, so validate via the candidate/smoke/spawnprobe scorecards.
 - **M5 (static mining) - BLOCKED on the owner's acceptance test (run 37 round
   2, 2026-11-01).** The test is not in this copy and agent-test refuses
   test/candidates/ paths, so M5 cannot be measured or ticked from this repo
@@ -455,6 +507,28 @@ yet.
 - Energy delivery issue: previous scorecard showed 72.7 energy delivered/tick vs ~3 harvested (energy going in circles) - this is now fixed by hauler changes
 
 ## Feedback acknowledged
+- Acknowledged 2026-11-01 (v8): URGENT live crash - constructionManager built new
+  RoomPosition from unchecked arithmetic near the room edge (items 1 + 2) - done:
+  isValidTile guard in computeTowerPositions and computeRoadEndpoints (08424f2),
+  main.ts per-room try/catch (08424f2), TEMP-DEBUG removed (6a038a1).
+- Acknowledged 2026-11-01 (v8): URGENT crash item 3 - edge-position unit tests
+  (x=3, y=46, corner 4,4) that fail on the old code and pass on the new - done
+  (f695cfd): the PositionMock now throws for out-of-bounds like the real game;
+  the tests throw "Invalid arguments in RoomPosition constructor" on the
+  unguarded 9df73af code and pass on the fixed code (78 unit passing, was 75).
+- Acknowledged 2026-11-01 (v8): M5 + energy (spend spare energy on more/bigger
+  upgraders and builders, pick up dropped energy before harvesting) - not done
+  this run: no M5 acceptance test in this repo copy (only
+  test/integration/m5-candidate.test.ts exists), so there is no acceptance bar
+  to validate against, and the previous attempt (RCL 1 builder minimum 1 -> 5)
+  failed the unit gate. Next run: unit-test a surplus-energy spend (extra
+  upgraders when containers/storage hold energy above a threshold, per rule
+  02b) against the spawn manager before any integration change.
+- Acknowledged 2026-11-01 (v8): rules - read FEEDBACK.md every run, one commit
+  per fix, the full suite must pass, never break protected tests or config, no
+  junk files, no TEMP-DEBUG in commits - process rules, followed in this run
+  (crash fix + gate fix are separate commits 54fb465 / 6a038a1 / f695cfd;
+  TEMP-DEBUG removed before committing).
 - Acknowledged 2026-10-31: M4 "Hold the room (level 5)" is a new milestone - done: M4
   green on 2026-10-31 (acceptance 1 passing, full suite 8 passing; commits 2c081e3,
   f606551).
