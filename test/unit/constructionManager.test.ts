@@ -67,6 +67,17 @@ class PositionMock
 
     constructor(x: number, y: number, roomName: string)
     {
+        // Mirror the real game: the RoomPosition constructor throws for
+        // coordinates outside 0..49. The construction searches add offsets
+        // to the spawn/source position, so a spawn near the room edge builds
+        // an out-of-bounds position and aborts the whole tick (owner feedback
+        // 2026-11-01). Enforcing the same throw here is what makes the edge
+        // tests below catch a regression: the old unguarded code throws here,
+        // the fixed code filters the tile out with isValidTile first.
+        if (x < 0 || x > 49 || y < 0 || y > 49)
+        {
+            throw new Error("Invalid arguments in RoomPosition constructor");
+        }
         this.x = x;
         this.y = y;
         this.roomName = roomName;
@@ -176,6 +187,22 @@ function addStructure(room: any, x: number, y: number, structureType: string): v
     tileAt(x, y).structures.push(structure);
 }
 
+/**
+ * Builds the canonical test room but moves the SPAWN (only the spawn) to the
+ * given edge position, so the extension/tower searches walk rings that leave
+ * the room. The controller stays at the center: the crash (owner feedback
+ * 2026-11-01) is in the searches that offset from the spawn.
+ * @param spawnX The x coordinate of the spawn, close to the room edge.
+ * @param spawnY The y coordinate of the spawn, close to the room edge.
+ * @returns The mock room; its structures/sites arrays are the state.
+ */
+function makeEdgeRoom(spawnX: number, spawnY: number): any
+{
+    const room = makeRoom();
+    room.spawn = {pos: new PositionMock(spawnX, spawnY, "W0N1")};
+    return room;
+}
+
 function setGlobal(name: string, value: any): void
 {
     // @ts-ignore : the game sandbox provides these as globals
@@ -251,5 +278,68 @@ describe("manageConstruction tower and extension layout (M4 regression)", () => 
         addStructure(room, 25, 27, STRUCTURE_TOWER);
         manageConstruction(room);
         assert.equal(sitePositions(room, STRUCTURE_TOWER).length, 0);
+    });
+});
+
+describe("manageConstruction edge-position robustness (RoomPosition out-of-bounds, owner feedback 2026-11-01)", () => {
+    beforeEach(() => {
+        tiles = new Map();
+        setGlobal("OK", OK);
+        setGlobal("FIND_SOURCES", FIND_SOURCES);
+        setGlobal("FIND_MY_SPAWNS", FIND_MY_SPAWNS);
+        setGlobal("FIND_CONSTRUCTION_SITES", FIND_CONSTRUCTION_SITES);
+        setGlobal("FIND_MY_STRUCTURES", FIND_MY_STRUCTURES);
+        setGlobal("FIND_STRUCTURES", FIND_STRUCTURES);
+        setGlobal("LOOK_STRUCTURES", LOOK_STRUCTURES);
+        setGlobal("LOOK_CONSTRUCTION_SITES", LOOK_CONSTRUCTION_SITES);
+        setGlobal("STRUCTURE_TOWER", STRUCTURE_TOWER);
+        setGlobal("STRUCTURE_EXTENSION", STRUCTURE_EXTENSION);
+        setGlobal("STRUCTURE_CONTAINER", STRUCTURE_CONTAINER);
+        setGlobal("STRUCTURE_ROAD", STRUCTURE_ROAD);
+        setGlobal("STRUCTURE_RAMPART", STRUCTURE_RAMPART);
+        setGlobal("STRUCTURE_WALL", STRUCTURE_WALL);
+        setGlobal("TERRAIN_MASK_WALL", TERRAIN_MASK_WALL);
+        setGlobal("RoomPosition", PositionMock);
+    });
+
+    /** Every "x,y" the manager placed a site on, across all structure types. */
+    function allSitePositions(room: any): string[]
+    {
+        return room.sites.map((s: any) => `${s.pos.x},${s.pos.y}`);
+    }
+
+    /** The manager may only place on tiles 1..48: the 0/49 edge ring is exits. */
+    function assertAllInsideRoom(room: any): void
+    {
+        for (const p of allSitePositions(room))
+        {
+            const parts = p.split(",");
+            const x = Number(parts[0]);
+            const y = Number(parts[1]);
+            assert.isAtLeast(x, 1, `site x=${x} must be inside 1..48`);
+            assert.isAtMost(x, 48, `site x=${x} must be inside 1..48`);
+            assert.isAtLeast(y, 1, `site y=${y} must be inside 1..48`);
+            assert.isAtMost(y, 48, `site y=${y} must be inside 1..48`);
+        }
+    }
+
+    it("does not throw and stays in 1..48 when the spawn is near the left edge (x=3)", () => {
+        const room = makeEdgeRoom(3, 25);
+        // On the old unguarded code this throws: the range-8 extension search
+        // reaches x = 3 - 8 = -5.
+        manageConstruction(room);
+        assertAllInsideRoom(room);
+    });
+
+    it("does not throw and stays in 1..48 when the spawn is near the bottom edge (y=46)", () => {
+        const room = makeEdgeRoom(25, 46);
+        manageConstruction(room);
+        assertAllInsideRoom(room);
+    });
+
+    it("does not throw and stays in 1..48 when the spawn is in a corner (4,4)", () => {
+        const room = makeEdgeRoom(4, 4);
+        manageConstruction(room);
+        assertAllInsideRoom(room);
     });
 });
