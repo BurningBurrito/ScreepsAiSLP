@@ -1,6 +1,6 @@
-# Scorecard: acceptance-m1 · 2026-11-02 05:24 · 801 ticks · commit 6003f9d
+# Scorecard: acceptance-m1 · 2026-11-02 10:52 · 801 ticks · commit 88fda14
 
-| Metric (last 320 ticks unless noted) | This run | Previous run (2026-11-02 02:07, 5d4eae6) | Change |
+| Metric (last 320 ticks unless noted) | This run | Previous run (2026-11-02 05:24, 6003f9d) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 6.28 | 6.28 | 0 |
 | Energy wasted at source regeneration (sum) | 4,204 | 4,204 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 51 % | 51 % | 0 pts |
 | Spawn busy | 7 % | 7 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 20 % | 20 % | 0 pts |
-| CPU / tick (average, max) | 1.78, 20.35 | 1.85, 20.4 | -0.07 |
+| CPU / tick (average, max) | 1.78, 20.47 | 1.78, 20.35 | 0 |
 | RCL / progress at end (whole run) | 1 / 174 | 1 / 174 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
 | Energy harvested (whole run) | 3,760 | 3,760 | 0 |
