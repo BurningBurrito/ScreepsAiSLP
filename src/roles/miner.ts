@@ -9,6 +9,16 @@
  * miner stays within range 1 of its source from the tick it first reaches it,
  * and a miner that never leaves its container tile can never violate that.
  *
+ * A creep performs exactly one action per tick, so the miner cannot harvest
+ * and offload in the same tick. It therefore harvests until its store is
+ * full, then spends one tick transferring the whole load into the container.
+ * That loses one harvest tick per store-length of load (1 in 26 for the top
+ * 5-WORK body, ~96 % of ticks still harvesting), which keeps the source
+ * drained at its refill rate so nothing is left behind when it regenerates
+ * every 300 ticks. When the container is full (the haulers are behind), the
+ * miner keeps harvesting: the surplus drops on the ground and a hauler
+ * collects it, while the source still stays drained.
+ *
  * Haulers take the energy from the container, so the miner never walks to the
  * spawn or the extensions: a worker that walks to a source is a bootstrap
  * harvester, not a miner. If the container is gone (destroyed, or the source
@@ -59,26 +69,42 @@ export function runMiner(creep: Creep): void
         return;
     }
 
-    // Harvest the source (the anchor tile is within range 1 of it).
+    // One action per tick: a creep cannot harvest and transfer in the same
+    // tick, so the miner alternates. It harvests until the store is full, then
+    // offloads the whole load into the container in a single transfer (a
+    // transfer moves everything the container can take). That costs one lost
+    // harvest tick per store-length of load - 1 in 26 for the top body - which
+    // is what keeps the source drained without leaving energy behind at the
+    // 300-tick regeneration. (The old code harvested first and then tried to
+    // transfer in the same tick; the second action never ran, so the miner
+    // filled up and dropped its surplus on the ground instead of the
+    // container.)
+    const energy = creep.store[RESOURCE_ENERGY] ?? 0;
+    const capacity = creep.store.getCapacity(RESOURCE_ENERGY);
+
+    if (hasContainer && energy >= capacity)
+    {
+        const free = container.store.getFreeCapacity(RESOURCE_ENERGY);
+        if (free > 0)
+        {
+            if (creep.transfer(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
+            {
+                // The container vanished under the miner: drop-mine instead.
+                creep.harvest(source);
+            }
+            return;
+        }
+        // The container is full: fall through to harvest. With a full store
+        // the harvest drops the excess on the ground (drop-mining) - a hauler
+        // collects it, and the source stays drained, so nothing is wasted at
+        // regeneration.
+    }
+
     if (creep.harvest(source) === ERR_NOT_IN_RANGE)
     {
         // Only when the source itself left range (it should not): step toward
         // it and retry next tick.
         moveToToward(creep, source, 1);
-        return;
-    }
-
-    // Offload into the container while the store holds energy. Standing on the
-    // container tile keeps the transfer within range 0, so no movement.
-    if (hasContainer && (creep.store[RESOURCE_ENERGY] ?? 0) > 0)
-    {
-        const transferResult = creep.transfer(container, RESOURCE_ENERGY);
-        if (transferResult === ERR_NOT_IN_RANGE)
-        {
-            // The container vanished under the miner: step back to a neighbour
-            // of the source (drop-mining) and let a hauler collect it.
-            moveToToward(creep, source, 1);
-        }
     }
 }
 
