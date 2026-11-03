@@ -252,3 +252,12 @@ export const CONTAINER_BOOST_MIN_ROADS = 1;
  * rooms or between code and tests.
  */
 export const CONTROLLER_SIGN_TEXT = "ScreepsAiSLP - https://github.com/BurningBurrito/ScreepsAiSLP";
+
+/**
+ * Upgrader body switching (owner feedback 2026-11-02): a finished container
+ * within this range of the controller feeds the upgrader's energy, so from
+ * that point on the upgrader's body is WORK-heavy (one MOVE reaches the
+ * container); before it exists the upgrader walks for its energy and its
+ * body stays balanced (see bodyTemplates in managers/spawnManager).
+ */
+export const CONTROLLER_CONTAINER_RANGE = 3;

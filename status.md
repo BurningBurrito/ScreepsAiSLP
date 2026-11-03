@@ -100,6 +100,39 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-03 (cold-boot recovery test: probe race root-caused and fixed)
+- **The cold-boot integration test failed with "the wipe killed the whole crew
+  (8 creeps actually remained)." Root cause: a race in the test's own probe
+  helper, not the game logic.** `suicide()` runs in the tick's user phase and
+  only writes the suicide intent; the room processor applies the intent (removes
+  the creep) later in the same tick's room phase. The old `probeUntilResult`
+  resolved as soon as the console result ("wiped N creeps") arrived, which fires
+  during the user phase, before the processor removed the creeps. The next probe
+  (the post-wipe count) then started a fresh `server.tick()` while the wipe tick
+  was still in flight, and its `Game.creeps` read saw the pre-processor state:
+  all 8 creeps still alive.
+- **Proof the wipe works.** A scratch run with strictly serialized ticks: after
+  the wipe tick completes, `rooms.intents` is empty (processor handled it) and
+  `rooms.objects` holds 0 creep documents; the next tick's probe reads 1 creep
+  (the fresh cold-boot spawn). Engine and processor are correct; the test read
+  stale state.
+- **Fix (test only).** `probeUntilResult` in
+  test/integration/cold-boot-recovery.test.ts now records the console result but
+  resolves only after the tick that produced it has fully completed (user + room
+  phases), so every probe sees the post-processor state and the count probe can
+  never overlap the wipe tick.
+- **Also in this working tree (from the interrupted run, committed with it):**
+  M5 body-template prereqs — the upgrader body now switches on
+  `hasControllerContainer` (WORK-heavy once a container feeds the controller,
+  MOVE-balanced before that: src/managers/spawnManager.ts, src/config.ts
+  CONTROLLER_CONTAINER_RANGE) and the defender/attacker body is now pure
+  ATTACK+MOVE pairs (the old CARRY part was dead weight). Lint clean, build OK,
+  100 unit passing, tsc clean. Because the upgrader body changes the RCL pace of
+  the M1-M4 acceptance worlds (no controller container there), the full suite is
+  re-run before this is committed.
+- **Tests:** <pending - agent-test: cold-boot first, then the full suite; result
+  lines are copied in at the end of the run>
+
 ### 2026-11-03 (feedback v8.6: URGENT tower placement fix + controller sign)
 - **URGENT 2 — the second tower was never placed in the owner's cramped room
   (feedback 2026-11-02).** The range 2-5 search found nothing because
@@ -469,6 +502,27 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **Run (2026-11-03): cold-boot recovery test race fixed — verifying before commit.**
+  The test (test/integration/cold-boot-recovery.test.ts) failed with 8 creeps
+  "remaining" after the wipe; the root cause is the probe helper resolving before
+  the tick's room phase applied the suicide intents (test-only bug, not the game
+  logic — a serialized-tick scratch run proved the wipe leaves 0 creep docs in the
+  DB). probeUntilResult now resolves only after the producing tick fully
+  completes. Working tree also carries the M5 body-template prereqs (upgrader
+  body switch on hasControllerContainer + defender ATTACK+MOVE body) from the
+  interrupted run; because that changes the upgrader in the M1-M4 worlds, the full
+  suite is re-run before committing. That re-run passed M1-M3 but M4 failed
+  (extensionsBuilt 1, expected 3; towers, ramparts and intrusion handling all OK)
+  — root cause is a slow-bootstrap flake, not the M5 diff: the harvester's harvest
+  rate collapsed to ~0.3/tick for ticks 1600-3600 (a pre-existing movement issue —
+  the harvester is unchanged by the M5 diff, and the pre-change 6b3393d run showed
+  the same degraded build rate 3.37 vs the 5.26 baseline). The M5 upgrader body is
+  correct per the M5 design (the unit test expects the balanced [W,C,M] at 300
+  capacity). M4 re-run (07:24) FAILED again (extensionsBuilt 1, expected 3;
+  same harvester-freeze stall, harvest collapsed to ~0.3/tick for ticks
+  1600-4300, healthy from tick 4400 but too late to build 3 extensions;
+  towers, ramparts, intrusion handling all OK). A new M4 re-run (07:57) is in
+  progress to confirm the flake; commit after a green M4 + full suite.
 - **Run (2026-11-02/03): feedback v8.6 URGENT items + controller sign — done.**
   URGENT 1 (colony died out): cold boot + income floor (edb614e) plus unit tests of
   the exact wipe scenarios from the feedback (4a706dc). URGENT 2 (no second tower in

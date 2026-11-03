@@ -52,7 +52,7 @@
  *   is what lands RCL 2 inside the 500-tick smoke window.
  */
 
-import { ENERGY_INCOME_FLOOR, MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX } from "config";
+import { CONTROLLER_CONTAINER_RANGE, ENERGY_INCOME_FLOOR, MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX } from "config";
 import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
 
 /** Roles checked each tick, highest priority first (owner rule #5). The miner
@@ -88,8 +88,11 @@ const INCOME_ROLES: Role[] = ["miner", "harvester", "hauler"];
  * only exist inside the Screeps sandbox, and unit tests import this module
  * in plain Node where they are undefined. Evaluating the tables only when
  * spawning keeps the module import safe.
+ *
+ * @param room The room to spawn in: the upgrader's table depends on whether
+ * its energy is brought to it by a controller container
  */
-function bodyTemplates(): Record<Role, BodyPartConstant[][]>
+function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
 {
     return {
     miner: [
@@ -117,14 +120,29 @@ function bodyTemplates(): Record<Role, BodyPartConstant[][]>
         [WORK, WORK, CARRY, MOVE], // 300
         [WORK, CARRY, MOVE], // 200
     ],
-    upgrader: [
-        // The upgrader parks within range 3 of the controller, so one MOVE
-        // part is enough; maximise WORK instead.
-        [WORK, WORK, WORK, WORK, WORK, WORK, WORK, CARRY, MOVE], // 800
-        [WORK, WORK, WORK, WORK, CARRY, MOVE], // 500
-        [WORK, WORK, CARRY, MOVE], // 300
-        [WORK, CARRY, MOVE], // 200
-    ],
+    upgrader: hasControllerContainer(room)
+        ? [
+            // Energy comes to the upgrader: a filled container within range 3
+            // of the controller means it only walks there once, so one MOVE
+            // reaches it and every spare part is WORK (owner feedback
+            // 2026-11-02: a big upgrader with few MOVE parts only makes
+            // sense when energy comes to it).
+            [WORK, WORK, WORK, WORK, WORK, WORK, WORK, CARRY, MOVE], // 800
+            [WORK, WORK, WORK, WORK, CARRY, MOVE], // 500
+            [WORK, WORK, CARRY, MOVE], // 300
+            [WORK, CARRY, MOVE], // 200
+        ]
+        : [
+            // No controller container yet: the upgrader walks to fetch its
+            // energy, so it keeps at least one MOVE part per two other parts
+            // (road walking) plus the CARRY that makes each trip pay - a
+            // 7-WORK / 1-MOVE body crawled one tile per several ticks in the
+            // owner's room (owner feedback 2026-11-02).
+            [WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE, MOVE, MOVE], // 750
+            [WORK, WORK, WORK, CARRY, MOVE, MOVE, MOVE], // 500
+            [WORK, WORK, CARRY, MOVE, MOVE], // 350
+            [WORK, CARRY, MOVE], // 200
+        ],
     hauler: [
         // Haulers: pairs of CARRY+MOVE, one MOVE per two CARRY is enough on
         // roads. Haulers never carry WORK parts (owner rule #1).
@@ -134,11 +152,15 @@ function bodyTemplates(): Record<Role, BodyPartConstant[][]>
         [CARRY, CARRY, MOVE, MOVE], // 200
     ],
     defender: [
-        // The defender is a last-resort attacker (M4): two ATTACK parts, one
-        // CARRY for tower energy transfers, one MOVE. It never harvests, and
-        // it is the only role that exists in defend mode when the towers are
-        // dry. Kept small: it is a spare, not the economy.
-        [ATTACK, ATTACK, CARRY, MOVE], // 230
+        // The defender is a last-resort attacker (M4): it never harvests and
+        // never transfers energy, so the old CARRY part was dead weight.
+        // Bodies are ATTACK+MOVE pairs, as many pairs as the energy allows:
+        // one MOVE per ATTACK part reaches a hostile on plain ground (owner
+        // feedback 2026-11-02: bodies must match the job).
+        [ATTACK, ATTACK, ATTACK, ATTACK, MOVE, MOVE, MOVE, MOVE], // 620
+        [ATTACK, ATTACK, ATTACK, MOVE, MOVE, MOVE], // 420
+        [ATTACK, ATTACK, MOVE, MOVE], // 260
+        [ATTACK, MOVE], // 130
     ],
     };
 }
@@ -181,14 +203,41 @@ function bodyCost(body: BodyPartConstant[]): number
 }
 
 /**
+ * Whether a finished container sits within range 3 of the controller.
+ * From M5 on that container is the upgrader's energy source, and it is also
+ * the switch that decides how the upgrader's body is built (see
+ * bodyTemplates): once the energy comes to the upgrader, WORK is maximised
+ * and one MOVE part is enough.
+ * @param room The room to check
+ * @returns True when a container feeds the controller's neighbourhood
+ */
+function hasControllerContainer(room: Room): boolean
+{
+    const controller = room.controller;
+    if (controller === undefined)
+    {
+        return false;
+    }
+    return room.find(FIND_STRUCTURES, {
+        filter: (structure) =>
+            structure.structureType === STRUCTURE_CONTAINER &&
+            // A container supplies energy to a creep standing on or next to
+            // it; range 3 is the M5 spec's distance ("a container within
+            // range 3 of the controller").
+            structure.pos.getRangeTo(controller.pos) <= CONTROLLER_CONTAINER_RANGE,
+    }).length > 0;
+}
+
+/**
  * Picks the largest body template that fits the sizing budget.
+ * @param room The room to spawn in (the upgrader's table depends on it)
  * @param role The role to build a body for
  * @param budget The energy capacity the body must fit into
  * @returns The chosen body and its cost, or null when nothing fits
  */
-function pickBody(role: Role, budget: number): { body: BodyPartConstant[]; cost: number } | null
+function pickBody(room: Room, role: Role, budget: number): { body: BodyPartConstant[]; cost: number } | null
 {
-    for (const template of bodyTemplates()[role])
+    for (const template of bodyTemplates(room)[role])
     {
         if (template.length <= MAX_CREEP_SIZE && bodyCost(template) <= budget)
         {
@@ -558,7 +607,7 @@ function trySpawnRole(room: Room, spawn: StructureSpawn, role: Role, energyAvail
 {
     const sizingBudget = sizingBudgetFor(room, role, energyAvailable);
 
-    const picked = pickBody(role, sizingBudget);
+    const picked = pickBody(room, role, sizingBudget);
     if (picked === null)
     {
         return false; // Nothing affordable - not even a minimal body

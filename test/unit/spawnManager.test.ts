@@ -109,7 +109,7 @@ describe("spawnManager", () => {
       name: "w10n10",
       energyCapacityAvailable: options.capacity === undefined ? 300 : options.capacity,
       energyAvailable: options.available === undefined ? 300 : options.available,
-      controller: options.controllerLevel !== undefined ? {level: options.controllerLevel} : undefined,
+      controller: options.controllerLevel !== undefined ? {level: options.controllerLevel, pos: {x: 20, y: 20}} : undefined,
       // 0 = plain, TERRAIN_MASK_WALL (1) = wall; the source-assignment code
       // probes the tiles next to each source for standable room.
       getTerrain: () => ({
@@ -635,7 +635,48 @@ describe("spawnManager", () => {
     assert.equal(calls[0].name, "upgrader-3");
     assert.equal(calls[0].memory.role, "upgrader");
     assert.equal(calls[0].memory.working, true);
-    assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
+    // No controller container yet, so the upgrader walks for its energy and
+    // its body stays balanced: 300 capacity buys the 200-energy [W,C,M].
+    assert.deepEqual(calls[0].body, [WORK, CARRY, MOVE]);
+  });
+
+  it("spawns a WORK-heavy upgrader once a controller container exists", () => {
+    // The M5 switch (owner feedback 2026-11-02): when a finished container
+    // sits within range 3 of the controller, the energy comes to the
+    // upgrader and its body goes WORK-heavy again - one MOVE reaches the
+    // container, so every spare part is WORK. Both sources sit next to the
+    // mock controller (20,20), so both containers are within range 3.
+    addCreeps({
+      "miner-0": {role: "miner", sourceId: "source-1"},
+      "miner-1": {role: "miner", sourceId: "source-2"},
+      "hauler-2": {role: "hauler"},
+    });
+    // Three creeps already exist, so the next name uses counter value 3.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 3;
+    const {room, calls} = makeRoom({
+      capacity: 800,
+      available: 800,
+      sites: 0,
+      containers: 2,
+      spawning: null,
+      spawnResult: OK,
+      controllerLevel: 3,
+      sources: [
+        {id: "source-1", pos: {x: 17, y: 18}},
+        {id: "source-2", pos: {x: 19, y: 18}},
+      ],
+    });
+
+    checkAndSpawn(room);
+
+    // Both miners cover the container'd sources and the hauler is alive, so
+    // the upgrader minimum (1) is the next role - sized from the 800
+    // capacity, and the controller container makes it the WORK-heavy table.
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "upgrader-3");
+    assert.equal(calls[0].memory.role, "upgrader");
+    assert.deepEqual(calls[0].body, [WORK, WORK, WORK, WORK, WORK, WORK, WORK, CARRY, MOVE]);
   });
 
   it("spawns a surplus builder while sites exist, once the upgrader cap is reached", () => {
@@ -834,8 +875,10 @@ describe("spawnManager", () => {
       assert.equal(calls.length, 1);
       assert.equal(calls[0].name, "upgrader-2");
       assert.equal(calls[0].memory.role, "upgrader");
-      // Income is alive, so the body is sized from the 300 capacity.
-      assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
+      // Income is alive, so the body is sized from the 300 capacity - and
+      // with no controller container the balanced table picks the 200-energy
+      // [W,C,M] (the 350 [W,W,C,M,M] does not fit).
+      assert.deepEqual(calls[0].body, [WORK, CARRY, MOVE]);
     });
 
     it("income floor exception: a war-mode room with dry towers spawns the defender first", () => {
@@ -866,7 +909,9 @@ describe("spawnManager", () => {
       assert.equal(calls.length, 1);
       assert.equal(calls[0].name, "defender-1");
       assert.equal(calls[0].memory.role, "defender");
-      assert.deepEqual(calls[0].body, [ATTACK, ATTACK, CARRY, MOVE]);
+      // The defender carries nothing (it only attacks and moves): 300
+      // capacity buys the 260-energy ATTACK+MOVE pair body.
+      assert.deepEqual(calls[0].body, [ATTACK, ATTACK, MOVE, MOVE]);
     });
 
     it("cold boot: no creeps, 300 of 1300 available - a harvester spawns this tick", () => {
