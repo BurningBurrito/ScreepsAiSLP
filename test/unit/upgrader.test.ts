@@ -1,6 +1,7 @@
 import {assert} from "chai";
 import {runUpgrader} from "../../src/roles/upgrader";
 import {Game, Memory, OK, ERR_NOT_IN_RANGE} from "./mock";
+import {CONTROLLER_SIGN_TEXT} from "../../src/config";
 
 // Import types to extend global scope
 import "../../src/types/memory";
@@ -47,6 +48,9 @@ type CallCounts = {
     harvest?: number;
     upgrade?: number;
     moveTo?: number;
+    sign?: number;
+    lastSignText?: string;
+    lastMoveOpts?: any;
     lastHarvested?: string;
 };
 
@@ -56,7 +60,13 @@ function makeUpgrader(memory: Record<string, any>):
     const calls: CallCounts = {};
     const sourceA = { id: "sA", energy: 500, pos: pos(14, 18) }; // pocket: near the controller
     const sourceB = { id: "sB", energy: 500, pos: pos(39, 14) }; // open: far from the controller
-    const controller = { my: true, pos: pos(25, 25) };
+    // The default sign is already correct, so every pre-existing test runs
+    // the sign-free upgrade path; the sign tests below clear or change it.
+    const controller: any = {
+        my: true,
+        pos: pos(25, 25),
+        sign: { username: "player", text: CONTROLLER_SIGN_TEXT, time: 1, datetime: new Date() },
+    };
     const creep: any = {
         id: "u1",
         memory: { working: false, role: "upgrader", ...memory },
@@ -96,8 +106,14 @@ function makeUpgrader(memory: Record<string, any>):
             calls.upgrade = (calls.upgrade ?? 0) + 1;
             return OK;
         },
-        moveTo: () => {
+        signController: (_target: any, text: string) => {
+            calls.sign = (calls.sign ?? 0) + 1;
+            calls.lastSignText = text;
+            return OK;
+        },
+        moveTo: (_target: any, opts?: any) => {
             calls.moveTo = (calls.moveTo ?? 0) + 1;
+            calls.lastMoveOpts = opts;
             return OK;
         },
     };
@@ -118,7 +134,13 @@ function makeUpgraderWithSites(sites: any[]):
     const calls: { build?: number; upgrade?: number; lastBuilt?: string } = {};
     const sourceA = { id: "sA", energy: 500, pos: pos(14, 18) };
     const sourceB = { id: "sB", energy: 500, pos: pos(39, 14) };
-    const controller = { my: true, pos: pos(25, 25) };
+    // Correct sign by default: the non-priority-sites test reaches the
+    // upgrade phase and must run the sign-free path like the other tests.
+    const controller = {
+        my: true,
+        pos: pos(25, 25),
+        sign: { username: "player", text: CONTROLLER_SIGN_TEXT, time: 1, datetime: new Date() },
+    };
     const spawn = { pos: pos(13, 20), store: { getFreeCapacity: () => 0 } };
     const creep: any = {
         id: "u1",
@@ -298,6 +320,87 @@ describe("upgrader", () => {
 
         assert.equal(calls.upgrade, 1, "no tower or extension site: the upgrader upgrades");
         assert.equal(calls.build, undefined, "it does not build the road site");
+    });
+
+    describe("controller sign (owner request 2026-11-02)", () => {
+        /**
+         * An upgrader in the upgrade phase (full store, no priority sites) so
+         * the sign check runs; makeUpgrader's default sign is already correct.
+         * @returns The carrying mock creep and its call counters.
+         */
+        function makeSigningUpgrader(): { creep: any; calls: CallCounts }
+        {
+            const { creep, calls } = makeUpgrader({ working: true });
+            creep.store[RESOURCE_ENERGY] = 50;
+            return { creep, calls };
+        }
+
+        it("signs a missing controller sign, then resumes upgrading", () => {
+            const { creep, calls } = makeSigningUpgrader();
+            creep.room.controller.sign = undefined;
+
+            runUpgrader(creep);
+
+            assert.equal(calls.sign, 1, "the upgrader signs once");
+            assert.equal(calls.lastSignText, CONTROLLER_SIGN_TEXT, "with the exact owner text");
+            assert.equal(calls.upgrade, undefined, "the sign tick does not also upgrade");
+
+            // The sign landed: the next tick upgrades as usual.
+            creep.room.controller.sign = {
+                username: "player",
+                text: CONTROLLER_SIGN_TEXT,
+                time: 1,
+                datetime: new Date(),
+            };
+            runUpgrader(creep);
+
+            assert.equal(calls.upgrade, 1, "the upgrade resumes once the sign is right");
+            assert.equal(calls.sign, 1, "and the sign is not applied twice");
+        });
+
+        it("never re-signs when the sign text is already correct", () => {
+            const { creep, calls } = makeSigningUpgrader();
+
+            runUpgrader(creep);
+
+            assert.equal(calls.sign, undefined, "no signController call");
+            assert.equal(calls.upgrade, 1, "the upgrade runs untouched");
+        });
+
+        it("re-signs when the sign text differs from the owner text", () => {
+            const { creep, calls } = makeSigningUpgrader();
+            creep.room.controller.sign = {
+                username: "someone",
+                text: "old text",
+                time: 1,
+                datetime: new Date(),
+            };
+
+            runUpgrader(creep);
+
+            assert.equal(calls.sign, 1, "a foreign sign is replaced");
+            assert.equal(calls.lastSignText, CONTROLLER_SIGN_TEXT, "with the owner text");
+            assert.equal(calls.upgrade, undefined, "the sign takes the action this tick");
+        });
+
+        it("walks in to range 1 to sign when out of range, instead of upgrading", () => {
+            // signController needs an adjacent tile while the upgrade walk
+            // stops at range 3: a pending sign must walk two tiles closer.
+            const { creep, calls } = makeSigningUpgrader();
+            creep.room.controller.sign = undefined;
+            creep.signController = (_t: any, text: string) => {
+                calls.sign = (calls.sign ?? 0) + 1;
+                calls.lastSignText = text;
+                return ERR_NOT_IN_RANGE;
+            };
+
+            runUpgrader(creep);
+
+            assert.equal(calls.sign, 1, "it still tries the sign");
+            assert.equal(calls.moveTo, 1, "and walks toward the controller");
+            assert.equal(calls.lastMoveOpts.range, 1, "to range 1 - signController's range");
+            assert.equal(calls.upgrade, undefined, "no upgrade while the sign is pending");
+        });
     });
 });
 

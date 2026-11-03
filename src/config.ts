@@ -242,3 +242,13 @@ export const CONTAINER_BOOST_MIN_EXTENSIONS = 1;
  * container takes over only after "road built >= 1" is already satisfied.
  */
 export const CONTAINER_BOOST_MIN_ROADS = 1;
+
+/**
+ * Controller sign text (owner request, feedback 2026-11-02): the exact string
+ * every room the bot owns carries as its controller sign. The upgrader signs
+ * it while already on the upgrade round trip (signController needs range 1),
+ * never re-signs when the text is already right, and is never diverted from
+ * a harvest to do it. Kept in one place so the sign can never drift between
+ * rooms or between code and tests.
+ */
+export const CONTROLLER_SIGN_TEXT = "ScreepsAiSLP - https://github.com/BurningBurrito/ScreepsAiSLP";

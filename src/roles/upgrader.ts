@@ -39,9 +39,9 @@
  * tick of the long return walk and re-create the oscillation. See pickSource.
  */
 
+import { CONTROLLER_SIGN_TEXT, PARTIAL_DELIVERY_FRACTION } from "config";
 import { hasPriorityBuildSites, runBuilder } from "roles/builder";
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
-import { PARTIAL_DELIVERY_FRACTION } from "config";
 import { moveToToward } from "utils/movement";
 
 /**
@@ -139,6 +139,26 @@ export function runUpgrader(creep: Creep): void
     {
         return;
     }
+
+    // Controller sign (owner request, feedback 2026-11-02): every owned room
+    // carries the fixed project sign, and this creep is the one that already
+    // parks at the controller - a harvester is never diverted for it. The
+    // sign lives 50,000 ticks, so the cost is one action when it is missing
+    // or wrong; when the text is already right this is a single string
+    // compare and the upgrade below runs untouched (never re-sign).
+    // signController needs range 1 while the upgrade stops at range 3, so a
+    // pending sign walks in two tiles closer first; the tick after the sign
+    // lands, the text check passes and the upgrade resumes at range 3.
+    if (controller.sign === undefined || controller.sign.text !== CONTROLLER_SIGN_TEXT)
+    {
+        if (creep.signController(controller, CONTROLLER_SIGN_TEXT) === ERR_NOT_IN_RANGE)
+        {
+            moveToToward(creep, controller, 1);
+        }
+        // One action per tick: the sign counts, the upgrade follows next tick.
+        return;
+    }
+
     const upgradeResult = creep.upgradeController(controller);
     if (upgradeResult === ERR_NOT_IN_RANGE)
     {
