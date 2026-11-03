@@ -55,7 +55,7 @@ export function runMiner(creep: Creep): void
         filter: (structure) =>
             structure.structureType === STRUCTURE_CONTAINER
             && structure.pos.getRangeTo(source) <= 1,
-    })[0];
+    })[0] as StructureContainer | undefined;
 
     const hasContainer = container !== undefined;
     const anchor = hasContainer ? container : source;
