@@ -635,9 +635,13 @@ describe("spawnManager", () => {
     assert.equal(calls[0].name, "upgrader-3");
     assert.equal(calls[0].memory.role, "upgrader");
     assert.equal(calls[0].memory.working, true);
-    // No controller container yet, so the upgrader walks for its energy and
-    // its body stays balanced: 300 capacity buys the 200-energy [W,C,M].
-    assert.deepEqual(calls[0].body, [WORK, CARRY, MOVE]);
+    // No controller container yet, so the upgrader walks for its energy.
+    // 300 capacity buys the 300-energy [W,W,C,M], the historical
+    // pre-container body. It must cost the whole RCL 1 capacity, or the
+    // upgrader spawns before the income crew is up and its building work
+    // pins the store at the 50% withdrawal floor (the M4 regression of
+    // 2026-11-03).
+    assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
   });
 
   it("spawns a WORK-heavy upgrader once a controller container exists", () => {
@@ -876,9 +880,10 @@ describe("spawnManager", () => {
       assert.equal(calls[0].name, "upgrader-2");
       assert.equal(calls[0].memory.role, "upgrader");
       // Income is alive, so the body is sized from the 300 capacity - and
-      // with no controller container the balanced table picks the 200-energy
-      // [W,C,M] (the 350 [W,W,C,M,M] does not fit).
-      assert.deepEqual(calls[0].body, [WORK, CARRY, MOVE]);
+      // with no controller container the balanced table picks the 300-energy
+      // [W,W,C,M], the historical pre-container body that must cost the
+      // whole RCL 1 capacity (see the body table in spawnManager).
+      assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
     });
 
     it("income floor exception: a war-mode room with dry towers spawns the defender first", () => {

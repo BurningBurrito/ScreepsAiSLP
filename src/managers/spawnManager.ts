@@ -138,9 +138,19 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
             // (road walking) plus the CARRY that makes each trip pay - a
             // 7-WORK / 1-MOVE body crawled one tile per several ticks in the
             // owner's room (owner feedback 2026-11-02).
+            // The 300 row is the historical pre-container body (2 WORK, 1
+            // MOVE) and must stay as expensive as the whole RCL 1 capacity:
+            // a cheaper body lets the upgrader spawn while only one or two
+            // harvesters are alive, and its building work - limited by the
+            // 50% withdrawal floor in the builder role - pins the store at
+            // 150, below the 200 the next harvester costs, so the income
+            // crew never grows and construction stalls (the M4 regression
+            // of 2026-11-03). Once the first extension raises the capacity
+            // to 350, the balanced 350 body takes over.
             [WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE, MOVE, MOVE], // 750
             [WORK, WORK, WORK, CARRY, MOVE, MOVE, MOVE], // 500
             [WORK, WORK, CARRY, MOVE, MOVE], // 350
+            [WORK, WORK, CARRY, MOVE], // 300
             [WORK, CARRY, MOVE], // 200
         ],
     hauler: [

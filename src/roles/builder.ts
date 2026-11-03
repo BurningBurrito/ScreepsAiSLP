@@ -15,9 +15,10 @@
  *   Upgrader hold-back: while fewer upgraders are alive than the minimum
  *   (upgraderBelowMinimum in managers/spawnManager), the builder does not
  *   withdraw at any store level - the room's energy belongs to the next
- *   upgrader spawn. The upgrader's RCL 1 body costs 200 of the 300 capacity,
- *   and the 50% withdrawal floor pins the store at 150, so without the
- *   hold-back the first upgrader never spawns and the smoke test's
+ *   upgrader spawn. While no controller container exists, the upgrader's
+ *   body costs the whole RCL 1 capacity (300), and the 50% withdrawal
+ *   floor pins the store at 150, so without the hold-back the first
+ *   upgrader never spawns and the smoke test's
  *   controller-progress criterion fails (run of 2026-11-01). The builder
  *   self-harvests during the window, exactly like the original full-room
  *   gate; once the upgrader is alive the floor applies again.

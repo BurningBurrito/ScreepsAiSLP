@@ -100,6 +100,41 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-03 (M4 regression fixed: 300-energy pre-container upgrader body restored)
+- **Root cause of the M4 failures on e073eed (extensionsBuilt 1, expected 3).**
+  e073eed's M5 prereq removed the 300-energy [W,W,C,M] row from the upgrader's
+  pre-container body table (it became 750/500/350/200), so at the RCL 1-4
+  capacity of 300 the upgrader body was the 200-energy [W,C,M]. The upgrader
+  could now spawn after only one or two harvesters had saved up (~T90 in the
+  M4 world), and its building work - limited by the builder role's 50%
+  withdrawal floor - pinned the store at ~149-198, below the 300 the second
+  harvester costs. The income crew never grew: the store stayed in the
+  149-225 band for ~3,700 ticks and only one extension was finished by tick
+  6,000 (reproduction run 11:32: extensionsBuilt 1, capacity 350, creeps
+  "harvester 1-2, upgrader 1" from T100 to T3700).
+- **Fix (src/managers/spawnManager.ts).** Restored `[WORK, WORK, CARRY,
+  MOVE]` // 300 to the pre-container upgrader table (between the 350 and 200
+  rows) with a comment explaining that the row must cost the whole RCL 1
+  capacity: the first upgrader may only spawn once the income crew is up,
+  which the builder hold-back (src/roles/builder.ts) makes possible by
+  leaving the store alone until it reaches 300. Once the first extension
+  raises the capacity to 350 the balanced 350 body [W,W,C,M,M] takes over,
+  and the M5 WORK-heavy table (controller container) is untouched.
+- **Comment fix (src/roles/builder.ts).** The hold-back header said the
+  upgrader body "costs 200 of the 300 capacity"; after the fix it costs the
+  whole RCL 1 capacity (300). The hold-back is still required (300 > the
+  150 floor), so the mechanism is unchanged.
+- **Unit tests (test/unit/spawnManager.test.ts).** Two tests asserted the
+  200-energy [W,C,M] body at 300 capacity (introduced with the regression in
+  e073eed); both now assert [W,W,C,M] (300) with the rationale in comments.
+  The WORK-heavy table test (controller container, 7-WORK body at 800) is
+  unchanged. 100 passing (28ms).
+- **Verification.** smoke (500 ticks): EXIT 0, timeline and scorecard
+  byte-identical to the 6b3393d passing baseline (harvest 3.86/tick,
+  progress 50, upgrader alive by T300, creeps at end builder 2 / harvester 2
+  / upgrader 2). acceptance-m4 re-run in progress (started 13:15); the result
+  line is copied in when it finishes.
+
 ### 2026-11-03 (cold-boot recovery test: probe race root-caused and fixed)
 - **The cold-boot integration test failed with "the wipe killed the whole crew
   (8 creeps actually remained)." Root cause: a race in the test's own probe
@@ -502,27 +537,21 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **Run (2026-11-03): cold-boot recovery test race fixed — verifying before commit.**
-  The test (test/integration/cold-boot-recovery.test.ts) failed with 8 creeps
-  "remaining" after the wipe; the root cause is the probe helper resolving before
-  the tick's room phase applied the suicide intents (test-only bug, not the game
-  logic — a serialized-tick scratch run proved the wipe leaves 0 creep docs in the
-  DB). probeUntilResult now resolves only after the producing tick fully
-  completes. Working tree also carries the M5 body-template prereqs (upgrader
-  body switch on hasControllerContainer + defender ATTACK+MOVE body) from the
-  interrupted run; because that changes the upgrader in the M1-M4 worlds, the full
-  suite is re-run before committing. That re-run passed M1-M3 but M4 failed
-  (extensionsBuilt 1, expected 3; towers, ramparts and intrusion handling all OK)
-  — root cause is a slow-bootstrap flake, not the M5 diff: the harvester's harvest
-  rate collapsed to ~0.3/tick for ticks 1600-3600 (a pre-existing movement issue —
-  the harvester is unchanged by the M5 diff, and the pre-change 6b3393d run showed
-  the same degraded build rate 3.37 vs the 5.26 baseline). The M5 upgrader body is
-  correct per the M5 design (the unit test expects the balanced [W,C,M] at 300
-  capacity). M4 re-run (07:24) FAILED again (extensionsBuilt 1, expected 3;
-  same harvester-freeze stall, harvest collapsed to ~0.3/tick for ticks
-  1600-4300, healthy from tick 4400 but too late to build 3 extensions;
-  towers, ramparts, intrusion handling all OK). A new M4 re-run (07:57) is in
-  progress to confirm the flake; commit after a green M4 + full suite.
+- **Run (2026-11-03): M4 energy-deadlock regression fixed - awaiting the M4
+  acceptance result.** The e073eed M5 prereq made the pre-container upgrader
+  body 200 energy ([W,C,M]) at 300 capacity, so the upgrader spawned after
+  one or two harvesters and its building work (capped by the builder role's
+  50% withdrawal floor) pinned the store at ~149-198 for ~3,700 ticks -
+  below the 300 the second harvester costs - and M4 failed with
+  extensionsBuilt 1, expected 3 (reproduction run 11:32; the earlier
+  "harvester-freeze flake" reading of the 07:24/07:57 failures was
+  superseded by this measurement: the store timeline shows the pin, not a
+  movement stall). Fix: the 300-energy [W,W,C,M] row is back in the
+  pre-container upgrader table (src/managers/spawnManager.ts), the hold-back
+  comment in src/roles/builder.ts is corrected, and the two unit tests that
+  asserted the 200-energy body now assert [W,W,C,M]. Smoke verified
+  byte-identical to the 6b3393d passing baseline; acceptance-m4 started
+  13:15, commit after a green M4 + full suite.
 - **Run (2026-11-02/03): feedback v8.6 URGENT items + controller sign — done.**
   URGENT 1 (colony died out): cold boot + income floor (edb614e) plus unit tests of
   the exact wipe scenarios from the feedback (4a706dc). URGENT 2 (no second tower in
