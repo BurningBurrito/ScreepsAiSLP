@@ -100,6 +100,52 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-03 (feedback v8.6: URGENT tower placement fix + controller sign)
+- **URGENT 2 — the second tower was never placed in the owner's cramped room
+  (feedback 2026-11-02).** The range 2-5 search found nothing because
+  computeTowerPositions (src/managers/constructionManager.ts) still reused the
+  extension checkerboard parity filter: rings 3 and 5 sit on the opposite parity
+  from the spawn, so in a cramped room every even-parity ring tile was taken by
+  roads or extension sites and the odd rings were skipped entirely. Fix (1076de5):
+  the parity filter is gone (towers don't need walkable neighbours), the primary
+  search walks rings 2-5 by proximity (TOWER_SITE_RANGES); if the engine refuses
+  every candidate or the static search finds nothing, placeTowerSites does a deep
+  re-scan of the rings 2-8 union (TOWER_SITE_DEEP_RANGES, capped at
+  TOWER_SITE_DEEP_CANDIDATES = 96); the last resort removes the nearest UNBUILT
+  extension construction site - never a finished structure - and builds the tower
+  on its tile. The tower tile leaves the extension search through the tower
+  reservation, so extensions re-reserve the next free tile on the next tick.
+  Files: src/config.ts, src/managers/constructionManager.ts,
+  test/unit/constructionManager.test.ts.
+- **Tests for the tower fix:** 5 new cramped-room unit tests - rings 2/4 full puts
+  the towers on rings 3/5, the owner's 30-extension box gets both towers on
+  opposite sides, engine refusing every primary tile falls back to a placement
+  inside ring 8, rings 2-8 full removes the closest unbuilt extension site, and a
+  finished extension is never removed. Unit suite 95 -> 99 passing with the sign
+  tests (was 90).
+- **In-game verification (agent-test, this run):** smoke 500 ticks EXIT 0 -
+  3.86/tick, CPU avg 2.11, 0 console errors (unchanged vs the 4a706dc baseline);
+  acceptance-m4 6001 ticks EXIT 0, "1 passing (26 min)" - snapshot: L5/444,
+  towersBuilt 2, towersWithRampart 2, extensionsBuilt 5, energyCapacity 550, 11
+  creeps, mode peace, hostiles 0. Scorecard vs baseline 06677ce: harvested 12.66
+  -> 12.66/tick, upgraded 0.2 -> 0.2, construction 5.26 -> 5.26, RCL 5/444 ->
+  5/444, spawn idle 68 % -> 68 %, creep idle 38 % -> 38 %, CPU avg 2.2 -> 2.28
+  (max 28.06 -> 28.63, noise), 0 errors. The M4 world is not the cramped case, so
+  no number moved there; the cramped behaviour is covered by the 5 unit tests.
+- **Controller sign (feedback 2026-11-02 small task).** CONTROLLER_SIGN_TEXT
+  added to src/config.ts; the upgrader - the only role that parks at the
+  controller - signs it while already on the upgrade round trip
+  (signController in src/roles/upgrader.ts): signController needs range 1, so a
+  pending sign walks two tiles closer first; one action per tick (sign or
+  upgrade, never both); never re-signs when the text already matches; a harvester
+  is never diverted. 4 new unit tests plus a new 800-tick integration test
+  (test/integration/controller-sign.test.ts) that reads controller.sign from the
+  sandbox with a scorecard-style probe. The first run timed out on the probe: I
+  queued the probe with an un-awaited promise, so the game tick sometimes ran
+  before the probe reached the queue - fixed by awaiting the queue insert before
+  the tick. Result: 1 passing (4m), controller signed, upgrader alive, 0 console
+  errors (d666902).
+- **Full suite:** <pending - agent-test all, result line copied in at the end>
 ### 2026-11-01 (run 38: gate failure fixed by revert; owner's URGENT edge-crash fix completed)
 - **Gate failure root cause and fix (commit 54fb465).** The 20:16 gate failed on a unit
   test (spawnManager "spawns a fifth worker from the surplus energy"). A previous run's
@@ -423,6 +469,21 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **Run (2026-11-02/03): feedback v8.6 URGENT items + controller sign — done.**
+  URGENT 1 (colony died out): cold boot + income floor (edb614e) plus unit tests of
+  the exact wipe scenarios from the feedback (4a706dc). URGENT 2 (no second tower in
+  the owner's cramped room): the parity filter that silently skipped tower rings 3
+  and 5 is removed, the search walks rings 2-5, the deep fallback rescans rings 2-8,
+  and the last resort removes the nearest UNBUILT extension site (never a finished
+  structure) — 1076de5 with 5 cramped-room unit tests; M4 acceptance re-verified
+  this run (1 passing, 26 min): 12.66/tick, L5/444, 2 towers with ramparts, 0
+  errors — unchanged vs baseline 06677ce (CPU avg 2.2 -> 2.28). Controller sign
+  (small task): the upgrader signs CONTROLLER_SIGN_TEXT at range 1 while already on
+  the upgrade round trip, never re-signs matching text — 4 unit tests plus a new
+  800-tick integration test (test/integration/controller-sign.test.ts). Remaining
+  v8.6 items for the next run, in order: M5 (run the owner's acceptance-m5 test if
+  it exists, else the energy-budget work in the M5 note below) and the
+  upgrader/defender body changes (M5 part).
 - **Run 38 (2026-11-01): owner's URGENT edge-crash fix COMPLETE, gate fixed.**
   Items 1 + 2 (isValidTile bounds guard in constructionManager + main.ts
   per-room try/catch) were already in tree as 08424f2; kept. Item 3
@@ -537,6 +598,33 @@ yet.
 - Energy delivery issue: previous scorecard showed 72.7 energy delivered/tick vs ~3 harvested (energy going in circles) - this is now fixed by hauler changes
 
 ## Feedback acknowledged
+- Acknowledged 2026-11-03 (v8.6): URGENT — colony died out (no creep able to
+  recover) - done: cold boot + income floor in minCreepsPerRole and the spawn
+  decision in src/managers/spawnManager.ts (edb614e), plus unit tests of the
+  exact wipe scenarios from the feedback (4a706dc, spawnManager suite 21
+  passing). Optional item 5 (an integration test that wipes all creeps at tick
+  1500) not done this run: the tower fix took priority, and per the new rules
+  only passing tests go in test/integration - first step of the next run.
+- Acknowledged 2026-11-03 (v8.6): URGENT — second tower never placed in the
+  owner's cramped room - done in 1076de5: computeTowerPositions
+  (src/managers/constructionManager.ts) drops the checkerboard parity filter
+  (it skipped tower rings 3 and 5, the free ones in a cramped room) and walks
+  rings 2-5 (TOWER_SITE_RANGES); placeTowerSites falls back to a deep re-scan
+  of rings 2-8 (TOWER_SITE_DEEP_RANGES) when the engine refuses every primary
+  candidate, and as a last resort removes the nearest UNBUILT extension
+  construction site - never a finished structure - and builds the tower on its
+  tile. 5 new cramped-room unit tests (unit suite 95 -> 99 passing with the
+  sign tests); smoke unchanged (3.86/tick) and M4 acceptance re-verified
+  (1 passing, 26 min: 12.66/tick, L5/444, 2 towers with ramparts, 0 errors).
+- Acknowledged 2026-11-03 (v8.6): small task — controller sign - done:
+  CONTROLLER_SIGN_TEXT in src/config.ts; the upgrader (the only role that
+  parks at the controller) signs it while on the upgrade round trip -
+  signController needs range 1 so a pending sign walks two tiles closer first,
+  one action per tick, never re-signs when the text already matches, and a
+  harvester is never diverted (runUpgrader + signController,
+  src/roles/upgrader.ts). 4 new unit tests plus a new 800-tick integration
+  test (test/integration/controller-sign.test.ts) that reads
+  controller.sign from the sandbox.
 - Acknowledged 2026-11-01 (v8): URGENT live crash - constructionManager built new
   RoomPosition from unchecked arithmetic near the room edge (items 1 + 2) - done:
   isValidTile guard in computeTowerPositions and computeRoadEndpoints (08424f2),
