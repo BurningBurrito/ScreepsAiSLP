@@ -10,6 +10,7 @@ import "../../src/types/memory";
 const WORK = "work";
 const CARRY = "carry";
 const MOVE = "move";
+const ATTACK = "attack";
 
 // These numeric values match the real engine constants (see the type
 // definitions); the mock does not declare them, so the tests install them.
@@ -18,7 +19,7 @@ const FIND_CONSTRUCTION_SITES = 111;
 const FIND_STRUCTURES = 107;
 const FIND_SOURCES = 105;
 const FIND_SOURCES_ACTIVE = 104;
-const BODYPART_COST = {work: 100, carry: 50, move: 50};
+const BODYPART_COST = {work: 100, carry: 50, move: 50, attack: 80};
 
 interface SpawnCall {
   body: string[];
@@ -64,6 +65,7 @@ describe("spawnManager", () => {
     global.WORK = WORK; // @ts-ignore
     global.CARRY = CARRY; // @ts-ignore
     global.MOVE = MOVE; // @ts-ignore
+    global.ATTACK = ATTACK; // @ts-ignore
     global.OK = 0; // @ts-ignore
     global.ERR_BUSY = -11; // @ts-ignore
     global.FIND_MY_SPAWNS = FIND_MY_SPAWNS; // @ts-ignore
@@ -746,5 +748,214 @@ describe("spawnManager", () => {
     // the surplus step has nothing left to spend the idle energy on, so the
     // spawn idles - correct now, because every sink is busy.
     assert.equal(calls.length, 0);
+  });
+
+  describe("cold boot and income floor (owner feedback 2026-11-02)", () => {
+    it("cold boot beats the dead-hauler path: with no income alive, the harvester spawns first", () => {
+      // A container exists and no hauler is alive, so the hauler would also
+      // be sized from the available energy - but the cold boot pre-pass
+      // (no harvester AND no miner) runs first and starts the income itself.
+      const {room, calls} = makeRoom({
+        capacity: 300,
+        available: 200,
+        sites: 0,
+        containers: 1,
+        spawning: null,
+        spawnResult: OK,
+        sources: [{id: "source-1"}],
+      });
+
+      checkAndSpawn(room);
+
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].name, "harvester-0");
+      // Sized from the 200 available, not the 300 capacity: a wiped colony
+      // must spawn the income it can pay for right now, or the store is
+      // never refilled and it can never recover.
+      assert.deepEqual(calls[0].body, [WORK, CARRY, MOVE]);
+      assert.equal(calls[0].memory.role, "harvester");
+    });
+
+    it("income floor: one income creep alive, hauler below minimum - the hauler spawns before the upgrader", () => {
+      // One source with a container: the miner minimum is met, and the
+      // hauler minimum (1, a container exists) and the upgrader minimum (1)
+      // are both unmet. SPAWN_ORDER puts the upgrader before the hauler, so
+      // without the income floor the upgrader would win this tick. With one
+      // income creep alive (below ENERGY_INCOME_FLOOR = 2) the floor hands
+      // the spawn to the hauler instead.
+      addCreeps({
+        "miner-0": {role: "miner", sourceId: "source-1"},
+      });
+      // @ts-ignore : write into the game globals
+      (global as any).Memory.creepCounter = 1;
+      const {room, calls} = makeRoom({
+        capacity: 300,
+        available: 200,
+        sites: 0,
+        containers: 1,
+        spawning: null,
+        spawnResult: OK,
+        sources: [{id: "source-1"}],
+      });
+
+      checkAndSpawn(room);
+
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].name, "hauler-1");
+      assert.equal(calls[0].memory.role, "hauler");
+      // The hauler crew is dead (no hauler alive while a container exists),
+      // so this one is sized from the 200 available, not the capacity:
+      // the [C,C,C,C,C,C,C,C,M,M,M] body would cost 450 and never spawn.
+      assert.deepEqual(calls[0].body, [CARRY, CARRY, MOVE, MOVE]);
+    });
+
+    it("income floor: at the floor, the main order applies (upgrader before hauler)", () => {
+      // Two income creeps alive (at ENERGY_INCOME_FLOOR = 2): the floor is
+      // not active, and the main loop follows SPAWN_ORDER - the unmet
+      // upgrader is spawned before the unmet hauler.
+      addCreeps({
+        "miner-0": {role: "miner", sourceId: "source-1"},
+        "harvester-1": {role: "harvester", sourceId: "source-2"},
+      });
+      // @ts-ignore : write into the game globals
+      (global as any).Memory.creepCounter = 2;
+      const {room, calls} = makeRoom({
+        capacity: 300,
+        available: 300,
+        sites: 0,
+        containers: 1,
+        spawning: null,
+        spawnResult: OK,
+        sources: [{id: "source-1"}, {id: "source-2"}],
+      });
+
+      checkAndSpawn(room);
+
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].name, "upgrader-2");
+      assert.equal(calls[0].memory.role, "upgrader");
+      // Income is alive, so the body is sized from the 300 capacity.
+      assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
+    });
+
+    it("income floor exception: a war-mode room with dry towers spawns the defender first", () => {
+      // Same shape as the hauler test (one income creep, hauler below
+      // minimum), but the room is in war mode and no tower can fire in the
+      // unit environment: the defender minimum exists and takes priority
+      // over the income floor (a colony that does not defend itself
+      // defends no one).
+      addCreeps({
+        "miner-0": {role: "miner", sourceId: "source-1"},
+      });
+      // @ts-ignore : write into the game globals
+      (global as any).Memory.creepCounter = 1;
+      // @ts-ignore : write into the game globals
+      (global as any).Memory.mode = "war";
+      const {room, calls} = makeRoom({
+        capacity: 300,
+        available: 300,
+        sites: 0,
+        containers: 1,
+        spawning: null,
+        spawnResult: OK,
+        sources: [{id: "source-1"}],
+      });
+
+      checkAndSpawn(room);
+
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].name, "defender-1");
+      assert.equal(calls[0].memory.role, "defender");
+      assert.deepEqual(calls[0].body, [ATTACK, ATTACK, CARRY, MOVE]);
+    });
+
+    it("cold boot: no creeps, 300 of 1300 available - a harvester spawns this tick", () => {
+      // The owner's exact wipe scenario (a): nothing alive, the store holds
+      // 300 while the room's capacity promises 1300 (the spawn plus a full
+      // set of extensions). Sized against the capacity, the largest harvester
+      // is the 500-energy [W,W,W,C,C,M,M] body and 300 < 500, so the spawn
+      // would wait for energy that nothing can ever deliver. Sized from what
+      // the store holds right now, the 300-energy [W,W,C,M] body starts
+      // immediately and the colony can recover.
+      const {room, calls} = makeRoom({
+        capacity: 1300,
+        available: 300,
+        sites: 0,
+        containers: 0,
+        spawning: null,
+        spawnResult: OK,
+        sources: [{id: "source-1"}, {id: "source-2"}],
+      });
+
+      checkAndSpawn(room);
+
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].name, "harvester-0");
+      assert.equal(calls[0].memory.role, "harvester");
+      assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
+    });
+
+    it("income floor: one miner alive, hauler dead, 350 of 1300 - a hauler spawns from what is available", () => {
+      // The owner's wipe scenario (b): a miner works its container, the
+      // hauler is dead, the store holds 350 of 1300. One income creep is
+      // below the floor of two, so this tick's spawn goes to the hauler -
+      // and the hauler is sized from the 350 available, so the 200-energy
+      // [C,C,M,M] body starts right away instead of waiting for a body
+      // nobody can pay for yet.
+      addCreeps({
+        "miner-0": {role: "miner", sourceId: "source-1"},
+      });
+      // @ts-ignore : write into the game globals
+      (global as any).Memory.creepCounter = 1;
+      const {room, calls} = makeRoom({
+        capacity: 1300,
+        available: 350,
+        sites: 0,
+        containers: 1,
+        spawning: null,
+        spawnResult: OK,
+        sources: [{id: "source-1"}],
+      });
+
+      checkAndSpawn(room);
+
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].name, "hauler-1");
+      assert.equal(calls[0].memory.role, "hauler");
+      assert.deepEqual(calls[0].body, [CARRY, CARRY, MOVE, MOVE]);
+    });
+
+    it("income floor: same room at full energy - the hauler still goes first, with the largest body", () => {
+      // The owner's wipe scenario (c): one miner, one dead hauler, and the
+      // store is full (1300 of 1300). Even at full energy the hauler is
+      // below its minimum while the income floor is active, so it spawns
+      // before the upgrader - and with a full store the body is the largest
+      // the capacity allows: 12 CARRY and 4 MOVE for 800 energy.
+      addCreeps({
+        "miner-0": {role: "miner", sourceId: "source-1"},
+      });
+      // @ts-ignore : write into the game globals
+      (global as any).Memory.creepCounter = 1;
+      const {room, calls} = makeRoom({
+        capacity: 1300,
+        available: 1300,
+        sites: 0,
+        containers: 1,
+        spawning: null,
+        spawnResult: OK,
+        sources: [{id: "source-1"}],
+      });
+
+      checkAndSpawn(room);
+
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].name, "hauler-1");
+      assert.equal(calls[0].memory.role, "hauler");
+      assert.deepEqual(calls[0].body, [
+        CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY,
+        CARRY, CARRY, CARRY, CARRY, CARRY,
+        MOVE, MOVE, MOVE, MOVE,
+      ]);
+    });
   });
 });

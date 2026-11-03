@@ -19,6 +19,7 @@ import {manageConstruction} from "../../src/managers/constructionManager";
 // be unique and consistent inside this file (the game sandbox provides the
 // same names in production).
 const OK = 0;
+const ERR_INVALID_TARGET = -8;
 const FIND_SOURCES = 106;
 const FIND_MY_SPAWNS = 109;
 const FIND_CONSTRUCTION_SITES = 111;
@@ -341,5 +342,95 @@ describe("manageConstruction edge-position robustness (RoomPosition out-of-bound
         const room = makeEdgeRoom(4, 4);
         manageConstruction(room);
         assertAllInsideRoom(room);
+    });
+});
+
+describe("manageConstruction tower before extensions (owner feedback 2026-11-02)", () => {
+    beforeEach(() => {
+        tiles = new Map();
+        setGlobal("OK", OK);
+        setGlobal("FIND_SOURCES", FIND_SOURCES);
+        setGlobal("FIND_MY_SPAWNS", FIND_MY_SPAWNS);
+        setGlobal("FIND_CONSTRUCTION_SITES", FIND_CONSTRUCTION_SITES);
+        setGlobal("FIND_MY_STRUCTURES", FIND_MY_STRUCTURES);
+        setGlobal("FIND_STRUCTURES", FIND_STRUCTURES);
+        setGlobal("LOOK_STRUCTURES", LOOK_STRUCTURES);
+        setGlobal("LOOK_CONSTRUCTION_SITES", LOOK_CONSTRUCTION_SITES);
+        setGlobal("STRUCTURE_TOWER", STRUCTURE_TOWER);
+        setGlobal("STRUCTURE_EXTENSION", STRUCTURE_EXTENSION);
+        setGlobal("STRUCTURE_CONTAINER", STRUCTURE_CONTAINER);
+        setGlobal("STRUCTURE_ROAD", STRUCTURE_ROAD);
+        setGlobal("STRUCTURE_RAMPART", STRUCTURE_RAMPART);
+        setGlobal("STRUCTURE_WALL", STRUCTURE_WALL);
+        setGlobal("TERRAIN_MASK_WALL", TERRAIN_MASK_WALL);
+        setGlobal("RoomPosition", PositionMock);
+    });
+
+    /** The canonical room at a different controller level. */
+    function makeRoomAtLevel(level: number): any
+    {
+        const room = makeRoom();
+        room.controller.level = level;
+        return room;
+    }
+
+    it("RCL 3: the first tower site is placed and no extension starts", () => {
+        const room = makeRoomAtLevel(3);
+        manageConstruction(room);
+        assert.equal(sitePositions(room, STRUCTURE_TOWER).length, 1, "the tower site goes out first");
+        assert.equal(sitePositions(room, STRUCTURE_EXTENSION).length, 0,
+            "extensions wait while the tower is unfinished (tower limit 1 at RCL 3-4)");
+    });
+
+    it("RCL 4: same gate - the tower limit is 1 until level 5", () => {
+        const room = makeRoomAtLevel(4);
+        manageConstruction(room);
+        assert.equal(sitePositions(room, STRUCTURE_TOWER).length, 1);
+        assert.equal(sitePositions(room, STRUCTURE_EXTENSION).length, 0);
+    });
+
+    it("RCL 3: once the tower is finished, all 10 extensions are placed", () => {
+        const room = makeRoomAtLevel(3);
+        addStructure(room, 23, 25, STRUCTURE_TOWER);
+        manageConstruction(room);
+        assert.equal(sitePositions(room, STRUCTURE_TOWER).length, 0, "level 3 allows exactly one tower");
+        assert.equal(sitePositions(room, STRUCTURE_EXTENSION).length, 10,
+            "the extension queue starts as soon as the tower exists");
+    });
+
+    it("RCL 2: no tower allowed, and the 5 extensions stay inside range 4 of the spawn", () => {
+        const room = makeRoomAtLevel(2);
+        manageConstruction(room);
+        assert.equal(sitePositions(room, STRUCTURE_TOWER).length, 0, "no tower at level 2");
+        const extensions = room.sites
+            .filter((s: any) => s.structureType === STRUCTURE_EXTENSION);
+        assert.equal(extensions.length, 5, "level 2 allows 5 extensions");
+        // The narrow search (owner feedback 2026-11-02): with a limit of 5
+        // the extension rings stop at range 4, well before the range-5+
+        // tiles where the source roads run.
+        for (const site of extensions)
+        {
+            const distance = Math.abs(site.pos.x - 25) + Math.abs(site.pos.y - 25);
+            assert.isAtMost(distance, 4, `extension at ${site.pos.x},${site.pos.y} beyond the narrow search`);
+        }
+    });
+
+    it("moves to the next candidate when the engine refuses a tower tile", () => {
+        const room = makeRoomAtLevel(3);
+        const originalCreate = room.createConstructionSite;
+        const attempts: string[] = [];
+        room.createConstructionSite = (pos: any, structureType: string): number => {
+            attempts.push(`${pos.x},${pos.y}:${structureType}`);
+            if (structureType === STRUCTURE_TOWER && pos.x === 23 && pos.y === 25)
+            {
+                return ERR_INVALID_TARGET; // the engine refuses the first candidate
+            }
+            return originalCreate(pos, structureType);
+        };
+        manageConstruction(room);
+        assert.include(attempts, "23,25:tower", "the first candidate was tried");
+        assert.include(attempts, "25,27:tower", "a refusal moves on to the next candidate");
+        assert.include(sitePositions(room, STRUCTURE_TOWER), "25,27", "the tower went to the next candidate");
+        assert.notInclude(sitePositions(room, STRUCTURE_TOWER), "23,25", "the refused tile holds no site");
     });
 });

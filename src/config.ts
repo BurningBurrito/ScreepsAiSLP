@@ -175,6 +175,16 @@ export const RAMPART_TARGET_HITS = 10000;
 export const RAMPART_MIN_LEVEL = 3;
 
 /**
+ * Tower site placement (see placeTowerSites in managers/constructionManager):
+ * if the engine refuses every reserved tower candidate, the placement
+ * re-runs the position search with this many candidates before giving up
+ * for the tick. The fallback search only runs on the failure path (the
+ * engine rejected a tile the static checks did not catch), so a generous
+ * count costs nothing in normal operation.
+ */
+export const TOWER_SITE_FALLBACK_CANDIDATES = 6;
+
+/**
  * Energy a tower keeps in reserve for its defense duty. The tower only
  * repairs (ramparts, roads, containers) while it holds strictly more than
  * this, and harvesters only refill it while it holds strictly less. 500

@@ -27,7 +27,7 @@
  * cannot permanently break the route.
  */
 
-import { RAMPART_MIN_LEVEL } from "config";
+import { RAMPART_MIN_LEVEL, TOWER_SITE_FALLBACK_CANDIDATES } from "config";
 import { isValidTile } from "utils/positions";
 
 /** Get the spawn position in this room */
@@ -187,7 +187,12 @@ function computeExtensionPositions(room: Room, excludeTiles: Set<string>, limit:
     // Try positions around spawn, starting from range 2 and going outward
     // Use checkerboard pattern: only positions where (x + y) % 2 === (spawnX + spawnY) % 2
     const spawnParity = (spawn.x + spawn.y) % 2;
-    const maxRange = 8;
+    // Narrow search (owner feedback 2026-11-02): extensions hug the spawn.
+    // The checkerboard keeps only even rings, so this loop is really ranges
+    // 2 and 4. RCL 2 (5 extensions) fits inside those two rings, so the
+    // search never reaches ring 5+ where the source roads run; higher
+    // levels (30 at RCL 5) still widen to range 8 as before.
+    const maxRange = limit > 8 ? 8 : 4;
 
     // Look these up once for the whole search: they are fixed for the room,
     // and the candidate loop below runs hundreds of times.
@@ -554,10 +559,17 @@ function placeExtensionSites(room: Room, extensionPositions: RoomPosition[], lim
  * (1 tower at RCL 3-4, 2 from RCL 5 on - the CONTROLLER_STRUCTURES table).
  * The builders finish the current tower before the next site is placed, so
  * construction energy never splits between two towers at once.
+ *
+ * Candidates are tried in priority order and a tile the engine refuses
+ * (createConstructionSite returns an error) moves on to the next one; if
+ * every reserved candidate is refused, a deeper search runs as a fallback,
+ * so a tower never starves because of one bad tile (owner feedback 2026-11-02).
  * @param room The room to place a site in
- * @param towerPositions Candidate positions, in priority order
+ * @param towerPositions Reserved candidate positions, in priority order
+ * (all the room's future tower tiles)
+ * @param roadNetworkTiles The room's road network, excluded from the search
  */
-function placeTowerSites(room: Room, towerPositions: RoomPosition[]): void
+function placeTowerSites(room: Room, towerPositions: RoomPosition[], roadNetworkTiles: Set<string>): void
 {
     const controllerLevel = getControllerLevel(room);
     const limit = structureLimit(STRUCTURE_TOWER, controllerLevel);
@@ -584,16 +596,41 @@ function placeTowerSites(room: Room, towerPositions: RoomPosition[]): void
         return;
     }
 
-    // Find existing construction sites at tower positions and skip occupied ones
-    for (const pos of towerPositions)
+    // Try the candidates in priority order (owner feedback 2026-11-02).
+    // A candidate may hold a site already (skip it), or the engine may
+    // still refuse the tile even though every static check passed - a
+    // foreign structure, the spawn, or a position outside the build
+    // range. The old code fired createConstructionSite at the first empty
+    // candidate and gave up no matter what happened; now a refused
+    // placement moves on to the next candidate, so a tower never starves
+    // because of one bad tile.
+    const tryPositions = (candidates: RoomPosition[]): boolean =>
     {
-        const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
-        if (sites.length === 0)
+        for (const pos of candidates)
         {
-            room.createConstructionSite(pos, STRUCTURE_TOWER);
-            return; // Only one tower site at a time
+            const sites = pos.lookFor(LOOK_CONSTRUCTION_SITES);
+            if (sites.length > 0)
+            {
+                continue; // occupied (own or foreign site) - try the next candidate
+            }
+            if (room.createConstructionSite(pos, STRUCTURE_TOWER) === OK)
+            {
+                return true; // Only one tower site at a time
+            }
         }
+        return false;
+    };
+
+    if (tryPositions(towerPositions))
+    {
+        return;
     }
+
+    // Every reserved candidate was refused: the engine rejected tiles the
+    // static checks did not catch. Search the full ring set deeper so the
+    // tower still lands this tick. This path is rare, so the extra
+    // position search costs almost nothing (owner feedback 2026-11-02).
+    tryPositions(computeTowerPositions(room, roadNetworkTiles, TOWER_SITE_FALLBACK_CANDIDATES));
 }
 
 /**
@@ -1056,7 +1093,16 @@ export function manageConstruction(room: Room): void
     {
         towerReserveTiles.add(`${pos.x},${pos.y}`);
     }
-    const extensionPositions = extensionsBuilt + extensionSites < extensionLimit
+    // Tower before extensions (owner feedback 2026-11-02): at RCL 3-4 the
+    // tower limit is 1 and the tower is the first thing a level 3 room
+    // builds (rule 02b). While that tower is not finished - no built tower
+    // and no site - the extensions do not start: the builder crew and the
+    // first ~5000 energy all go to the tower. The gate is exactly "limit 1":
+    // from RCL 5 on (limit 2) the M4 flow (tower site and 30 extensions side
+    // by side, second tower's tile reserved) is kept unchanged.
+    const towerBlocksExtensions = towerLimit === 1 && towersBuilt + towerSites < towerLimit;
+
+    const extensionPositions = !towerBlocksExtensions && extensionsBuilt + extensionSites < extensionLimit
         ? computeExtensionPositions(room, towerReserveTiles, extensionLimit)
         : [];
 
@@ -1069,7 +1115,7 @@ export function manageConstruction(room: Room): void
     const containerPositions = computeContainerPositions(room);
 
     // Place tower sites first (highest priority)
-    placeTowerSites(room, towerPositions);
+    placeTowerSites(room, towerPositions, roadNetworkTiles);
 
     // Place rampart sites (M4: on the spawn's and the towers' tiles)
     placeRampartSites(room, structures);
