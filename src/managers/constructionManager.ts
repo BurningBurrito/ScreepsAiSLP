@@ -13,12 +13,18 @@
  * (structureLimit below): at level 5 the room builds 2 towers and 30
  * extensions, never the RCL 3 numbers. Tower sites are placed one at a time.
  *
- * Layout invariant: the road network is the skeleton of the room. Extensions,
- * towers and containers are never placed on a road tile, because the
- * acceptance tests measure connectivity over road tiles only - a structure
- * sitting on the network would open a hole in it. Road sites that are missing
- * from the network are re-attempted every tick (existingRoadPositions check),
- * so a single failed createConstructionSite cannot permanently break the route.
+ * Layout invariant: the road network is the skeleton of the room. Extensions
+ * and towers are never placed on a road tile, because the acceptance tests
+ * measure connectivity over road tiles only. Containers are the exception:
+ * the engine allows a road and a container to share a tile (real Screeps does
+ * too), and the flood fill counts road objects, so a container on the network
+ * does not open a hole in it. The exception is required, not optional: a
+ * wall-pocket source may have exactly one walkable neighbour tile and it can
+ * be the road tile - excluding road tiles would leave such a source with no
+ * container position at all (W0N1 source at 39,14, M5 failure of 2026-11-02).
+ * Road sites that are missing from the network are re-attempted every tick
+ * (existingRoadPositions check), so a single failed createConstructionSite
+ * cannot permanently break the route.
  */
 
 import { RAMPART_MIN_LEVEL } from "config";
@@ -462,14 +468,18 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[]): number
             continue;
         }
 
-        // If something else (extension, tower, container, built structure) was
-        // placed on this tile, do not stack a road site on top of it. The
-        // layout invariant above keeps this from ever happening; this check
-        // makes sure we do not spin on a failing createConstructionSite.
-        const occupied = pos.lookFor(LOOK_CONSTRUCTION_SITES).length > 0
-            || pos.lookFor(LOOK_STRUCTURES).some(
-                (structure) => structure.structureType !== STRUCTURE_ROAD,
-            );
+        // If something else (extension, tower, built structure) was placed on
+        // this tile, do not stack a road site on top of it. A container is
+        // the exception: the engine allows a road and a container to share a
+        // tile (see the file header), and a wall-pocket source needs exactly
+        // that. This check makes sure we do not spin on a failing
+        // createConstructionSite for any other combination.
+        const occupied = pos.lookFor(LOOK_CONSTRUCTION_SITES).some(
+            (site) => site.structureType !== STRUCTURE_CONTAINER,
+        ) || pos.lookFor(LOOK_STRUCTURES).some(
+            (structure) => structure.structureType !== STRUCTURE_ROAD
+                && structure.structureType !== STRUCTURE_CONTAINER,
+        );
         if (occupied)
         {
             continue;
@@ -635,8 +645,17 @@ function placeRampartSites(room: Room, structures: Structure[]): void
     }
 }
 
-/** Compute container positions for each source */
-function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomPosition[]
+/**
+ * Compute container positions for each source.
+ *
+ * A container may share its tile with a road (see the layout invariant in the
+ * file header), so the road network is NOT excluded here - and a tile that
+ * only holds a road (built or site) is not "occupied". Every other structure
+ * or site does occupy the tile: only one non-road structure fits, and a
+ * container site already placed for this source is the success case the
+ * per-source check above skips.
+ */
+function computeContainerPositions(room: Room): RoomPosition[]
 {
     const positions: RoomPosition[] = [];
     const spawn = getSpawnPosition(room);
@@ -740,18 +759,14 @@ function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomP
                     continue;
                 }
 
-                // Skip road-network tiles: a container on the route would open
-                // a hole in the road flood-fill.
-                if (excludeTiles.has(`${containerPos.x},${containerPos.y}`))
-                {
-                    continue;
-                }
-                
-                // Check if occupied by structure or site
+                // Check if occupied: a road (built or site) may share the tile
+                // with the container, everything else may not.
                 const structures = containerPos.lookFor(LOOK_STRUCTURES);
                 const sites = containerPos.lookFor(LOOK_CONSTRUCTION_SITES);
-                
-                if (structures.length > 0 || sites.length > 0)
+
+                if (structures.some((structure) => structure.structureType !== STRUCTURE_ROAD)
+                    || sites.some((site) => site.structureType !== STRUCTURE_ROAD
+                        && site.structureType !== STRUCTURE_CONTAINER))
                 {
                     continue;
                 }
@@ -770,56 +785,6 @@ function computeContainerPositions(room: Room, excludeTiles: Set<string>): RoomP
         {
             positions.push(bestPos);
         }
-        else if (Game.time % 100 === 0)
-        {
-            // TEMP DIAG: every adjacent tile rejected - log why, once per 100
-            // ticks, so the smoke console pinpoints the failing check.
-            const reasons: string[] = [];
-            for (let dx = -1; dx <= 1; dx++)
-            {
-                for (let dy = -1; dy <= 1; dy++)
-                {
-                    if (dx === 0 && dy === 0)
-                    {
-                        continue;
-                    }
-                    const nx = source.pos.x + dx;
-                    const ny = source.pos.y + dy;
-                    let reason = "oob";
-                    if (isValidTile(nx, ny))
-                    {
-                        const cp = new RoomPosition(nx, ny, room.name);
-                        if (isWallPosition(cp, room))
-                        {
-                            reason = "wall";
-                        }
-                        else if (excludeTiles.has(`${nx},${ny}`))
-                        {
-                            reason = "excl";
-                        }
-                        else if (cp.lookFor(LOOK_STRUCTURES).length > 0)
-                        {
-                            reason = "struct:" + cp.lookFor(LOOK_STRUCTURES).map((s) => s.structureType).join("/");
-                        }
-                        else if (cp.lookFor(LOOK_CONSTRUCTION_SITES).length > 0)
-                        {
-                            reason = "site:" + cp.lookFor(LOOK_CONSTRUCTION_SITES).map((s) => s.structureType).join("/");
-                        }
-                        else
-                        {
-                            reason = "OK d" + cp.getRangeTo(spawn);
-                        }
-                    }
-                    reasons.push(`(${nx},${ny})=${reason}`);
-                }
-            }
-            console.log("[DIAG2] src " + source.pos.x + "," + source.pos.y + " excluded=" + excludeTiles.size + " " + reasons.join(" "));
-        }
-    }
-
-    if (Game.time % 100 === 0)
-    {
-        console.log("[DIAG] container positions: " + positions.map((p) => `${p.x},${p.y}`).join(" | ") + " for " + sources.length + " sources");
     }
 
     return positions;
@@ -850,11 +815,7 @@ function placeContainerSites(room: Room, containerPositions: RoomPosition[]): vo
 
         if (!hasContainer && !hasSite)
         {
-            const result = room.createConstructionSite(pos, STRUCTURE_CONTAINER);
-            if (Game.time < 200)
-            {
-                console.log("[DIAG] placeContainerSites at " + pos.x + "," + pos.y + " -> " + result);
-            }
+            room.createConstructionSite(pos, STRUCTURE_CONTAINER);
             return; // Only place one container at a time
         }
     }
@@ -1101,7 +1062,11 @@ export function manageConstruction(room: Room): void
 
     // Compute container positions (third priority), excluding the road
     // network and the reserved tower tiles
-    const containerPositions = computeContainerPositions(room, towerReserveTiles);
+    // Compute container positions (third priority). Unlike extensions and
+    // towers they are NOT kept off the road network: a container may share
+    // its tile with a road, which is the only option for a wall-pocket
+    // source (see the layout invariant in the file header).
+    const containerPositions = computeContainerPositions(room);
 
     // Place tower sites first (highest priority)
     placeTowerSites(room, towerPositions);
