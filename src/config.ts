@@ -38,6 +38,17 @@ export const MIN_CREEPS_BY_LEVEL: {
 ];
 
 /**
+ * Income floor (owner feedback 2026-11-02): the minimum number of income
+ * creeps (harvester + miner + hauler, alive) a room must keep. Below this the
+ * spawn manager starts one of the income roles before it queues any upgrader,
+ * builder or defender - a colony at zero or one income creep is one death away
+ * from a state where nothing refills the energy store and it can never recover.
+ * The single exception is a non-peace room whose towers are dry: a defender
+ * below its minimum takes priority over income.
+ */
+export const ENERGY_INCOME_FLOOR = 2;
+
+/**
  * Surplus spawn caps (owner feedback 2026-10-30): totals per room, including
  * the minimum crew, that the spawn may exceed while every minimum is met AND
  * the energy store is full - the moment checkAndSpawn would otherwise idle

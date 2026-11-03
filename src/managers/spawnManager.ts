@@ -7,9 +7,23 @@
  *   room.energyAvailable. We pick the largest template that fits the
  *   capacity and only tell the spawn to spawn when the room can pay for the
  *   body, so a creep is never shrunken because the store happens to be low
- *   this tick. Exception: on a cold boot (no harvester alive) there is no
- *   income at all, so the first harvester is sized down to what the store
- *   holds right now - otherwise nothing would ever be spawned.
+ *   this tick. Exception: when an income crew has just died (no harvester
+ *   and no miner alive, or no hauler alive while a container exists) that
+ *   role is sized down to what the store holds right now - the store will
+ *   not refill until the crew is back, so waiting for capacity would wait
+ *   forever (owner feedback 2026-11-02).
+ *
+ * Income protection (owner feedback 2026-11-02):
+ *   1. Cold boot: no harvester AND no miner alive means nothing can harvest,
+ *      so the store is never refilled and no capacity-sized body can ever
+ *      start - a wiped colony would stay dead. The first thing the spawn
+ *      does is start the largest harvester the store can pay for right now
+ *      (sized from energyAvailable, see sizingBudgetFor).
+ *   2. Income floor: while fewer than ENERGY_INCOME_FLOOR of the income
+ *      roles (harvester + miner + hauler) are alive, the next spawn goes to
+ *      one of them before any upgrader, builder or defender. Single
+ *      exception: not in peace mode and no tower can fire, in which case a
+ *      defender below its minimum takes priority over income.
  *
  * Spawn order (owner rule #5): harvester, then builder, then upgrader, then
  * defender, then hauler. At most ONE spawn is started per tick: a spawnCreep
@@ -38,7 +52,7 @@
  *   is what lands RCL 2 inside the 500-tick smoke window.
  */
 
-import { MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX } from "config";
+import { ENERGY_INCOME_FLOOR, MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX } from "config";
 import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
 
 /** Roles checked each tick, highest priority first (owner rule #5). The miner
@@ -55,6 +69,14 @@ const SPAWN_ORDER: Role[] = ["miner", "harvester", "builder", "upgrader", "defen
  * exist.
  */
 const SURPLUS_ORDER: Role[] = ["harvester", "upgrader", "builder"];
+
+/**
+ * Income roles, in spawn priority order: the creeps that keep energy flowing
+ * (miner and harvester pull it out of the sources, hauler moves it to the
+ * store). The income floor (ENERGY_INCOME_FLOOR, owner feedback 2026-11-02)
+ * keeps this crew ahead of every other role while it is short.
+ */
+const INCOME_ROLES: Role[] = ["miner", "harvester", "hauler"];
 
 /**
  * Body templates per role, largest first. The first template whose cost fits
@@ -478,12 +500,50 @@ function assignMinerSource(room: Room): string | undefined
 }
 
 /**
+ * The energy budget a new creep's body is sized against for the given role.
+ *
+ * The default is the room's energy capacity: the long-term maximum the
+ * existing crew will keep refilling, so bodies are always sized for the long
+ * run and never shrunken because the store happens to be low this tick
+ * (owner rule #5).
+ *
+ * The exception is a crew that has just died. Capacity is a promise the
+ * living crew delivers; with no harvester and no miner alive nothing can
+ * harvest, the store is never refilled, and waiting for capacity would wait
+ * forever - that is how a wiped colony stays dead. While the income is dead,
+ * harvesters and miners are sized from the energy available right now. The
+ * same holds for the hauler: once a container exists but no hauler is alive,
+ * the transport crew is gone, so the first hauler is sized from available
+ * (owner feedback 2026-11-02).
+ *
+ * @param room The room to spawn in
+ * @param role The role being spawned
+ * @param energyAvailable room.energyAvailable at the start of this tick
+ * @returns The energy budget to size the body against
+ */
+function sizingBudgetFor(room: Room, role: Role, energyAvailable: number): number
+{
+    const incomeDead = getCreepCount("harvester") === 0 && getCreepCount("miner") === 0;
+    const haulerDead = getCreepCount("hauler") === 0 &&
+        room.find(FIND_STRUCTURES, {
+            filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
+        }).length > 0;
+
+    const sizeFromAvailable =
+        (incomeDead && (role === "harvester" || role === "miner")) ||
+        (role === "hauler" && haulerDead);
+
+    return sizeFromAvailable ? energyAvailable : room.energyCapacityAvailable;
+}
+
+/**
  * Attempts to start one spawn of the given role on a known-free spawn.
  *
- * The body is the largest template the sizing budget allows (owner rule #5).
- * The spawn only starts when the room can actually pay for the body, except
- * on a cold boot - when no harvester is alive, the budget is the store
- * itself and the first harvester is sized down to it.
+ * The body is the largest template the sizing budget allows (owner rule #5,
+ * see sizingBudgetFor): normally the room's capacity, or the energy available
+ * right now when the role's crew has just died and capacity is a promise
+ * nobody can keep. The spawn only starts when the room can actually pay for
+ * the picked body.
  * @param room The room to spawn in
  * @param spawn The free spawn to use
  * @param role The role to spawn
@@ -496,8 +556,7 @@ function assignMinerSource(room: Room): string | undefined
  */
 function trySpawnRole(room: Room, spawn: StructureSpawn, role: Role, energyAvailable: number, sourceId?: string): boolean
 {
-    const coldBoot = role === "harvester" && getCreepCount(role) === 0;
-    const sizingBudget = coldBoot ? energyAvailable : room.energyCapacityAvailable;
+    const sizingBudget = sizingBudgetFor(room, role, energyAvailable);
 
     const picked = pickBody(role, sizingBudget);
     if (picked === null)
@@ -507,8 +566,11 @@ function trySpawnRole(room: Room, spawn: StructureSpawn, role: Role, energyAvail
 
     if (energyAvailable < picked.cost)
     {
-        // Wait until the room can pay for the full-size body. A shrunken
-        // creep is permanently smaller, so waiting is always worth it.
+        // Wait until the room can pay for the body it is sized to. A shrunken
+        // creep is permanently smaller, so waiting is always worth it for a
+        // capacity-sized role; an available-sized role (its crew just died)
+        // always fits the budget by construction, so this check only stops
+        // the capacity-sized spawns.
         return false;
     }
 
@@ -584,8 +646,71 @@ export function checkAndSpawn(room: Room): void
     const minimums = minCreepsPerRole(room);
     const energyAvailable = room.energyAvailable;
 
+    // Roles whose spawn attempt already failed this tick. A rejected
+    // spawnCreep returns its error immediately without creating an intent
+    // (the spawn is still free) - but the energy and the room state cannot
+    // change within a tick, so retrying the same role would only burn creep
+    // names.
+    const attempted = new Set<Role>();
+
+    // Cold boot (owner feedback 2026-11-02): no harvester AND no miner
+    // alive means nothing can harvest, so the energy store is never
+    // refilled - waiting for it to reach capacity would wait forever and a
+    // wiped colony could never recover. Highest-priority spawn in the
+    // room: start the largest harvester the store can pay for right now,
+    // this tick (sized from energyAvailable while the income is dead, see
+    // sizingBudgetFor).
+    if (getCreepCount("harvester") === 0 && getCreepCount("miner") === 0)
+    {
+        if (trySpawnRole(room, spawn, "harvester", energyAvailable))
+        {
+            return;
+        }
+        attempted.add("harvester");
+    }
+
+    // Income floor (owner feedback 2026-11-02): the colony needs at least
+    // ENERGY_INCOME_FLOOR income creeps (harvester + miner + hauler) alive.
+    // Below that, the next spawn goes to one of them - before any upgrader,
+    // builder or defender - because a room with one income creep is one death
+    // away from a state where the store is never refilled again and no
+    // capacity-sized body can ever start. Single exception: not in peace mode
+    // and no tower can fire, in which case a defender below its minimum takes
+    // priority over income (a colony that does not defend itself defends no
+    // one). minimums.defender is 0 in peace mode and while any tower can
+    // fire, so the below-minimum check alone covers "the slot exists".
+    const incomeAlive = getCreepCount("harvester") + getCreepCount("miner") + getCreepCount("hauler");
+    if (incomeAlive < ENERGY_INCOME_FLOOR)
+    {
+        const needDefender =
+            (Memory.mode ?? "peace") !== "peace" && !towerCanFire(room) &&
+            getCreepCount("defender") < minimums.defender;
+
+        const floorRoles: Role[] = needDefender ? ["defender", ...INCOME_ROLES] : INCOME_ROLES;
+        for (const role of floorRoles)
+        {
+            if (attempted.has(role))
+            {
+                continue; // failed already this tick - nothing has changed
+            }
+            if (getCreepCount(role) >= minimums[role])
+            {
+                continue; // at minimum - the main loop keeps it topped up
+            }
+            if (trySpawnRole(room, spawn, role, energyAvailable))
+            {
+                return;
+            }
+            attempted.add(role);
+        }
+    }
+
     for (const role of SPAWN_ORDER)
     {
+        if (attempted.has(role))
+        {
+            continue; // already failed this tick (the cold boot above)
+        }
         const minimum = minimums[role];
         if (minimum === 0)
         {
@@ -609,7 +734,7 @@ export function checkAndSpawn(room: Room): void
     const minimumsMet = SPAWN_ORDER.every((role) => getCreepCount(role) >= minimums[role]);
     if (minimumsMet && energyAvailable >= room.energyCapacityAvailable)
     {
-        spawnSurplus(room, spawn, energyAvailable);
+        spawnSurplus(room, spawn, energyAvailable, attempted);
     }
 }
 
@@ -621,10 +746,14 @@ export function checkAndSpawn(room: Room): void
  * @param spawn The free spawn to use
  * @param energyAvailable room.energyAvailable at the start of this tick
  */
-function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number): void
+function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number, attempted: Set<Role>): void
 {
     for (const role of SURPLUS_ORDER)
     {
+        if (attempted.has(role))
+        {
+            continue; // failed already this tick - nothing has changed
+        }
         if (role === "harvester")
         {
             // One per uncovered source, never more: sourceWithoutHarvester
