@@ -27,7 +27,7 @@
  * cannot permanently break the route.
  */
 
-import { RAMPART_MIN_LEVEL, TOWER_SITE_FALLBACK_CANDIDATES } from "config";
+import { RAMPART_MIN_LEVEL, TOWER_SITE_DEEP_CANDIDATES, TOWER_SITE_DEEP_RANGES, TOWER_SITE_RANGES } from "config";
 import { isValidTile } from "utils/positions";
 
 /** Get the spawn position in this room */
@@ -303,8 +303,29 @@ function computeExtensionPositions(room: Room, excludeTiles: Set<string>, limit:
 /**
  * Get tower positions near the spawn, up to `maxTowers` (the number of
  * towers the level still allows).
+ *
+ * The search walks the diamond rings of `ranges`, closest first, and skips
+ * no parity: the checkerboard filter the extension search uses is there so
+ * every extension has walkable neighbours, and a tower has no such
+ * requirement. Filtering it in here was what made "search up to range 5" a
+ * no-op in practice - rings 3 and 5 sit on the opposite parity from the
+ * spawn and were silently skipped, so a cramped room whose even rings were
+ * full by roads and extension sites could never place a second tower
+ * (owner feedback 2026-11-02).
+ * @param room The room to search in
+ * @param excludeTiles The road network's tiles, never buildable for towers
+ * @param maxTowers How many candidates to return
+ * @param ranges The diamond rings to walk, closest first
+ * (TOWER_SITE_RANGES by default; the placement fallback passes the primary
+ * ranges plus the deeper TOWER_SITE_DEEP_RANGES)
+ * @returns Up to `maxTowers` candidate positions, in priority order
  */
-function computeTowerPositions(room: Room, excludeTiles: Set<string>, maxTowers: number): RoomPosition[]
+function computeTowerPositions(
+    room: Room,
+    excludeTiles: Set<string>,
+    maxTowers: number,
+    ranges: number[] = TOWER_SITE_RANGES,
+): RoomPosition[]
 {
     const positions: RoomPosition[] = [];
     const spawn = getSpawnPosition(room);
@@ -312,10 +333,6 @@ function computeTowerPositions(room: Room, excludeTiles: Set<string>, maxTowers:
     {
         return positions;
     }
-
-    // Try positions at range 2, then 3
-    const spawnParity = (spawn.x + spawn.y) % 2;
-    const ranges = [2, 3, 4];
 
     // Look these up once for the whole search: they are fixed for the room,
     // and the candidate loop below runs hundreds of times.
@@ -362,12 +379,6 @@ function computeTowerPositions(room: Room, excludeTiles: Set<string>, maxTowers:
             // Never place the tower on a road tile (keeps the road network
             // connected for the acceptance flood-fill).
             if (excludeTiles.has(`${pos.x},${pos.y}`))
-            {
-                continue;
-            }
-
-            const posParity = (pos.x + pos.y) % 2;
-            if (posParity !== spawnParity)
             {
                 continue;
             }
@@ -561,19 +572,29 @@ function placeExtensionSites(room: Room, extensionPositions: RoomPosition[], lim
  * construction energy never splits between two towers at once.
  *
  * Candidates are tried in priority order and a tile the engine refuses
- * (createConstructionSite returns an error) moves on to the next one; if
- * every reserved candidate is refused, a deeper search runs as a fallback,
- * so a tower never starves because of one bad tile (owner feedback 2026-11-02).
+ * (createConstructionSite returns an error) moves on to the next one. If
+ * every candidate fails - refused by the engine, or none found at all
+ * because every free tile of rings 2-5 is held by a road or a construction
+ * site - the whole range of rings 2-8 (primary plus deep ranges) is
+ * searched. If there is still no free tile,
+ * one of the room's own unbuilt extension construction sites (the one
+ * closest to the spawn) is removed and the tower is built on its tile; a
+ * finished extension is working infrastructure and is never touched. The
+ * extension layout re-picks the freed slot on the next free tile next tick,
+ * so the colony loses no extensions, it only moves one (owner feedback
+ * 2026-11-02: in the owner's room the 30 extensions plus the roads filled
+ * every tile of the tower search and the second tower never got placed).
  * @param room The room to place a site in
  * @param towerPositions Reserved candidate positions, in priority order
- * (all the room's future tower tiles)
+ * (all the room's future tower tiles; empty when the static search found
+ * none)
  * @param roadNetworkTiles The room's road network, excluded from the search
  */
 function placeTowerSites(room: Room, towerPositions: RoomPosition[], roadNetworkTiles: Set<string>): void
 {
     const controllerLevel = getControllerLevel(room);
     const limit = structureLimit(STRUCTURE_TOWER, controllerLevel);
-    if (limit < 1 || towerPositions.length === 0)
+    if (limit < 1)
     {
         return;
     }
@@ -626,11 +647,62 @@ function placeTowerSites(room: Room, towerPositions: RoomPosition[], roadNetwork
         return;
     }
 
-    // Every reserved candidate was refused: the engine rejected tiles the
-    // static checks did not catch. Search the full ring set deeper so the
-    // tower still lands this tick. This path is rare, so the extra
+    // Every reserved candidate failed: either the engine rejected tiles the
+    // static checks did not catch, or the static search found no candidate
+    // at all (towerPositions is empty - every free tile of rings 2-5 is
+    // held by a road or a construction site). Re-scan the primary rings
+    // PLUS the deeper rings so the tower still lands this tick when any
+    // tile of rings 2-8 is free: a refused tile is skipped again and the
+    // search moves on to the next one. This path is rare, so the extra
     // position search costs almost nothing (owner feedback 2026-11-02).
-    tryPositions(computeTowerPositions(room, roadNetworkTiles, TOWER_SITE_FALLBACK_CANDIDATES));
+    const fallbackRanges = [...TOWER_SITE_RANGES, ...TOWER_SITE_DEEP_RANGES];
+    const fallbackCandidates = computeTowerPositions(
+        room,
+        roadNetworkTiles,
+        TOWER_SITE_DEEP_CANDIDATES,
+        fallbackRanges,
+    );
+    if (tryPositions(fallbackCandidates))
+    {
+        return;
+    }
+
+    // Last resort (owner feedback 2026-11-02): every tile in rings 2-8 is
+    // occupied. Remove one of the room's OWN unbuilt extension construction
+    // sites - the one closest to the spawn - and build the tower on its
+    // tile. Only sites are ever removed, never a finished structure: a
+    // working extension keeps the economy running, an unbuilt site is just
+    // a queue entry that computeExtensionPositions re-picks on the next
+    // free tile next tick (the tower's tile leaves the extension search
+    // through the tower reservation).
+    const spawn = getSpawnPosition(room);
+    if (spawn === null)
+    {
+        return;
+    }
+    const extensionSites = room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_EXTENSION,
+    });
+    let nearest: ConstructionSite | null = null;
+    for (const site of extensionSites)
+    {
+        if (nearest === null || site.pos.getRangeTo(spawn) < nearest.pos.getRangeTo(spawn))
+        {
+            nearest = site;
+        }
+    }
+    if (nearest === null)
+    {
+        return; // No unbuilt extension site to make room with - try again next tick
+    }
+    nearest.remove();
+    if (room.createConstructionSite(nearest.pos, STRUCTURE_TOWER) !== OK)
+    {
+        // The engine refused the tile even though nothing stands on it any
+        // more (should not happen). The freed slot is refilled by the
+        // extension layout next tick; the tower search runs again then too.
+        return;
+    }
 }
 
 /**

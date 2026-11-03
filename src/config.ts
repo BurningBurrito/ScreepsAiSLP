@@ -175,14 +175,35 @@ export const RAMPART_TARGET_HITS = 10000;
 export const RAMPART_MIN_LEVEL = 3;
 
 /**
- * Tower site placement (see placeTowerSites in managers/constructionManager):
- * if the engine refuses every reserved tower candidate, the placement
- * re-runs the position search with this many candidates before giving up
- * for the tick. The fallback search only runs on the failure path (the
- * engine rejected a tile the static checks did not catch), so a generous
- * count costs nothing in normal operation.
+ * Tower site placement (see computeTowerPositions in
+ * managers/constructionManager): the diamond rings around the spawn the
+ * primary search walks, closest first. Ranges 2 through 5: the M4 spec
+ * allows a tower up to five tiles from the spawn, and the odd rings (3, 5)
+ * matter - the extension layout only fills the checkerboard's even rings,
+ * so in a cramped room the ring-3 and ring-5 tiles are the ones that stay
+ * free (owner feedback 2026-11-02: the old search walked rings 2-4 but
+ * filtered ring 3 out by parity, and the second tower never found a tile).
  */
-export const TOWER_SITE_FALLBACK_CANDIDATES = 6;
+export const TOWER_SITE_RANGES: number[] = [2, 3, 4, 5];
+
+/**
+ * Tower site placement (see placeTowerSites in managers/constructionManager):
+ * the extra rings the fallback search walks AFTER the primary ranges, when
+ * the engine refused every primary candidate or the primary search found
+ * none at all. Only runs on the failure path, so the extra work costs
+ * nothing in normal operation (owner feedback 2026-11-02).
+ */
+export const TOWER_SITE_DEEP_RANGES: number[] = [6, 7, 8];
+
+/**
+ * Tower site placement (see placeTowerSites in managers/constructionManager):
+ * how many candidates the deep-ring fallback search returns. Generous on
+ * purpose: the deep search must enumerate every free tile of rings 6-8
+ * (at most ~96), so the last resort - removing an unbuilt extension site
+ * to make room - triggers only when rings 2-8 are truly full (owner
+ * feedback 2026-11-02).
+ */
+export const TOWER_SITE_DEEP_CANDIDATES = 96;
 
 /**
  * Energy a tower keeps in reserve for its defense duty. The tower only

@@ -434,3 +434,190 @@ describe("manageConstruction tower before extensions (owner feedback 2026-11-02)
         assert.notInclude(sitePositions(room, STRUCTURE_TOWER), "23,25", "the refused tile holds no site");
     });
 });
+
+describe("manageConstruction tower placement in a cramped room (owner feedback 2026-11-02)", () => {
+    beforeEach(() => {
+        tiles = new Map();
+        setGlobal("OK", OK);
+        setGlobal("FIND_SOURCES", FIND_SOURCES);
+        setGlobal("FIND_MY_SPAWNS", FIND_MY_SPAWNS);
+        setGlobal("FIND_CONSTRUCTION_SITES", FIND_CONSTRUCTION_SITES);
+        setGlobal("FIND_MY_STRUCTURES", FIND_MY_STRUCTURES);
+        setGlobal("FIND_STRUCTURES", FIND_STRUCTURES);
+        setGlobal("LOOK_STRUCTURES", LOOK_STRUCTURES);
+        setGlobal("LOOK_CONSTRUCTION_SITES", LOOK_CONSTRUCTION_SITES);
+        setGlobal("STRUCTURE_TOWER", STRUCTURE_TOWER);
+        setGlobal("STRUCTURE_EXTENSION", STRUCTURE_EXTENSION);
+        setGlobal("STRUCTURE_CONTAINER", STRUCTURE_CONTAINER);
+        setGlobal("STRUCTURE_ROAD", STRUCTURE_ROAD);
+        setGlobal("STRUCTURE_RAMPART", STRUCTURE_RAMPART);
+        setGlobal("STRUCTURE_WALL", STRUCTURE_WALL);
+        setGlobal("TERRAIN_MASK_WALL", TERRAIN_MASK_WALL);
+        setGlobal("RoomPosition", PositionMock);
+    });
+
+    const SPAWN_X = 3;
+    const SPAWN_Y = 25;
+
+    /**
+     * The cramped room shape of the owner's (owner feedback 2026-11-02)
+     * without sites: the spawn sits three tiles from the room's left edge,
+     * and the eight tiles of ring 1 around it are natural wall terrain.
+     * @returns The mock room; its sites array is the state.
+     */
+    function makeWalledCrampedRoom(): any
+    {
+        const room = makeEdgeRoom(SPAWN_X, SPAWN_Y);
+
+        // Ring 1 around the spawn is wall terrain (TERRAIN_MASK_WALL = 1).
+        const wallTiles = new Set<string>();
+        for (let dx = -1; dx <= 1; dx++)
+        {
+            for (let dy = -1; dy <= 1; dy++)
+            {
+                if (dx !== 0 || dy !== 0)
+                {
+                    wallTiles.add(`${SPAWN_X + dx},${SPAWN_Y + dy}`);
+                }
+            }
+        }
+        room.getTerrain = () => ({
+            get: (x: number, y: number): number =>
+                (wallTiles.has(`${x},${y}`) ? TERRAIN_MASK_WALL : 0),
+        });
+        return room;
+    }
+
+    /**
+     * Fills the cramped room with unbuilt extension sites on every free
+     * tile within Chebyshev range `fillDepth` of the spawn: the shape of an
+     * RCL 5 room whose 30 extensions and the roads filled the whole
+     * checkerboard rings of the tower search.
+     * @param fillDepth The Chebyshev radius to fill with extension sites
+     * @returns The mock room; its sites array is the state.
+     */
+    function makeCrampedRoom(fillDepth: number): any
+    {
+        const room = makeWalledCrampedRoom();
+        for (let x = Math.max(0, SPAWN_X - fillDepth); x <= SPAWN_X + fillDepth; x++)
+        {
+            for (let y = Math.max(0, SPAWN_Y - fillDepth); y <= SPAWN_Y + fillDepth; y++)
+            {
+                if (x === SPAWN_X && y === SPAWN_Y)
+                {
+                    continue; // the spawn's tile
+                }
+                if (room.getTerrain().get(x, y) === TERRAIN_MASK_WALL)
+                {
+                    continue; // the ring-1 walls
+                }
+                room.createConstructionSite(new PositionMock(x, y, "W0N1"), STRUCTURE_EXTENSION);
+            }
+        }
+        return room;
+    }
+
+    /** Unbuilt extension sites on every tile of the given diamond rings (|dx| + |dy| = ring) around the spawn. */
+    function addRingSites(room: any, rings: number[]): void
+    {
+        for (const ring of rings)
+        {
+            for (let dx = -ring; dx <= ring; dx++)
+            {
+                const dy = ring - Math.abs(dx);
+                const ys: number[] = [SPAWN_Y + dy];
+                if (dy > 0)
+                {
+                    ys.push(SPAWN_Y - dy);
+                }
+                for (const y of ys)
+                {
+                    const x = SPAWN_X + dx;
+                    if (x < 0 || x > 49 || y < 0 || y > 49)
+                    {
+                        continue;
+                    }
+                    room.createConstructionSite(new PositionMock(x, y, "W0N1"), STRUCTURE_EXTENSION);
+                }
+            }
+        }
+    }
+
+    it("searches the odd ring 3 when the even rings 2 and 4 are full", () => {
+        const room = makeWalledCrampedRoom();
+        // Rings 2 and 4 are exactly the even-parity tiles of the old search
+        // range: full, with the odd ring-3 tiles left free.
+        addRingSites(room, [2, 4]);
+        manageConstruction(room);
+        const towerSites = sitePositions(room, STRUCTURE_TOWER);
+        assert.equal(towerSites.length, 1, "a tower site is placed");
+        // (1,26) is the first free ring-3 tile in scan order: (0,25) comes
+        // first but sits on the room's exit ring, which the manager never
+        // builds on. The old parity filter skipped every ring-3 tile, so
+        // this room got no tower at all (owner feedback 2026-11-02).
+        assert.include(towerSites, "1,26");
+        assert.notInclude(sitePositions(room, STRUCTURE_EXTENSION), "1,26", "the tower's tile holds no extension");
+    });
+
+    it("places the tower on a free ring-5 tile when every free tile of rings 2-4 is a site (the owner's room)", () => {
+        const room = makeCrampedRoom(4);
+        const extensionsBefore = sitePositions(room, STRUCTURE_EXTENSION).length;
+        manageConstruction(room);
+        const towerSites = sitePositions(room, STRUCTURE_TOWER);
+        assert.equal(towerSites.length, 1, "a tower site is placed even in the cramped room");
+        // Every tile up to Chebyshev 4 is a site or a wall, so the first free
+        // tile is on ring 5: (3,30) in scan order, exactly five from the
+        // spawn - the farthest the M4 spec allows a tower.
+        assert.include(towerSites, "3,30");
+        // A free tile existed, so the site-removal last resort must not run.
+        assert.equal(sitePositions(room, STRUCTURE_EXTENSION).length, extensionsBefore, "no extension was removed");
+    });
+
+    it("falls back to the deep rings 6-8 when rings 2-5 are full, without removing a site", () => {
+        const room = makeCrampedRoom(5);
+        const extensionsBefore = sitePositions(room, STRUCTURE_EXTENSION).length;
+        manageConstruction(room);
+        const towerSites = sitePositions(room, STRUCTURE_TOWER);
+        assert.equal(towerSites.length, 1, "the deep search finds a tile");
+        // (3,31) is the first free tile of ring 6 in scan order: the deep
+        // search found it, so the site-removal last resort must not run.
+        assert.include(towerSites, "3,31");
+        assert.equal(sitePositions(room, STRUCTURE_EXTENSION).length, extensionsBefore, "no extension was removed");
+    });
+
+    it("removes the nearest unbuilt extension site when every tile of rings 2-8 is occupied", () => {
+        const room = makeCrampedRoom(8);
+        const extensionsBefore = sitePositions(room, STRUCTURE_EXTENSION).length;
+        assert.equal(extensionsBefore, 195, "sanity: the 12x17 box minus the spawn and the eight walls");
+        manageConstruction(room);
+        const towerSites = sitePositions(room, STRUCTURE_TOWER);
+        assert.equal(towerSites.length, 1, "the tower still lands, at the cost of one extension site");
+        // (1,23) is the nearest site to the spawn: ring 1 is wall, ring 2 is
+        // the closest free ring, and ties go to the first site in room order.
+        assert.include(towerSites, "1,23");
+        const extensionSites = sitePositions(room, STRUCTURE_EXTENSION);
+        assert.equal(extensionSites.length, extensionsBefore - 1, "exactly one site removed");
+        assert.notInclude(extensionSites, "1,23", "the removed site's slot is the tower's now");
+    });
+
+    it("never removes a finished extension - only an unbuilt site", () => {
+        const room = makeCrampedRoom(8);
+        // Convert the nearest site ((1,23)) into a finished extension: the
+        // last resort must pick the next-nearest unbuilt site instead.
+        const site = room.sites.find((s: any) => s.pos.x === 1 && s.pos.y === 23);
+        assert.isOk(site, "the nearest site exists before the conversion");
+        site.remove();
+        addStructure(room, 1, 23, STRUCTURE_EXTENSION);
+        manageConstruction(room);
+        const towerSites = sitePositions(room, STRUCTURE_TOWER);
+        assert.equal(towerSites.length, 1, "the tower still lands");
+        // (1,24) is the next-nearest unbuilt site once (1,23) is a structure.
+        assert.include(towerSites, "1,24");
+        const finished = room.structures.filter((s: any) => s.structureType === STRUCTURE_EXTENSION);
+        assert.equal(finished.length, 1, "the finished extension survived");
+        assert.equal(`${finished[0].pos.x},${finished[0].pos.y}`, "1,23");
+        const extensionSites = sitePositions(room, STRUCTURE_EXTENSION);
+        assert.equal(extensionSites.length, 193, "exactly one site removed");
+        assert.notInclude(extensionSites, "1,24", "the removed site's slot is the tower's now");
+    });
+});
