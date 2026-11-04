@@ -1,20 +1,20 @@
-# Scorecard: acceptance-m1 · 2026-11-03 18:42 · 801 ticks · commit 8e4113e
+# Scorecard: acceptance-m1 · 2026-11-04 00:18 · 801 ticks · commit 0bffe66
 
-| Metric (last 320 ticks unless noted) | This run | Previous run (2026-11-03 13:25, e073eed) | Change |
+| Metric (last 320 ticks unless noted) | This run | Previous run (2026-11-03 18:42, 8e4113e) | Change |
 | --- | --- | --- | --- |
-| Energy harvested / tick | 6.04 | 4.31 | +1.73 |
-| Energy wasted at source regeneration (sum) | 4,204 | 4,730 | -526 |
-| Controller progress / tick | 0.31 | 0.46 | -0.15 |
-| Construction progress / tick | 3.35 | 2.67 | +0.68 |
-| Energy delivered to spawn and extensions / tick | 1.69 | 3.59 | -1.9 |
-| Spawn idle while energy is full | 51 % | 1 % | +51 pts |
+| Energy harvested / tick | 6.04 | 6.04 | 0 |
+| Energy wasted at source regeneration (sum) | 4,204 | 4,204 | 0 |
+| Controller progress / tick | 0.31 | 0.31 | 0 |
+| Construction progress / tick | 3.35 | 3.35 | 0 |
+| Energy delivered to spawn and extensions / tick | 1.69 | 1.69 | 0 |
+| Spawn idle while energy is full | 51 % | 51 % | 0 pts |
 | Spawn busy | 7 % | 7 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 23 % | 23 % | 0 pts |
-| CPU / tick (average, max) | 1.85, 20.45 | 1.74, 20.44 | +0.11 |
-| RCL / progress at end (whole run) | 1 / 150 | 1 / 196 | -46 |
+| CPU / tick (average, max) | 1.84, 20.58 | 1.85, 20.45 | -0.01 |
+| RCL / progress at end (whole run) | 1 / 150 | 1 / 150 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
-| Energy harvested (whole run) | 3,664 | 3,032 | +632 |
-| Build energy spent on roads (share of all build energy) | 99 % | 97 % | +3 pts |
+| Energy harvested (whole run) | 3,664 | 3,664 | 0 |
+| Build energy spent on roads (share of all build energy) | 99 % | 99 % | 0 pts |
 | Road tiles: total / on wall / disconnected from the spawn network (end) | 59 / 0 / 0 | 59 / 0 / 0 | 0 |
 | Roads reach (end): sources, controller | 2 of 2, yes | 2 of 2, yes |  |
 | Extensions and towers farther than 8 tiles from the spawn (end) | 0 | 0 | 0 |
@@ -36,5 +36,5 @@ Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tic
       500 | builder 2, harvester 2, upgrader 2       |   5.2 |     0 |     2/300 | busy | 1.5
       600 | builder 3, harvester 2, upgrader 2       |   4.2 |   0.6 |   131/300 | idle | 1.6
       700 | builder 3, harvester 2, upgrader 2       |     6 |   0.4 |   300/300 | idle | 1.9
-      800 | builder 3, harvester 2, upgrader 2       |   8.1 |     0 |   300/300 | idle | 2.1
-      801 | builder 3, harvester 2, upgrader 2       |    12 |     0 |   300/300 | idle | 1.8
+      800 | builder 3, harvester 2, upgrader 2       |   8.1 |     0 |   300/300 | idle | 2
+      801 | builder 3, harvester 2, upgrader 2       |    12 |     0 |   300/300 | idle | 1.7
