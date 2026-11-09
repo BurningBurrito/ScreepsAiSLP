@@ -1141,7 +1141,7 @@ yet.
 - [x] M1: basic economy and creep management (completed)
 - [x] M3: build priorities, layout and a tower (completed 2026-10-30, acceptance 1 passing)
 - [x] M4: Hold the room (level 5) - towers, ramparts, defend mode (completed 2026-10-31, acceptance 1 passing)
-- [ ] M5: static mining with containers and haulers (UNBLOCKED - the M4 replay finished 2026-11-09; the parked acceptance test comes back per the owner before M5 starts)
+- [ ] M5: static mining with containers and haulers (UNBLOCKED - the M4 replay finished 2026-11-09; the parked acceptance test comes back per the owner before M5 starts. Construction-priorities step done 2026-11-09 in 88fb080: the container boost after the towers is gated on RCL 4+ and 3+ BUILT extensions so it cannot starve the M4 extension floor, and at RCL 4+ a container takes its road-network pocket tile directly - M4 acceptance re-verified 1 passing, 131 unit passing)
 - [ ] CPU profiling and path caching (former M5, before the M4 renumber)
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
 
