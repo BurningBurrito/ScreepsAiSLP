@@ -1,6 +1,6 @@
-# Scorecard: acceptance-m4 · 2026-11-09 18:29 · 6001 ticks · commit 88fb080
+# Scorecard: acceptance-m4 · 2026-11-09 19:49 · 6001 ticks · commit f344668
 
-| Metric (last 1000 ticks unless noted) | This run | Previous run (2026-11-09 17:24, 3642fd2) | Change |
+| Metric (last 1000 ticks unless noted) | This run | Previous run (2026-11-09 18:29, 88fb080) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 12.1 | 12.1 | 0 |
 | Energy wasted at source regeneration (sum) | 7,710 | 7,710 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 59 % | 59 % | 0 pts |
 | Spawn busy | 9 % | 9 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 31 % | 31 % | 0 pts |
-| CPU / tick (average, max) | 2.45, 28.83 | 2.46, 28.65 | -0.01 |
+| CPU / tick (average, max) | 2.39, 28.79 | 2.45, 28.83 | -0.06 |
 | RCL / progress at end (whole run) | 5 / 550 | 5 / 550 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | 0 / 0 | 0 / 0 | 0 |
 | Energy harvested (whole run) | 57,384 | 57,384 | 0 |
@@ -29,64 +29,64 @@ Bot console: 106 lines, 0 with errors (reports/acceptance-m4-console.log). Probe
 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
-      100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.7
-      200 | harvester 3                              |     5 |     0 |   296/300 | idle | 1.4
-      300 | harvester 4                              |   2.4 |     0 |   296/300 | idle | 1.4
+      100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.6
+      200 | harvester 3                              |     5 |     0 |   296/300 | idle | 1.3
+      300 | harvester 4                              |   2.4 |     0 |   296/300 | idle | 1.3
       400 | builder 1, harvester 5                   |   4.7 |     0 |   166/300 | idle | 1.5
       500 | builder 3, harvester 5                   |   9.4 |     0 |   230/300 | idle | 2
-      600 | builder 3, harvester 5, upgrader 2       |   9.5 |     0 |   300/300 | idle | 2.1
-      700 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   300/300 | idle | 2.5
+      600 | builder 3, harvester 5, upgrader 2       |   9.5 |     0 |   300/300 | idle | 2
+      700 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   300/300 | idle | 2.4
       800 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.4
       900 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.3
      1000 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.5
-     1100 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   300/300 | idle | 2.5
+     1100 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   300/300 | idle | 2.4
      1200 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.4
-     1300 | builder 3, harvester 5, upgrader 2       |  10.5 |     0 |   300/300 | idle | 2.5
-     1400 | builder 3, harvester 5, upgrader 2       |     5 |     0 |   300/300 | idle | 2
+     1300 | builder 3, harvester 5, upgrader 2       |  10.5 |     0 |   300/300 | idle | 2.4
+     1400 | builder 3, harvester 5, upgrader 2       |     5 |     0 |   300/300 | idle | 1.9
      1500 | builder 3, harvester 5, upgrader 2       |  10.1 |     0 |   300/300 | idle | 2.2
-     1600 | builder 3, harvester 5, upgrader 2       |   9.9 |     0 |     6/300 | busy | 2.4
+     1600 | builder 3, harvester 5, upgrader 2       |   9.9 |     0 |     6/300 | busy | 2.3
      1700 | builder 3, harvester 5, upgrader 2       |   8.5 |     0 |   235/300 | idle | 2.3
      1800 | builder 3, harvester 5, upgrader 2       |   7.4 |     0 |   300/300 | idle | 2.2
-     1900 | builder 3, harvester 5, upgrader 2       |   8.8 |     0 |     5/300 | busy | 2.4
+     1900 | builder 3, harvester 5, upgrader 2       |   8.8 |     0 |     5/300 | busy | 2.3
      2000 | builder 3, harvester 5, upgrader 2       |   8.9 |     0 |   169/300 | idle | 2.2
      2100 | builder 3, harvester 5, upgrader 2       |   9.4 |     0 |   283/300 | idle | 2.1
      2200 | builder 3, harvester 5, upgrader 2       |  10.8 |     0 |   300/300 | idle | 2.4
-     2300 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.3
+     2300 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.2
      2400 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   300/300 | idle | 2.4
      2500 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.3
      2600 | builder 3, harvester 5, upgrader 2       |   5.6 |     0 |   300/300 | idle | 2
-     2700 | builder 3, harvester 5, upgrader 2       |     6 |     0 |   300/300 | idle | 2
-     2800 | builder 3, harvester 5, upgrader 2       |  11.2 |     1 |   300/300 | idle | 2.2
-     2900 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.3
+     2700 | builder 3, harvester 5, upgrader 2       |     6 |     0 |   300/300 | idle | 1.9
+     2800 | builder 3, harvester 5, upgrader 2       |  11.2 |     1 |   300/300 | idle | 2.1
+     2900 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.2
      3000 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   300/300 | idle | 2.4
      3100 | builder 3, harvester 5, upgrader 2       |     9 |     0 |   300/300 | idle | 2.3
-     3200 | builder 3, harvester 5, upgrader 2       |   9.2 |     0 |   124/300 | idle | 2.4
+     3200 | builder 3, harvester 5, upgrader 2       |   9.2 |     0 |   124/300 | idle | 2.3
      3300 | builder 3, harvester 5, upgrader 2       |   7.4 |     0 |   300/300 | idle | 2.1
      3400 | builder 3, harvester 5, upgrader 2       |   7.6 |     0 |   350/350 | idle | 2.2
      3500 | builder 3, harvester 5, upgrader 2       |   8.9 |   0.5 |   108/350 | busy | 2.2
      3600 | builder 3, harvester 5, upgrader 2       |   9.3 |     0 |   118/350 | idle | 2.1
-     3700 | builder 3, harvester 5, upgrader 2       |   9.1 |     0 |   350/350 | idle | 2.2
+     3700 | builder 3, harvester 5, upgrader 2       |   9.1 |     0 |   350/350 | idle | 2.1
      3800 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   350/350 | idle | 2.3
      3900 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   350/350 | idle | 2.4
-     4000 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   350/350 | idle | 2.5
-     4100 | builder 3, harvester 5, upgrader 2       |  10.9 |     0 |   350/400 | idle | 2.5
+     4000 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   350/350 | idle | 2.4
+     4100 | builder 3, harvester 5, upgrader 2       |  10.9 |     0 |   350/400 | idle | 2.4
      4200 | builder 3, harvester 5, upgrader 2       |  10.4 |     0 |   400/400 | idle | 2.4
-     4300 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   400/400 | idle | 2.5
+     4300 | builder 3, harvester 5, upgrader 2       |  11.2 |     0 |   400/400 | idle | 2.4
      4400 | builder 3, harvester 5, upgrader 2       |  11.1 |   0.5 |   400/400 | idle | 2.6
-     4500 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   400/400 | idle | 2.4
-     4600 | builder 3, harvester 5, upgrader 2       |   8.3 |     0 |   311/400 | idle | 2.3
+     4500 | builder 3, harvester 5, upgrader 2       |  11.1 |     0 |   400/400 | idle | 2.3
+     4600 | builder 3, harvester 5, upgrader 2       |   8.3 |     0 |   311/400 | idle | 2.2
      4700 | builder 3, harvester 4, upgrader 2       |   5.1 |     1 |   359/400 | idle | 2
-     4800 | builder 3, harvester 5, upgrader 1       |   6.7 |   0.2 |    76/400 | idle | 2
+     4800 | builder 3, harvester 5, upgrader 1       |   6.7 |   0.2 |    76/400 | idle | 1.9
      4900 | builder 3, harvester 5, upgrader 1       |   7.5 |   0.3 |   388/400 | idle | 1.8
-     5000 | builder 3, harvester 5, upgrader 1       |   7.7 |     0 |   129/400 | idle | 2
+     5000 | builder 3, harvester 5, upgrader 1       |   7.7 |     0 |   129/400 | idle | 1.9
      5100 | builder 3, harvester 5, upgrader 1       |    10 |     0 |    86/400 | busy | 2
-     5200 | builder 3, harvester 5, upgrader 2       |   7.5 |     0 |   256/400 | idle | 2.1
+     5200 | builder 3, harvester 5, upgrader 2       |   7.5 |     0 |   256/400 | idle | 2
      5300 | builder 3, harvester 5, upgrader 2       |  11.2 |     1 |   400/450 | idle | 2.5
      5400 | builder 3, harvester 5, upgrader 2       |  13.5 |     0 |   450/450 | idle | 2.4
      5500 | builder 3, defender 1, harvester 5, upgrader 2 |   7.8 |   0.5 |   450/450 | idle | 2.3
      5600 | builder 3, defender 1, harvester 5, upgrader 2 |    14 |   0.5 |   450/450 | idle | 2.6
-     5700 | builder 3, defender 1, harvester 5, upgrader 2 |  16.2 |     0 |   450/450 | idle | 2.7
-     5800 | builder 3, defender 1, harvester 5, upgrader 2 |  16.2 |     0 |   450/450 | idle | 2.6
+     5700 | builder 3, defender 1, harvester 5, upgrader 2 |  16.2 |     0 |   450/450 | idle | 2.6
+     5800 | builder 3, defender 1, harvester 5, upgrader 2 |  16.2 |     0 |   450/450 | idle | 2.5
      5900 | builder 3, defender 1, harvester 5, miner 1, upgrader 2 |  15.9 |     0 |   165/450 | busy | 2.6
-     6000 | builder 3, defender 1, harvester 5, hauler 1, miner 1, upgrader 2 |   8.7 |     0 |   450/450 | idle | 2.6
+     6000 | builder 3, defender 1, harvester 5, hauler 1, miner 1, upgrader 2 |   8.7 |     0 |   450/450 | idle | 2.5
      6001 | builder 3, defender 1, harvester 5, hauler 1, miner 1, upgrader 2 |    12 |     0 |   450/450 | idle | 2.4

@@ -1,6 +1,6 @@
-# Scorecard: spawnprobe · 2026-11-09 14:32 · 700 ticks · commit d3ed9e6
+# Scorecard: spawnprobe · 2026-11-09 20:09 · 700 ticks · commit f344668
 
-| Metric (last 280 ticks unless noted) | This run | Previous run (2026-11-09 13:07, 92f465f) | Change |
+| Metric (last 280 ticks unless noted) | This run | Previous run (2026-11-09 14:32, d3ed9e6) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 5.23 | 5.23 | 0 |
 | Energy wasted at source regeneration (sum) | 1,796 | 1,796 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 23 % | 23 % | 0 pts |
 | Spawn busy | 12 % | 12 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 21 % | 21 % | 0 pts |
-| CPU / tick (average, max) | 1.65, 20.84 | 1.69, 20.84 | -0.04 |
+| CPU / tick (average, max) | 1.66, 20.88 | 1.65, 20.84 | +0.01 |
 | RCL / progress at end (whole run) | 1 / 150 | 1 / 150 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
 | Energy harvested (whole run) | 2,844 | 2,844 | 0 |
