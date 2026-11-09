@@ -555,6 +555,58 @@ describe("builder", () => {
         assert.equal(calls.lastBuilt, "ext1", "no container boost at level 3 without a built container");
     });
 
+    it("hands the crew to the container at level 4 once the M4 extension floor is met", () => {
+        // M5 static-mining stage: at controller level 4 and up the first
+        // source container takes the crew (behind the towers) once the M4
+        // extension floor - CONTAINER_BOOST_MIN_EXTENSIONS_L4 = 3 built
+        // extensions - is finished. The floor is load-bearing: boosted
+        // right after the tower, the crew camps the 5,000-energy container
+        // site and the third extension never finishes (M4 failure of
+        // 2026-11-09: extensionsBuilt 1, capacity 350 vs 3/450).
+        const { creep, calls } = makeCarryingBuilder(
+            [
+                { id: "ext2", structureType: "extension", progress: 2000, pos: pos(14, 20) },
+                { id: "con1", structureType: "container", progress: 0, pos: pos(18, 25) },
+            ],
+            {
+                level: 4,
+                structures: [
+                    { id: "extB1", structureType: "extension" },
+                    { id: "extB2", structureType: "extension" },
+                    { id: "extB3", structureType: "extension" },
+                ],
+            },
+        );
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "con1", "three built extensions arm the level-4 container boost");
+    });
+
+    it("keeps the extension ahead of the container at level 4 below the M4 extension floor", () => {
+        // Same room with only two built extensions: the M4 safety gate
+        // (three extensions by tick 6000 of the M4 window) is not met, so
+        // the container stays in the fallback slot behind the extension
+        // queue and the crew keeps finishing the third extension.
+        const { creep, calls } = makeCarryingBuilder(
+            [
+                { id: "ext2", structureType: "extension", progress: 2000, pos: pos(14, 20) },
+                { id: "con1", structureType: "container", progress: 0, pos: pos(18, 25) },
+            ],
+            {
+                level: 4,
+                structures: [
+                    { id: "extB1", structureType: "extension" },
+                    { id: "extB2", structureType: "extension" },
+                ],
+            },
+        );
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "ext2", "two built extensions keep the container in the fallback slot");
+    });
+
     it("hands the crew to the container once the bootstrap minimum is met", () => {
         // The M2 layout minimum is finished: one extension AND one road
         // are built, at level 2. The container may take the crew now -

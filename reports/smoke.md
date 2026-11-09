@@ -1,6 +1,6 @@
-# Scorecard: smoke · 2026-11-09 14:29 · 500 ticks · commit d3ed9e6
+# Scorecard: smoke · 2026-11-09 16:56 · 500 ticks · commit 3642fd2
 
-| Metric (last 200 ticks unless noted) | This run | Previous run (2026-11-09 13:04, 92f465f) | Change |
+| Metric (last 200 ticks unless noted) | This run | Previous run (2026-11-09 14:29, d3ed9e6) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 3.86 | 3.86 | 0 |
 | Energy wasted at source regeneration (sum) | 948 | 948 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 1 % | 1 % | 0 pts |
 | Spawn busy | 7 % | 7 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 21 % | 21 % | 0 pts |
-| CPU / tick (average, max) | 1.46, 21.05 | 1.5, 20.73 | -0.04 |
+| CPU / tick (average, max) | 1.49, 22.76 | 1.46, 21.05 | +0.03 |
 | RCL / progress at end (whole run) | 1 / 50 | 1 / 50 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
 | Energy harvested (whole run) | 1,824 | 1,824 | 0 |
@@ -29,8 +29,8 @@ Bot console: 11 lines, 0 with errors (reports/smoke-console.log). Probe results 
 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
-      100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.4
-      200 | builder 1, harvester 2                   |   3.7 |     0 |   196/300 | idle | 1.3
-      300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.3
+      100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.5
+      200 | builder 1, harvester 2                   |   3.7 |     0 |   196/300 | idle | 1.4
+      300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.4
       400 | builder 1, harvester 2, upgrader 1       |   2.5 |   0.5 |   175/300 | idle | 1.5
       500 | builder 2, harvester 2, upgrader 2       |   5.2 |     0 |     2/300 | busy | 1.5

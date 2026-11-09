@@ -622,7 +622,7 @@ describe("manageConstruction tower placement in a cramped room (owner feedback 2
     });
 });
 
-describe("container and road sharing a pocket tile (M5 owner feedback 2026-11-04, M3 road-first fix 2026-11-06)", () => {
+describe("container and road sharing a pocket tile (M5 owner feedback 2026-11-04, M3 road-first fix 2026-11-06, M5 pocket-first at L4+ 2026-11-09)", () => {
     beforeEach(() => {
         tiles = new Map();
         setGlobal("OK", OK);
@@ -664,11 +664,13 @@ describe("container and road sharing a pocket tile (M5 owner feedback 2026-11-04
         return room;
     }
 
-    it("keeps the road site on the pocket tile and withholds the container until the road is built", () => {
+    it("keeps the road site on the pocket tile and withholds the container below level 4", () => {
         const room = makePocketRoom();
+        room.controller.level = 3;
         // The road site on the pocket's only free tile: the exact M3 state,
         // where the container grabbed this tile and the acceptance flood
-        // fill (roads only) saw the source as disconnected.
+        // fill (roads only) saw the source as disconnected. The M3
+        // road-first contract only binds below level 4.
         room.createConstructionSite(new PositionMock(11, 11, "W0N1"), STRUCTURE_ROAD);
         assert.include(sitePositions(room, STRUCTURE_ROAD), "11,11", "sanity: the road site holds the tile");
         manageConstruction(room);
@@ -686,8 +688,9 @@ describe("container and road sharing a pocket tile (M5 owner feedback 2026-11-04
         assert.include(sitePositions(room, STRUCTURE_CONTAINER), "11,11", "the container lands on the built road");
     });
 
-    it("takes the pocket tile back from a pre-fix container site and puts the road there", () => {
+    it("takes the pocket tile back from a pre-fix container site below level 4", () => {
         const room = makePocketRoom();
+        room.controller.level = 3;
         // A world built by the pre-M3-fix code: the container site owns the
         // pocket tile and no road (site or built) is there.
         room.createConstructionSite(new PositionMock(11, 11, "W0N1"), STRUCTURE_CONTAINER);
@@ -695,6 +698,31 @@ describe("container and road sharing a pocket tile (M5 owner feedback 2026-11-04
         assert.include(sitePositions(room, STRUCTURE_ROAD), "11,11", "the road site replaces the legacy container site");
         assert.notInclude(sitePositions(room, STRUCTURE_CONTAINER), "11,11", "the legacy container site is removed");
         assert.include(sitePositions(room, STRUCTURE_CONTAINER), "39,39", "source B still gets its own site this tick");
+    });
+
+    it("takes the pocket tile from the road site at level 5 (M5 static-mining stage)", () => {
+        const room = makePocketRoom();
+        // Default level 5: in the static-mining rooms the road network is
+        // gated off while the extension queue stands (shouldPlaceRoadSites),
+        // so the built road the below-L4 wait expects may never come. The
+        // container takes the pocket tile directly and removes the road
+        // site, or the source would never get its container.
+        room.createConstructionSite(new PositionMock(11, 11, "W0N1"), STRUCTURE_ROAD);
+        assert.include(sitePositions(room, STRUCTURE_ROAD), "11,11", "sanity: the road site holds the tile");
+        manageConstruction(room);
+        assert.include(sitePositions(room, STRUCTURE_CONTAINER), "11,11", "the container site takes the pocket tile at level 4+");
+        assert.notInclude(sitePositions(room, STRUCTURE_ROAD), "11,11", "the road site is removed - the network keeps its gap");
+    });
+
+    it("places the container directly on a fresh pocket tile at level 5", () => {
+        const room = makePocketRoom();
+        // Nothing on the pocket tile yet: placeContainerSites runs before
+        // placeRoadSites on the same tick, so at level 5 the container is
+        // simply placed - and placeRoadSites must not put a road there
+        // (the legacy swap is skipped, the container is not a pre-fix site).
+        manageConstruction(room);
+        assert.include(sitePositions(room, STRUCTURE_CONTAINER), "11,11", "the container does not wait for a road at level 4+");
+        assert.notInclude(sitePositions(room, STRUCTURE_ROAD), "11,11", "the road keeps its gap at the container's tile");
     });
 });
 

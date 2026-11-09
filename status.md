@@ -118,6 +118,41 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-09 (M5: construction priorities - gated container boost, L4+ pocket tiles)
+- Implemented the M5 construction priorities on the step 4 tree (3642fd2),
+  i.e. the reverted step 6 change re-applied with the M4 safety gate:
+  - src/config.ts: CONTAINER_BOOST_MIN_LEVEL (4) and
+    CONTAINER_BOOST_MIN_EXTENSIONS_L4 (3 - exactly the M4 floor of "at least
+    3 extensions finished", so the boost cannot starve the third extension;
+    the unconditioned boost failed M4 on 2026-11-08 with extensionsBuilt 1,
+    capacity 350).
+  - src/roles/builder.ts containerFirstForRoom: at level 4+ the container
+    leads the builder crew once 3+ extensions are BUILT; level 3 keeps the
+    M3 contract (returns false, roads first).
+  - src/managers/constructionManager.ts: at level 4+ placeContainerSites
+    takes a road-network tile directly (removing an unbuilt road site - in
+    the static-mining rooms shouldPlaceRoadSites gates the road network off
+    while the extension queue stands, so the built road the below-L4 wait
+    expects may never come); placeRoadSites skips its legacy container-swap
+    on that tile at level 4+. Below level 4 the M3 road-first contract is
+    unchanged.
+  - Tests: test/unit/builder.test.ts (boost arms at 3 built extensions, off
+    at 2) and test/unit/constructionManager.test.ts (L5 container-takes-tile
+    plus road-site-removal cases). 127 -> 131 unit tests, all passing; lint
+    and build clean.
+- M4 acceptance regression run on the M5 tree: PASSED - 1 passing (28m),
+  EXIT 0. All M4 criteria green: extensionsBuilt 3 (needs 3),
+  energyCapacity 450 (needs 450), extension sites 27 (3 + 27 >= 15), towers
+  2/2 with ramparts, maxTowerEnergy 592 (needs 500), intruder gone in 1
+  tick, spawn ramparted, farthestFromSpawn 8 (max 8), 0 console errors.
+  Scorecard before (d3ed9e6) -> after: harvested 13.05 -> 12.1/tick, wasted
+  7,482 -> 7,710, construction 5.21 -> 5.42/tick, delivered 1.71 -> 2.26/
+  tick, creep idle 34 % -> 31 %, spawn idle 70 % -> 59 %, CPU 2.31/28.41
+  -> 2.46/28.65, RCL 5/550 identical, roads 59 -> 58 (the L4+ pocket tile
+  is now the container; M4 has no road-reach criterion, M3 asserts it and
+  runs at level 3 below the gate).
+- Smoke test (500 ticks, RCL 1) before the acceptance run: passed, no
+  regression (bootstrap path untouched - the gate is a no-op at RCL 1).
 ### 2026-11-09 (M4 replay: step 5 broke M4 and was reverted, step 6 re-applied)
 - Step 4 M4 acceptance PASSED (6001 ticks, EXIT 0, code 7232135):
   harvested 9.84 -> 13.05/tick, construction 4.14 -> 5.21/tick,
@@ -753,7 +788,44 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **M4 replay (current milestone; M5 parked by the owner, feedback v9.1, 2026-11-08).**
+- **M5 construction priorities (current milestone; M4 replay complete, M5 unblocked).**
+  The M4 replay ended at the reverted step 6 (unconditioned L4+ container boost
+  failed M4: extensionsBuilt 1, capacity 350). This run re-applies the boost
+  with the M4 safety gate and the L4+ pocket-tile ownership:
+  1. [x] Gate constants in src/config.ts: CONTAINER_BOOST_MIN_LEVEL (4) and
+     CONTAINER_BOOST_MIN_EXTENSIONS_L4 (3 - exactly the M4 floor of "at least
+     3 extensions finished", so the boost cannot starve the third extension).
+  2. [x] containerFirstForRoom in src/roles/builder.ts: case 3 - at level 4+
+     the container leads the crew once 3+ extensions are BUILT; level 3 keeps
+     the M3 contract (returns false). Unit tests: the boost arms at 3 built
+     extensions and stays off at 2.
+  3. [x] L4+ pocket-tile ownership in src/managers/constructionManager.ts:
+     placeContainerSites takes a road-network tile directly at level 4+
+     (removing an unbuilt road site - in the static-mining rooms
+     shouldPlaceRoadSites gates the network off while the extension queue
+     stands, so the built road the below-L4 wait expects may never come);
+     placeRoadSites skips its legacy container-swap on that tile at level 4+,
+     so the network keeps its gap (the in-game flood fill counts container
+     sites as road tiles, connectivity reads as connected either way). Below
+     level 4 the M3 road-first contract is unchanged. Unit tests: the
+     below-L3/L4 withhold-takeback pair plus the two L5 container-takes-tile
+     cases.
+  4. [x] M4 acceptance run (regression check) - PASSED 2026-11-09, 1 passing (28m),
+     EXIT 0 on the M5 tree. Snapshot: extensionsBuilt 3, extensionSites 27,
+     energyCapacity 450, towers 2/2 ramparted, maxTowerEnergy 592, intruder gone
+     in 1 tick (firstHostile 5401), farthestFromSpawn 8, 0 console errors.
+     Scorecard vs the d3ed9e6 baseline: harvested 13.05 -> 12.1/tick, wasted
+     7,482 -> 7,710, construction 5.21 -> 5.42/tick, delivered 1.71 -> 2.26/tick,
+     creep idle 34 % -> 31 %, spawn idle 70 % -> 59 %, CPU 2.31/28.41 ->
+     2.46/28.65, RCL 5/550 identical. Expected deltas: the boost arms at tick
+     ~5300 (third extension) and the window's build energy goes to the
+     container (4,986) instead of a fourth extension (375); the container is
+     built by ~5900 and miner + hauler creeps appear at the end - exactly the
+     M5 static-mining behavior, and M4 has no container or road-reach criteria
+     (its "roads reach" line 2 of 2 -> 1 of 2 is informational: the pocket
+     source now has the container instead of the road tile).
+  5. [ ] Full suite (agent-test start all) and commit.
+- **M4 replay (completed 2026-11-09; M5 now unblocked).**
   One M4 acceptance run (agent-test, ~30 min) after every step; each passing step is
   committed with before/after numbers, each failing step is reverted and its numbers
   noted here and in the Change Log. Cherry-picked commits: only the files the step

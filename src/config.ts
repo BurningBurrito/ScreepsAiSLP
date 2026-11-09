@@ -258,6 +258,33 @@ export const CONTAINER_BOOST_MIN_EXTENSIONS = 1;
 export const CONTAINER_BOOST_MIN_ROADS = 1;
 
 /**
+ * M5 container-priority gate (static-mining case, rule 02b stage 2): the
+ * lowest controller level at which the L4+ boost applies. At level 4 and
+ * up the room has left bootstrap, so the first source container - the tile
+ * the stationary miner stands on - is worth pulling the builder crew off
+ * the extension queue. The same level also switches the pocket-tile
+ * ownership in constructionManager: at this level and up the container
+ * takes a road-network tile directly instead of waiting for the built
+ * road (placeContainerSites / placeRoadSites), because in the static-
+ * mining rooms the road network stays gated off while extensions queue.
+ */
+export const CONTAINER_BOOST_MIN_LEVEL = 4;
+
+/**
+ * M5 container-priority gate (static-mining case): the number of FINISHED
+ * extensions a level 4+ room must have before the first source container
+ * may take the whole builder crew (containerFirstForRoom). Three is
+ * exactly the M4 acceptance floor ("at least 3 extensions are finished"):
+ * the crew switches to the container only after M4's contract is
+ * already met, so the boost cannot starve the third extension. The
+ * unconditioned L4+ boost (right after the first tower) failed the M4
+ * acceptance on 2026-11-09: extensionsBuilt 1, energyCapacity 350 versus
+ * the required 3 and 450 - the crew camped the 5,000-energy container
+ * site and the extensions never caught up.
+ */
+export const CONTAINER_BOOST_MIN_EXTENSIONS_L4 = 3;
+
+/**
  * Controller sign text (owner request, feedback 2026-11-02): the exact string
  * every room the bot owns carries as its controller sign. The upgrader signs
  * it while already on the upgrade round trip (signController needs range 1),

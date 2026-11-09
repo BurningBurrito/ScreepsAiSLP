@@ -16,26 +16,38 @@
  * Layout invariant: the road network is the skeleton of the room. Extensions
  * and towers are never placed on a road tile, because the acceptance tests
  * measure connectivity over road tiles only. Containers may share a tile
- * with a road (the engine allows it, and real Screeps does too), but on such
- * a tile the ROAD comes first: the M3 acceptance flood fill counts road
- * objects only (sites and built roads), so while the road is still unbuilt a
- * container site on the same tile would open a hole in the network and fail
- * "connected roads from spawn to all sources" - the engine allows at most
- * one construction site per tile, so both cannot sit there at once (M3
- * failure of 2026-11-06: W0N1's source at 39,14 has exactly one walkable
- * neighbour, 40,13, which is the road's end tile). The container follows
- * once the road is BUILT: road and container structures may share a tile,
- * so the pocket source still gets its container - just not before the road
- * (placeContainerSites gates on the built road, placeRoadSites takes the
- * tile back if an old container site stands there). The in-game flood fill
- * (areSourcesAndControllerConnected) counts container sites and containers
- * as road tiles as well, so the network reads as connected either way.
+ * with a road (the engine allows it, and real Screeps does too), but the
+ * ORDER on such a tile depends on the controller level:
+ *   - Below CONTAINER_BOOST_MIN_LEVEL (4) the ROAD comes first: the M3
+ *     acceptance flood fill counts road objects only (sites and built
+ *     roads), so while the road is still unbuilt a container site on the
+ *     same tile would open a hole in the network and fail "connected roads
+ *     from spawn to all sources" - the engine allows at most one
+ *     construction site per tile, so both cannot sit there at once (M3
+ *     failure of 2026-11-06: W0N1's source at 39,14 has exactly one
+ *     walkable neighbour, 40,13, which is the road's end tile). The
+ *     container follows once the road is BUILT: road and container
+ *     structures may share a tile, so the pocket source still gets its
+ *     container - just not before the road (placeContainerSites gates on
+ *     the built road, placeRoadSites takes the tile back if an old
+ *     container site stands there).
+ *   - At level 4 and up (the M5 static-mining stage) the CONTAINER takes
+ *     the tile directly: in those rooms the road network is gated off
+ *     while the extension queue stands (shouldPlaceRoadSites), so the
+ *     built road the wait below level 4 expects may never come - waiting
+ *     would leave the source without a container for the whole M5 window.
+ *     placeContainerSites removes an unbuilt road site on the tile and
+ *     places the container there; placeRoadSites skips its legacy
+ *     container-swap for that tile, so the road network keeps its gap.
+ * The in-game flood fill (areSourcesAndControllerConnected) counts
+ * container sites and containers as road tiles as well, so the network
+ * reads as connected either way.
  * Road sites that are missing from the network are re-attempted every tick
  * (existingRoadPositions check), so a single failed createConstructionSite
  * cannot permanently break the route.
  */
 
-import { RAMPART_MIN_LEVEL, SPAWN_KEEP_CLEAR_RANGE, TOWER_SITE_DEEP_CANDIDATES, TOWER_SITE_DEEP_RANGES, TOWER_SITE_RANGES } from "config";
+import { CONTAINER_BOOST_MIN_LEVEL, RAMPART_MIN_LEVEL, SPAWN_KEEP_CLEAR_RANGE, TOWER_SITE_DEEP_CANDIDATES, TOWER_SITE_DEEP_RANGES, TOWER_SITE_RANGES } from "config";
 import { isValidTile } from "utils/positions";
 
 // "structureType@x,y" keys of failed site placements already logged this
@@ -558,14 +570,18 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[]): number
             continue;
         }
 
-        // A container SITE on this road tile means a pre-M3-fix world (or a
-        // placement order we did not expect): the road must be there first,
-        // so remove the container site and take the tile for the road.
+        // A container SITE on this road tile is handled by level: below
+        // CONTAINER_BOOST_MIN_LEVEL it means a pre-M3-fix world (or a
+        // placement order we did not expect), so the road must be there
+        // first: remove the container site and take the tile for the road.
         // remove() is immediate, not an intent, so the road site goes on
         // the same tick; the container is placed again on top of the built
-        // road by placeContainerSites. Once the road is BUILT, a container
-        // site on the tile is the finished pair (road and container
-        // structures may share a tile) and is left alone.
+        // road by placeContainerSites. At level 4 and up the container is
+        // the intended owner of the tile (the M5 static-mining stage, see
+        // the file header) and the swap is skipped - the road keeps its
+        // gap. Once the road is BUILT, a container site on the tile is the
+        // finished pair (road and container structures may share a tile)
+        // and is left alone at every level.
         const hasContainerSite = pos.lookFor(LOOK_CONSTRUCTION_SITES).some(
             (site) => site.structureType === STRUCTURE_CONTAINER,
         );
@@ -577,6 +593,15 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[]): number
             if (hasBuiltRoad)
             {
                 continue; // the pair is complete - the container stays
+            }
+            // L4+ (M5 static-mining stage): the container owns the pocket
+            // tile - placeContainerSites takes it directly, because in the
+            // static-mining rooms the built road may never come. Skip the
+            // legacy swap: the road keeps its gap at this tile and the
+            // container site is left to be built.
+            if (getControllerLevel(room) >= CONTAINER_BOOST_MIN_LEVEL)
+            {
+                continue;
             }
             for (const site of pos.lookFor(LOOK_CONSTRUCTION_SITES))
             {
@@ -856,8 +881,10 @@ function placeRampartSites(room: Room, structures: Structure[]): void
  * may have exactly one walkable neighbour, and it can be the road's end
  * tile, so excluding road tiles would leave that source without any
  * container at all. The ORDER on a shared tile is enforced by
- * placeContainerSites, which places the container only after the road is
- * built (the M3 acceptance flood fill needs the road there first). Every
+ * placeContainerSites: below level 4 it places the container only after
+ * the road is built (the M3 acceptance flood fill needs the road there
+ * first); at level 4 and up it takes the tile directly (see the layout
+ * invariant in the file header). Every
  * other structure or site does occupy the tile, and a container site
  * already placed for this source is the success case the per-source check
  * above skips.
@@ -1000,14 +1027,18 @@ function computeContainerPositions(room: Room): RoomPosition[]
 /**
  * Place container construction sites, one per tick.
  *
- * On a road-network tile the ROAD comes first (see the layout invariant in
- * the file header): the M3 acceptance flood fill counts road objects only,
- * so while the road is still unbuilt a container site on the same tile
- * would open a hole in the network and fail "connected roads to all
- * sources". The container therefore waits for the built road and is placed
- * on top of it once the road is finished - road and container structures
- * may share a tile, so the pocket source still gets its container. On any
- * non-road tile the container is placed as soon as the tile is free.
+ * On a road-network tile the order depends on the controller level (see the
+ * layout invariant in the file header): below level 4 the ROAD comes first -
+ * the M3 acceptance flood fill counts road objects only, so while the road
+ * is still unbuilt a container site on the same tile would open a hole in
+ * the network and fail "connected roads to all sources"; the container
+ * waits for the built road and is placed on top of it once the road is
+ * finished (road and container structures may share a tile, so the pocket
+ * source still gets its container). At level 4 and up the container takes
+ * the tile directly - an unbuilt road site on it is removed, because in the
+ * static-mining rooms the built road may never come (shouldPlaceRoadSites
+ * gates the network off while the extension queue stands). On any non-road
+ * tile the container is placed as soon as the tile is free.
  * @param room The room to place sites in.
  * @param containerPositions Candidate positions, one per source, best first.
  * @param roadNetworkTiles Every tile of the computed road paths ("x,y").
@@ -1039,18 +1070,37 @@ function placeContainerSites(room: Room, containerPositions: RoomPosition[], roa
             continue;
         }
 
-        // On a road-network tile the road is placed before the container:
-        // wait until the road is BUILT, then place the container on top of
-        // it. While the road is still a site - or not placed yet, this
-        // function runs before placeRoadSites on the same tick - a
-        // container here would remove the road tile the M3 flood fill
-        // needs (the engine allows at most one site per tile).
+        // On a road-network tile the container and the road contest one
+        // tile (the engine allows at most one CONSTRUCTION SITE per tile):
+        //   - Below CONTAINER_BOOST_MIN_LEVEL (4) the ROAD comes first:
+        //     wait until the road is BUILT, then place the container on
+        //     top of it. While the road is still a site - or not placed
+        //     yet, this function runs before placeRoadSites on the same
+        //     tick - a container here would remove the road tile the M3
+        //     flood fill needs (it counts road objects only).
+        //   - At level 4 and up the CONTAINER takes the tile directly:
+        //     in the static-mining rooms the road network is gated off
+        //     while the extension queue stands (shouldPlaceRoadSites), so
+        //     the built road this branch waits for may never come -
+        //     waiting would leave this source without a container for the
+        //     whole M5 window. An unbuilt road site on the tile is
+        //     removed (site.remove() is immediate, so the container site
+        //     can be placed on this tick); the inverse of the legacy
+        //     swap, which placeRoadSites skips for this tile at L4+.
         if (roadNetworkTiles.has(`${pos.x},${pos.y}`))
         {
             const hasBuiltRoad = structures.some((s) => s.structureType === STRUCTURE_ROAD);
             if (!hasBuiltRoad)
             {
-                continue;
+                if (getControllerLevel(room) < CONTAINER_BOOST_MIN_LEVEL)
+                {
+                    continue;
+                }
+                const roadSite = sites.find((s) => s.structureType === STRUCTURE_ROAD);
+                if (roadSite !== undefined)
+                {
+                    roadSite.remove();
+                }
             }
         }
 
@@ -1326,8 +1376,9 @@ export function manageConstruction(room: Room): void
     // towers they are NOT kept off the road network: a container may share
     // its tile with a road, which is the only option for a wall-pocket
     // source (see the layout invariant in the file header). On a road tile
-    // the road comes first, so placeContainerSites gates the placement on
-    // the BUILT road (roadNetworkTiles).
+    // the order depends on the level: below level 4 placeContainerSites
+    // gates the placement on the BUILT road (roadNetworkTiles); at level 4
+    // and up it takes the tile directly (the M5 static-mining stage).
     const containerPositions = computeContainerPositions(room);
 
     // Place tower sites first (highest priority)
