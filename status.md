@@ -11,7 +11,11 @@ backup/m4-attempts-2026-11-08 and is being taken back one named step at a time -
 "M4 replay"; M5 is parked by the owner until the replay is done. The 2026-11-08 20:10
 gate failed M4 on the pre-reset code ("at least 3 extensions are finished", 0 of 3):
 that failure belongs to the backup branch, not to main. Replay progress: see "In
-Progress".
+Progress". Replay state 2026-11-09: steps 0-4 in and M4-verified; step 5 (parking,
+b00c0e1) FAILED M4 (extensionsBuilt 1, capacity 350 - needs 3/450) and was reverted
+per the owner's protocol (0ce4712); step 6 (container boost, cad8c5b) is re-applied
+on the step 4 tree (128 unit passing) and its M4 acceptance is the last run of the
+replay.
 
 Gate state verified (2026-11-01, run 37 round 2): the 05:33 gate failed on M2
 (0 finished extensions). The fix (c2b9f5c, 9f0abcf) was verified in this run by
@@ -94,6 +98,75 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-09 (M4 replay: step 5 broke M4 and was reverted, step 6 re-applied)
+- Step 4 M4 acceptance PASSED (6001 ticks, EXIT 0, code 7232135):
+  harvested 9.84 -> 13.05/tick, construction 4.14 -> 5.21/tick,
+  wasted-at-regen 8,332 -> 7,482, delivered-to-spawn 1.54 -> 1.71/tick,
+  creep idle 39 % -> 34 %, capacity 500, RCL 5/500 -> 5/550, CPU
+  2.17/30.47 -> 2.34/28.6, roads 58, 0 console errors. Snapshot: 4
+  extensions + 26 sites, 2 towers with ramparts, 11 creeps at end
+  (builder 3, defender 1, harvester 5, upgrader 2), 86 sites total. The
+  builder deadlock fix (skip extension sites whose tile holds a waiting
+  creep, keep the load and retry the next best site on ERR_INVALID_TARGET)
+  is what moved every economy line at once - the step 3b run stalled at
+  4.14 build/tick with 26 sites still open, the step 4 run keeps building
+  through the whole window. Step complete.
+- Step 5 (parking, b00c0e1): code applied in this run as a manual
+  hunk-by-hunk cherry-pick. The four blob-identical files
+  (src/roles/harvester.ts, src/roles/miner.ts, src/types/memory.ts,
+  test/unit/harvester.test.ts) came over with git checkout b00c0e1 --
+  <file>; the manual hunks went on src/config.ts (PARKING_RING_START /
+  PARKING_RING_END appended at EOF), src/roles/hauler.ts (the
+  getParkingPosition import; parkNearSpawn now parks on the cached
+  parking tile and keeps the spawn-ring fallback only when there is no
+  cache), src/managers/constructionManager.ts (parkingExcludedTiles,
+  isParkingTileFree, getParkingPosition, ensureParkingPosition inserted
+  before manageConstruction; the ensureParkingPosition call at the end
+  of manageConstruction; the two new config import names) and
+  test/unit/constructionManager.test.ts (the per-test Memory hook and
+  the parking describe, 4 tests). Every residual diff against b00c0e1
+  was checked: only the excluded M5-era changes remain (EXTENSION_PRIORITY_MIN,
+  CONTAINER_FIRST_MIN_LEVEL, the road-first container strategy, the
+  pathfinding callbacks, the four-builder row). The parking tile is
+  cached in Memory.rooms.parkingPos (survives global resets) and the
+  roles fall back to the old spawn-ring parking when there is no cache
+  or no Memory (unit-test environment). The harvester's "nothing could
+  take the load" branch now parks with the load instead of dropping it.
+  Lint and build clean, 130 unit passing (126 + 4). M4 acceptance
+  FAILED 2026-11-09 (6001 ticks, EXIT 1): extensionsBuilt 1 (needs 3),
+  energyCapacity 350 (needs 450); every other criterion passed (level
+  5, towersBuilt 2, maxTowerEnergy 546, towersWithRampart 2,
+  spawnHasRampart, firstHostile 5401 / firstDefend 5401, intruder gone
+  in 1 tick, intruderLeftRoom false, safeModeTicks 0, spawnHits 5000,
+  11 creeps, farthestFromSpawn 8, mode peace). The harness writes no
+  scorecard for a failed run; the live 100-tick samples show the cost:
+  harvest oscillated 0-9.9/tick (the step 4 run held 11-12 steady), and
+  the store cycled full -> drained while the builders consumed ~2.5-3.5
+  build/tick (step 4: 4.1-5.2). Measured mechanism: with the store full
+  the harvester now parks with the undeliverable load on the cached tile
+  (ring 5-10, off the builder's route) instead of dropping the energy
+  near the spawn, where the builder's runBuilder ground-pickup collects
+  it on the way to the sites; the energy sits in the harvester carry and
+  the builders self-harvest or wait. Per the owner's protocol (feedback
+  v9.1: "If M4 fails: revert the step ... Do NOT try to repair a failing
+  step. The owner decides.") the step was reverted: git revert 06733fc
+  (commit 0ce4712, clean apply), tree back to the step 4 state, 126 unit
+  passing.
+- Step 6 (container boost, cad8c5b): the first application (on top of
+  the step 5 tree, bf9b796) was reverted too (b4fa6fd) so the step is
+  judged on the step 4 tree without the parking change, then re-applied.
+  This time the reference diff from cad8c5b applied cleanly with
+  git apply, no manual hunks: src/config.ts (+CONTAINER_FIRST_MIN_LEVEL
+  = 4), src/roles/builder.ts (at controller level 4+ the container sites
+  lead the queue right after the tower class, ahead of the ramparts and
+  the extension queue; the level 1-3 containerFirstForRoom gate and the
+  M2/M3 order below level 4 are unchanged), test/unit/builder.test.ts
+  (+2 tests: at level 5 the container beats a closer, more advanced
+  extension and beats a rampart site). Verified: the three files are
+  byte-identical to the earlier bf9b796 application (the only tree
+  difference after the revert is the parking constants git revert
+  removed). Lint and build clean, 128 unit passing (126 + 2). M4
+  acceptance pending (the last run of the replay).
 ### 2026-11-08 (M4 replay started: owner reset to 040eef6, feedback v9.1 acknowledged)
 - Owner reset main to 040eef6 (the last commit where M4 passes) and moved all M4
   attempts to backup/m4-attempts-2026-11-08 (feedback v9.1). Objective of this and
@@ -651,7 +724,7 @@ yet.
      creeps (peak 11), 0 console errors. The hauler changes are dormant
      during M4 (no source container built in the window -> minerCount 0
      -> no haulers), so parity is expected.
-  5. [ ] Step 4 builder: 3c9a132 - skip obstacle sites with a creep on them, keep
+  5. [x] Step 4 builder: 3c9a132 - skip obstacle sites with a creep on them, keep
      the energy on ERR_INVALID_TARGET.
      4 DONE 2026-11-09 (code, pre-M4): applied manually as 7232135 (git
      cherry-pick takes no pathspec, so hunk by hunk, as in steps 3a/3b):
@@ -672,9 +745,14 @@ yet.
      gets the spawn-parking-ring describe block at EOF (verbatim - all its
      helpers already existed). Verified every residual diff against
      3c9a132 is only previously-excluded M5 rework. Lint and build clean,
-     126 unit passing (121 + 5). M4 acceptance started 2026-11-09 (baseline
-     to compare: step 3b run, harvested 9.84/tick, construction 4.14/tick,
-     wasted-at-regen 8,332, capacity 500, RCL 5/500).
+     126 unit passing (121 + 5). M4 acceptance PASSED 2026-11-09 (6001
+     ticks, EXIT 0): harvested 9.84 -> 13.05/tick, construction 4.14 ->
+     5.21/tick, wasted-at-regen 8,332 -> 7,482, delivered-to-spawn 1.54
+     -> 1.71/tick, creep idle 39 % -> 34 %, capacity 500, RCL 5/500 ->
+     5/550, CPU 2.17/30.47 -> 2.34/28.6, roads 58, 0 console errors;
+     4 extensions + 26 sites, 2 towers with ramparts, 11 creeps (peak
+     11). The builder deadlock fix moved every economy line at once -
+     step complete.
      PRE-ANALYSIS (verified against the tree): the 3c9a132 base carries
      EXCLUDED intermediate-commit code (extensionFloorState,
      containerWaitRoadSites, dynamicCostCallback), so three spots need
@@ -711,7 +789,32 @@ yet.
      - constructionManager.test.ts: appends the "manageConstruction spawn
        parking ring" describe (2 tests) at EOF - clean (our file ends with
        the contested-pocket describe, all helpers present).
-  6. [ ] Step 5 parking: b00c0e1 - parking area outside the extension field.
+  6. [x] Step 5 parking: b00c0e1 - parking area outside the extension field.
+     M4 FAILED (extensionsBuilt 1 vs 3, capacity 350 vs 450); reverted per
+     owner protocol (0ce4712). Numbers and mechanism in the Change Log and
+     Known Issues.
+     5 CODE APPLIED 2026-11-09 (this run, pre-M4): the four blob-identical
+     files (src/roles/harvester.ts, src/roles/miner.ts, src/types/memory.ts,
+     test/unit/harvester.test.ts) via git checkout b00c0e1 -- <file>;
+     manual hunks on src/config.ts (PARKING_RING_START/PARKING_RING_END at
+     EOF), src/roles/hauler.ts (getParkingPosition import + parkNearSpawn
+     parks on the cached tile, spawn-ring fallback only without a cache),
+     src/managers/constructionManager.ts (four parking functions before
+     manageConstruction, ensureParkingPosition call at the end of
+     manageConstruction, the two config import names) and
+     test/unit/constructionManager.test.ts (per-test Memory hook + parking
+     describe, 4 tests). Verified every residual diff against b00c0e1:
+     only excluded M5-era changes remain (EXTENSION_PRIORITY_MIN,
+     CONTAINER_FIRST_MIN_LEVEL, road-first container strategy, pathfinding
+     callbacks, four-builder row). Parking tile cached in
+     Memory.rooms.parkingPos; roles fall back to the spawn ring when there
+     is no cache or no Memory. Harvester "nothing could take the load"
+     now parks with the load instead of dropping it. Lint and build clean,
+     130 unit passing (126 + 4). M4 acceptance FAILED (extensionsBuilt 1
+     vs 3, capacity 350 vs 450, every other criterion passing); reverted
+     with git revert 06733fc -> 0ce4712 per the owner's protocol - see
+     the Change Log and Known Issues for the numbers and the measured
+     mechanism (the lost ground-pickup energy path).
      PRE-ANALYSIS (verified against the post-3b/4 tree): harvester.ts,
      miner.ts, types/memory.ts and test/unit/harvester.test.ts are
      blob-identical to the cherry-pick base - clean. config.ts appends
@@ -738,7 +841,13 @@ yet.
      area) - in harvester.ts, clean per above.
   7. [ ] Step 6 LAST source container: cad8c5b - the source container right after
      the first tower at level 4+. If M4 fails after it: revert, note the numbers,
-     stop there.
+     stop there. CODE RE-APPLIED 2026-11-09 (this run) on the step 4 tree after
+     the step 5 revert: the reference diff applied cleanly with git apply
+     (config.ts +CONTAINER_FIRST_MIN_LEVEL = 4, builder.ts level-4+ container
+     class right after the tower class, builder.test.ts +2 tests); the three
+     files are byte-identical to the earlier bf9b796 application; lint/build
+     clean, 128 unit passing (126 + 2). M4 acceptance is the last run of the
+     replay; if it fails: revert, note the numbers, stop.
      PRE-ANALYSIS (verified): the cherry-pick base for src/roles/builder.ts
      IS our current blob (af1a44d), so after step 4's manual edits the only
      overlap is the selectBuildSite doc comment - step 4 adds the @param
@@ -863,6 +972,25 @@ yet.
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
 
 ## Known Issues / Notes
+- **Step 5 parking (b00c0e1) broke M4 - reverted per owner protocol, NOT repaired
+  (2026-11-09).** Re-applied on the step 4 tree as 06733fc (130 unit passing), M4
+  acceptance FAILED: extensionsBuilt 1 (needs 3), energyCapacity 350 (needs 450);
+  every other criterion passed (level 5, towersBuilt 2, maxTowerEnergy 546,
+  towersWithRampart 2, spawnHasRampart, firstHostile 5401, safeModeTicks 0,
+  spawnHits 5000, 11 creeps, farthestFromSpawn 8). Live 100-tick samples: harvest
+  oscillated 0-9.9/tick (the step 4 run held 11-12), the store cycled full ->
+  drained, builders consumed ~2.5-3.5 build/tick (step 4: 4.1-5.2). Mechanism
+  (measured, consistent with the code): with the store full the harvester now
+  parks with the undeliverable load on the cached tile - rings 5-10 around the
+  spawn, outside the extension field and off the builder's route - instead of
+  dropping the energy near the spawn, where runBuilder's ground-pickup (builder.ts,
+  "dropped energy on the ground, only when we have space") collects it on the way
+  to the sites. The energy sits in the harvester carry and the builders
+  self-harvest or wait, so the extension queue finishes slower over the 6,000-tick
+  window. The original b00c0e1 commit message notes the same direction in the
+  500-tick smoke (harvest 4.1 -> 3.66/tick); M4 just multiplies the cost. Not
+  repaired: feedback v9.1 says a failing step is reverted and the owner decides;
+  the change is preserved on backup/m4-attempts-2026-11-08 as b00c0e1.
 - **m5-candidate.test.ts fails in the full suite - expected, not a regression (2026-11-01,
   run 38).** It is the human reviewer's DRAFT candidate for the M5 static-mining milestone
   (header: "not a replacement for it", "The agent must not edit this file"). It is not named
@@ -903,6 +1031,23 @@ yet.
   backup/m4-attempts-2026-11-08, reset main to 040eef6, parked M5 - doing the
   replay step by step; one line per replay step is added below as each step
   completes (done in which commit with numbers, or reverted with numbers).
+- Replay step 1 (harvest-while-building, 862d07e): done in b5a1c63, M4 passing
+  (harvested 11.83/tick, construction 13.69/tick, wasted 8,733, capacity 500).
+- Replay step 2 (upgrader cap, e9c99e6): done in 2367768, M4 passing (harvested
+  12.28/tick, construction 5.08/tick, wasted 8,215, capacity 500).
+- Replay step 3a (tower energy floor, 4b8a604): done in e0f7858, M4 passing
+  (harvested 12.23/tick, construction 6.06/tick, wasted 7,731, capacity 500).
+- Replay step 3b (tower refill priority, 0e9962e): done in 1d299a8, M4 passing
+  (harvested 12.27/tick, construction 1.38/tick, wasted 1,172, capacity 500,
+  maxTowerEnergy 546).
+- Replay step 4 (extension build priority, 278c0d1 + f192091): done in 7232135,
+  M4 passing (harvested 13.05/tick, construction 5.21/tick, wasted 7,482,
+  capacity 500).
+- Replay step 5 (parking, b00c0e1): applied as 06733fc, M4 FAILED (extensionsBuilt
+  1 vs 3, capacity 350 vs 450, all other criteria passing), reverted in 0ce4712 -
+  NOT repaired, the owner decides.
+- Replay step 6 (container boost, cad8c5b): re-applied on the step 4 tree (M4
+  acceptance pending as of this run).
 - Acknowledged 2026-11-03 (v8.6): URGENT — colony died out (no creep able to
   recover) - done: cold boot + income floor in minCreepsPerRole and the spawn
   decision in src/managers/spawnManager.ts (edb614e), plus unit tests of the

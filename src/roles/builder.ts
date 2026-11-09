@@ -23,7 +23,7 @@
  *   self-harvests during the window, exactly like the original full-room
  *   gate; once the upgrader is alive the floor applies again.
  *
- * Build priority (M4):
+ * Build priority (M4, extended by M5):
  *   1. In defend or war mode, rampart sites: the shield the spawn and the
  *      towers sit behind is finished before anything else, tower site
  *      included.
@@ -31,10 +31,21 @@
  *      and the M3 test fails unless it is finished. With every builder on
  *      it, the tower completes first and only then do builders spread over
  *      the 3,000-energy extensions.
- *   3. Rampart sites (peace): one on the spawn's tile and one on each
+ *   3. Container sites at controller level 4+ (M5, owner feedback
+ *      2026-11-04, blocker 2): the source container leads the queue right
+ *      after the first tower is finished - ahead of the ramparts and the
+ *      extension queue. The miner the first container unlocks roughly
+ *      doubles the room's income, and at level 5 the extension queue holds
+ *      30 sites (90,000 build energy), so making the container wait behind
+ *      it starves the economy far longer than the M5 window (5,000 ticks)
+ *      or the owner's live room. The tower site is class 2, so by the time
+ *      a level 4+ room reaches this class the first tower is done.
+ *   4. Rampart sites (peace): one on the spawn's tile and one on each
  *      finished tower's tile. Each costs only 300 energy for 10,000 hits -
  *      cheap insurance, and the M4 spec puts them right after the towers.
- *   4. Container sites (M5) - but only while containerFirstForRoom says so.
+ *      (Below level 4 they stay ahead of containers: the M2/M3 order.)
+ *   5. Container sites below level 4 (M5) - but only while
+ *      containerFirstForRoom says so.
  *      The first container is what unlocks the stationary miner, so once it
  *      is right to build containers first, the crew stays on them: while a
  *      container is ALREADY BUILT (rule 02b's stage boundary - bootstrap
@@ -48,11 +59,11 @@
  *      construction manager places a container site from RCL 1) and left
  *      M2 with 0 finished extensions and 0 finished roads at tick 3,000
  *      (gate failure of 2026-11-01).
- *   5. Extension sites, all builders on ONE of them: the most advanced
+ *   6. Extension sites, all builders on ONE of them: the most advanced
  *      (highest build progress, ties broken by closeness to the spawn).
  *      The room state is shared, so every builder computes the same focus
  *      without any memory - and the choice survives a global reset.
- *   6. Road sites.
+ *   7. Road sites.
  *
  *   The tower used to share its class with the extensions ("closest
  *   priority site wins"), and that is exactly how it starved in the first
@@ -114,6 +125,7 @@ import {
     CONTAINER_BOOST_MAX_LEVEL,
     CONTAINER_BOOST_MIN_EXTENSIONS,
     CONTAINER_BOOST_MIN_ROADS,
+    CONTAINER_FIRST_MIN_LEVEL,
 } from "config";
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
 import { moveToToward } from "utils/movement";
@@ -150,11 +162,13 @@ function isBlockedByWaitingCreeps(site: ConstructionSite, builder: Creep): boole
 /**
  * Selects the next construction site for a builder.
  *
- * Priority (M4): in defend or war mode the rampart sites come first;
- * otherwise the tower site on its own, then ramparts, then - while
- * containerFirstForRoom applies - ONE container (the nearest one), then ONE
- * extension (the most advanced, so the whole crew converges on it and
- * actually finishes it), then roads, and containers last of all. Within a
+ * Priority: in defend or war mode the rampart sites come first; otherwise
+ * the tower site on its own, then - at controller level 4 and above - the
+ * container sites (the nearest one; the M5 blocker-2 order: the source
+ * container leads right after the first tower is finished), then ramparts,
+ * then - while containerFirstForRoom applies (levels 1-3) - ONE container
+ * (the nearest one), then ONE extension (the most advanced, so the whole
+ * crew converges on it and actually finishes it), then roads last. Within a
  * priority class the tie-breakers are progress and distance, never a
  * free-for-all.
  * @param creep The builder that needs a target (used for pathing)
@@ -213,6 +227,24 @@ function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<strin
         return creep.pos.findClosestByPath<ConstructionSite>(towerSites);
     }
 
+    const containerSites = sitesOf(STRUCTURE_CONTAINER);
+
+    // M5 (owner feedback 2026-11-04, blocker 2): at controller level 4 and
+    // above the source container leads the queue right after the first tower
+    // is FINISHED - ahead of the ramparts and the extension queue. The miner
+    // the first container unlocks roughly doubles the room's income, and at
+    // level 5 the extension queue holds 30 sites (90,000 build energy), so
+    // letting it wait there starves the economy for far longer than the M5
+    // window. Levels 1-3 keep the M2/M3 order through the
+    // containerFirstForRoom gate below. The tower branch above runs first,
+    // so the first tower is finished by the time a level 4+ room reaches
+    // this line.
+    const level = room.controller !== undefined ? room.controller.level : 1;
+    if (containerSites.length > 0 && level >= CONTAINER_FIRST_MIN_LEVEL)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
+    }
+
     // Peace mode: ramparts come right after the towers (the M4 spec order:
     // tower sites, then ramparts, then extensions, then everything else,
     // roads last).
@@ -226,7 +258,6 @@ function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<strin
     // containerFirstForRoom applies (see it for the gate and why the
     // unconditional container-first of 2026-11-01 broke M2). Without the
     // gate, containers fall to the very end of the queue, behind roads.
-    const containerSites = sitesOf(STRUCTURE_CONTAINER);
     if (containerSites.length > 0 && containerFirstForRoom(room))
     {
         return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
