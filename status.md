@@ -106,7 +106,23 @@ yet.
   4 extensions + 26 sites, capacity 500, RCL 5/500, CPU 2.22 avg / 29.53 max,
   0 console errors; scorecard identical to the 2026-11-04 reference (every
   "Change" column 0). Full detail under "In Progress", step 1.
-- Steps 1 and later: see "In Progress".
+- Step 1 (blog, done 2026-11-09): took back the three rewritten posts and
+  test/unit/blog.test.ts from the backup branch with git checkout; commit
+  2968c46. No M4 run needed (no src/ change); lint and build clean, 109
+  unit passing (100 + 9 guard tests).
+- Step 2 (container wins the tile): cherry-picked fff12dc as a87ecf7 -
+  clean apply on src/managers/constructionManager.ts and
+  test/unit/constructionManager.test.ts only (the stale reports/ conflicts
+  from the old commit were dropped). Lint and build clean, 111 unit
+  passing (109 + 2 pocket-source tests). M4 acceptance PASSED 2026-11-09
+  05:24 (1 passing, 6001 ticks, EXIT 0): harvested 9.84/tick, construction
+  4.14/tick, capacity 500, RCL 5/500, CPU 2.17 avg / 28.45 max (baseline
+  2.22 / 29.53), 0 console errors. Scorecard vs the baseline: roads 59 ->
+  58 and reach 2 of 2 -> 1 of 2 - the new container site takes the tile a
+  road would have, and the harness flood-fill does not count a container
+  as reachable; M4 asserts no road reach, so non-blocking. All other lines
+  identical.
+- Steps 3 and later: see "In Progress".
 
 ### 2026-11-03 (M4 regression fixed: 300-energy pre-container upgrader body restored)
 - **Root cause of the M4 failures on e073eed (extensionsBuilt 1, expected 3).**
@@ -558,10 +574,18 @@ yet.
      1 tick, maxTowerEnergy 543. Scorecard identical to the 2026-11-04
      reference (all "Change" columns 0) - the reset restored the last
      known-good state exactly.
-  2. [ ] Step 1 blog: git checkout backup/m4-attempts-2026-11-08 -- blog/
-     test/unit/blog.test.ts (unit tests only, no M4 run), commit.
-  3. [ ] Step 2 container wins the tile: cherry-pick fff12dc
-     (src/managers/constructionManager.ts + its unit tests only).
+  2. [x] Step 1 blog: git checkout backup/m4-attempts-2026-11-08 -- blog/
+     test/unit/blog.test.ts (unit tests only, no M4 run), commit - done
+     2026-11-09, commit 2968c46 (three rewritten posts + the
+     corruption-guard test; 109 unit passing).
+  3. [x] Step 2 container wins the tile: cherry-pick fff12dc - committed
+     as a87ecf7 (src/managers/constructionManager.ts + its unit tests
+     only, reports/ dropped); 111 unit passing, lint and build clean. M4
+     acceptance PASSED 2026-11-09 05:24 (1 passing, 6001 ticks, EXIT 0):
+     harvested 9.84/tick, construction 4.14/tick, CPU 2.22/29.53 ->
+     2.17/28.45; roads 59 -> 58, reach 2 of 2 -> 1 of 2 (the container
+     site takes a road tile; harness flood-fill artifact, M4 asserts no
+     road reach) - step complete.
   4. [ ] Step 3 hauler: a55af67 (state machine) + 2f6ed80 (faults 2-4) - only
      src/roles/hauler.ts, its unit tests, and the hauler count (one per source
      container).
