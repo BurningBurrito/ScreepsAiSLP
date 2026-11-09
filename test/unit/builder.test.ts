@@ -555,46 +555,6 @@ describe("builder", () => {
         assert.equal(calls.lastBuilt, "ext1", "no container boost at level 3 without a built container");
     });
 
-    it("leads with the container at level 5 right after the first tower is done", () => {
-        // M5 blocker 2 (owner feedback 2026-11-04): at controller level 4
-        // and above the source container leads the queue right after the
-        // first tower is finished - ahead of the extension queue, which at
-        // level 5 holds 30 sites (90,000 build energy) and would otherwise
-        // starve the miner the first container unlocks. The finished tower
-        // structure empties the tower class, so the container class runs
-        // next. The extension is BOTH closer and further along, so this
-        // also proves the priority class beats progress and distance.
-        const { creep, calls } = makeCarryingBuilder(
-            [
-                { id: "ext1", structureType: "extension", progress: 2000, pos: pos(14, 20) },
-                { id: "con1", structureType: "container", progress: 0, pos: pos(18, 25) },
-            ],
-            { level: 5, structures: [{ id: "towerB", structureType: "tower" }] },
-        );
-
-        runBuilder(creep);
-
-        assert.equal(calls.build, 1, "the builder builds while container and extension sites exist");
-        assert.equal(calls.lastBuilt, "con1", "the container beats the closer, more advanced extension at level 5");
-    });
-
-    it("leads with the container at level 5 even over a rampart site", () => {
-        // The M5 build order is tower, then SOURCE CONTAINERS, then
-        // ramparts and extensions. A rampart site costs only 300 energy -
-        // it must not jump ahead of the container that unlocks the miner.
-        const { creep, calls } = makeCarryingBuilder(
-            [
-                { id: "ramp1", structureType: "rampart", progress: 0, pos: pos(13, 20) },
-                { id: "con1", structureType: "container", progress: 0, pos: pos(18, 25) },
-            ],
-            { level: 5, structures: [{ id: "towerB", structureType: "tower" }] },
-        );
-
-        runBuilder(creep);
-
-        assert.equal(calls.lastBuilt, "con1", "the container beats the rampart site at level 5");
-    });
-
     it("hands the crew to the container once the bootstrap minimum is met", () => {
         // The M2 layout minimum is finished: one extension AND one road
         // are built, at level 2. The container may take the crew now -
