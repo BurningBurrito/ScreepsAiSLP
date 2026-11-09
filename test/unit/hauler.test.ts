@@ -325,3 +325,95 @@ describe("hauler (M5 rewrite, fault 1: delivery state)", () => {
         assert.equal(creep.memory.delivering, false);
     });
 });
+
+describe("hauler (M5 rewrite, faults 2+3: delivery target order)", () => {
+    beforeEach(() => {
+        installGlobals();
+    });
+
+    it("fault 2: a full closest extension does not block an empty farther one", () => {
+        // e1 is closest to the hauler and FULL; e2 is farther and empty.
+        // The free-capacity filter must run before the distance pick, so
+        // the empty e2 wins (the old code picked e1 and stalled).
+        const e1 = makeStructure("e1", STRUCTURE_EXTENSION, 1000, 1000, 14, 20);
+        const e2 = makeStructure("e2", STRUCTURE_EXTENSION, 0, 3000, 20, 20);
+        const spawn = makeStructure("sp", STRUCTURE_SPAWN, 0, 3000, 40, 40);
+        const {creep, calls, store} = makeHauler(50, {
+            structures: [e1, e2, spawn],
+            sources: [{id: "s1", pos: pos(14, 19)}],
+        });
+        runHauler(creep);
+        assert.equal(calls.transfer, 1, "transferred");
+        assert.equal(calls.lastTransferTo, "e2", "to the farther EMPTY extension");
+        assert.equal(e2.store.energy, 50, "e2 received the load");
+        assert.equal(e1.store.energy, 1000, "the full e1 was left alone");
+        assert.equal(store.energy, 0, "store empty after delivery");
+    });
+
+    it("fault 3 (peace): an empty extension is served before a tower above the priority level", () => {
+        // Peace order: spawn + extensions FIRST, then towers below the
+        // priority level (500), then towers to full. The tower at 600/1000
+        // is above the priority level, so the empty extension wins.
+        const tower = makeStructure("t1", STRUCTURE_TOWER, 600, 1000, 14, 20);
+        const e1 = makeStructure("e1", STRUCTURE_EXTENSION, 0, 3000, 20, 20);
+        const spawn = makeStructure("sp", STRUCTURE_SPAWN, 0, 3000, 40, 40);
+        const {creep, calls} = makeHauler(50, {
+            structures: [tower, e1, spawn],
+            sources: [{id: "s1", pos: pos(14, 19)}],
+        });
+        runHauler(creep);
+        assert.equal(calls.lastTransferTo, "e1", "the extension, not the tower");
+    });
+
+    it("fault 3 (defend): with a hostile seen, a low tower is served first", () => {
+        // Defend order: towers below the priority level FIRST. The tower at
+        // 100/1000 comes before the empty extension.
+        // @ts-ignore : write into the game globals
+        (global as any).Memory.mode = "defend";
+        const tower = makeStructure("t1", STRUCTURE_TOWER, 100, 1000, 14, 20);
+        const e1 = makeStructure("e1", STRUCTURE_EXTENSION, 0, 3000, 20, 20);
+        const spawn = makeStructure("sp", STRUCTURE_SPAWN, 0, 3000, 40, 40);
+        const hostile = {id: "h1", pos: pos(30, 30)};
+        const {creep, calls} = makeHauler(50, {
+            structures: [tower, e1, spawn],
+            hostiles: [hostile],
+            sources: [{id: "s1", pos: pos(14, 19)}],
+        });
+        runHauler(creep);
+        assert.equal(calls.lastTransferTo, "t1", "the low tower, not the extension");
+    });
+
+    it("fault 3: the controller container is the last delivery target", () => {
+        // Peace, spawn and tower both full, controller container has room ->
+        // the controller container is filled last, after everything else.
+        const tower = makeStructure("t1", STRUCTURE_TOWER, 1000, 1000, 14, 20);
+        const spawn = makeStructure("sp", STRUCTURE_SPAWN, 3000, 3000, 40, 40);
+        const cc = makeStructure("cc", STRUCTURE_CONTAINER, 500, 2000, 24, 25);
+        const {creep, calls} = makeHauler(50, {
+            structures: [tower, spawn],
+            containers: [cc],
+            sources: [
+                {id: "s1", pos: pos(14, 19)},
+                {id: "s2", pos: pos(38, 36)},
+            ],
+            controller: {level: 5, pos: pos(25, 25)},
+        });
+        runHauler(creep);
+        assert.equal(calls.lastTransferTo, "cc", "the controller container, last");
+        assert.equal(cc.store.energy, 550, "the container received the load");
+    });
+
+    it("fault 2 (e): spawn, extensions and towers all full -> no transfer at all, the hauler parks", () => {
+        const tower = makeStructure("t1", STRUCTURE_TOWER, 1000, 1000, 14, 20);
+        const e1 = makeStructure("e1", STRUCTURE_EXTENSION, 1000, 1000, 20, 20);
+        const spawn = makeStructure("sp", STRUCTURE_SPAWN, 3000, 3000, 13, 21);
+        const {creep, calls, store} = makeHauler(50, {
+            structures: [tower, e1, spawn],
+            sources: [{id: "s1", pos: pos(14, 19)}],
+        });
+        runHauler(creep);
+        assert.equal(calls.transfer ?? 0, 0, "no transfer to a full target");
+        assert.equal(store.energy, 50, "still holding its load");
+        assert.equal(creep.memory.delivering, true, "still in the delivery phase");
+    });
+});

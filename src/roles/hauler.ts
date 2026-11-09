@@ -20,16 +20,18 @@
  * With nothing left to fill, the hauler waits near the spawn instead of
  * holding energy at a full target.
  *
- * Delivery target selection (pickDeliveryTarget) still uses the pre-M5
- * order and picks the closest target per class before checking whether it
- * is full - faults 2 and 3 of the same feedback rework it (a
- * free-capacity filter over ONE ordered list of target groups).
+ * Delivery target selection (pickDeliveryTarget) uses one unified ordered
+ * list of target groups - every tower, then every extension, then the
+ * spawn - and the free-capacity filter runs BEFORE the distance pick, so
+ * a full closest target never shadows an emptier one (faults 2 and 3 of
+ * the same feedback, fixed on top of this state machine).
  *
  * Every move goes through utils/moveToToward, which drops the creep's
  * cached path when it keeps replaying a blocked one (see that file for the
  * engine detail).
  */
 
+import { CONTROLLER_CONTAINER_RANGE, TOWER_REFILL_PRIORITY_ENERGY } from "config";
 import { moveToToward } from "utils/movement";
 
 /** Every structure a hauler may deliver energy to. */
@@ -117,44 +119,110 @@ export function runHauler(creep: Creep): void
 }
 
 /**
- * Chooses the hauler's delivery target.
+ * Chooses the hauler's delivery target (M5 faults 2 and 3, fixed together).
  *
- * The pre-M5 order: tower, then extension, then spawn - and within each
- * class the CLOSEST target, checked for free capacity only AFTER the
- * selection. That check-after-pick is fault 2 of the M5 hauler feedback
- * (a full closest extension blocks every empty one behind it); the next
- * commit filters to free capacity first, and the one after that replaces
- * the per-class walk with one ordered list of target groups.
+ * The targets are ONE ordered list of groups; the first group that still
+ * has a target with free capacity wins, and within a group the CLOSEST
+ * target is picked. The free-capacity filter runs BEFORE the distance pick
+ * (fault 2), so a full closest target never shadows an emptier one further
+ * away.
+ *
+ * The group order depends on the threat state (fault 3), because towers
+ * always want energy (rampart and road repair) and would otherwise starve
+ * the extensions:
+ *   - peace: spawn and extensions, then towers below
+ *     TOWER_REFILL_PRIORITY_ENERGY, then towers to full, then the
+ *     controller container (the storage joins the end of this same list in
+ *     M6 - that is why the order lives in one list in one function);
+ *   - defend or war (Memory.mode, set by modeManager while a hostile has
+ *     been seen): towers below the priority level first, then spawn and
+ *     extensions, then the rest as in peace.
+ *
+ * The controller container is always LAST: the upgraders withdraw from it,
+ * so it is filled only when everything else is full. (The hauler never
+ * WITHDRAWS from it - that is the upgraders' energy, see the file header.)
  * @param creep The hauler that needs a target (used for pathing)
  * @returns The selected target, or null when no target can take energy
  */
 function pickDeliveryTarget(creep: Creep): HaulerTarget | null
 {
-    const classes: BuildableStructureConstant[] = [STRUCTURE_TOWER, STRUCTURE_EXTENSION, STRUCTURE_SPAWN];
-    for (const structureType of classes)
+    const towers = creep.room.find(FIND_MY_STRUCTURES, {
+        // Type predicates: FIND_MY_STRUCTURES also covers containers, links
+        // and the controller, so each find narrows to its class.
+        filter: (structure): structure is StructureTower =>
+            structure.structureType === STRUCTURE_TOWER,
+    });
+    const extensions = creep.room.find(FIND_MY_STRUCTURES, {
+        filter: (structure): structure is StructureExtension =>
+            structure.structureType === STRUCTURE_EXTENSION,
+    });
+    const spawns = creep.room.find(FIND_MY_STRUCTURES, {
+        filter: (structure): structure is StructureSpawn =>
+            structure.structureType === STRUCTURE_SPAWN,
+    });
+    const controllerContainer = pickControllerContainer(creep.room);
+
+    const energy = (structure: HaulerTarget) => structure.store.getUsedCapacity(RESOURCE_ENERGY);
+    const belowPriority = towers.filter((tower) => energy(tower) < TOWER_REFILL_PRIORITY_ENERGY);
+    const toFull = towers.filter(
+        (tower) => energy(tower) >= TOWER_REFILL_PRIORITY_ENERGY &&
+            energy(tower) < tower.store.getCapacity(RESOURCE_ENERGY),
+    );
+    const economy = [...spawns, ...extensions];
+
+    const defending = (Memory.mode ?? "peace") !== "peace";
+
+    // ONE ordered list of target groups (fault 3): adding the storage in
+    // M6 is a single push at the end, no role rewrite.
+    const groups: HaulerTarget[][] = defending
+        ? [belowPriority, economy, toFull]
+        : [economy, belowPriority, toFull];
+    if (controllerContainer !== null)
     {
-        const structures = creep.room.find(FIND_MY_STRUCTURES, {
-            // Type predicate: every class above holds energy in a store,
-            // so the result is narrowed to the store-bearing structures
-            // (FIND_MY_STRUCTURES also covers links and the controller).
-            filter: (structure): structure is StructureExtension | StructureSpawn | StructureTower =>
-                structure.structureType === structureType,
-        });
-        if (structures.length === 0)
+        groups.push([controllerContainer]);
+    }
+
+    for (const group of groups)
+    {
+        // Fault 2: keep ONLY the targets that still have room, before the
+        // distance pick below.
+        const withFreeCapacity = group.filter(
+            (structure) => energy(structure) < structure.store.getCapacity(RESOURCE_ENERGY),
+        );
+        if (withFreeCapacity.length === 0)
         {
             continue;
         }
-        const target = creep.pos.findClosestByPath(structures);
-        if (target === null)
-        {
-            continue;
-        }
-        if (target.store.getUsedCapacity(RESOURCE_ENERGY) < target.store.getCapacity(RESOURCE_ENERGY))
+        const target = creep.pos.findClosestByPath(withFreeCapacity);
+        if (target !== null)
         {
             return target;
         }
     }
     return null;
+}
+
+/**
+ * The built controller container - the one within CONTROLLER_CONTAINER_RANGE
+ * of the controller - when it exists. It is the hauler's last delivery
+ * target and the upgraders' fuel.
+ * @param room The room to look in
+ * @returns The container, or null when none is built yet
+ */
+function pickControllerContainer(room: Room): StructureContainer | null
+{
+    const controller = room.controller;
+    if (controller === undefined || controller === null)
+    {
+        return null;
+    }
+    const candidates = room.find(FIND_STRUCTURES, {
+        // Type predicate: narrows to the containers near the controller.
+        filter: (structure): structure is StructureContainer =>
+            structure.structureType === STRUCTURE_CONTAINER &&
+            structure.pos.getRangeTo(controller.pos) <= CONTROLLER_CONTAINER_RANGE,
+    });
+    return candidates.length > 0 ? candidates[0] : null;
 }
 
 /**

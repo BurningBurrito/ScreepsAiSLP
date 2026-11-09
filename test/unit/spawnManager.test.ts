@@ -351,6 +351,45 @@ describe("spawnManager", () => {
     assert.deepEqual(calls[0].body, [CARRY, CARRY, MOVE, MOVE]);
   });
 
+  it("fault 4: with two source containers the hauler minimum is two (one per container)", () => {
+    // M5 fault 4: one hauler per source container - a single hauler cannot
+    // keep 20 energy per tick flowing through 30 extensions, two towers and
+    // the spawn at RCL 5. Both sources have built containers, so the
+    // minimum is 2; one hauler is alive, so the second one spawns.
+    addCreeps({
+      "miner-0": {role: "miner", sourceId: "source-1"},
+      "miner-1": {role: "miner", sourceId: "source-2"},
+      "upgrader-2": {role: "upgrader"},
+      "hauler-3": {role: "hauler"},
+    });
+    // Four creeps already exist, so the next name uses counter value 4.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 4;
+    const {room, calls} = makeRoom({
+      capacity: 1800,
+      available: 1800,
+      sites: 0,
+      containers: 2,
+      controllerLevel: 5,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "hauler-4");
+    assert.equal(calls[0].memory.role, "hauler");
+    // RCL 5 capacity (1800) fits the 1500 two-thousand-energy body: 20
+    // CARRY and 10 MOVE (10 MOVE keeps 20 CARRY moving every tick on roads).
+    const expectedBody = [
+      ...new Array(20).fill(CARRY),
+      ...new Array(10).fill(MOVE),
+    ];
+    assert.deepEqual(calls[0].body, expectedBody);
+  });
+
   it("spawns one harvester per container-less source (the M5 source-state split)", () => {
     // M5: the source-worker minimum is no longer the level table row - it is
     // one worker per source, and the worker's role depends on the source's

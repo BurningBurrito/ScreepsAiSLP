@@ -156,9 +156,17 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
     hauler: [
         // Haulers: pairs of CARRY+MOVE, one MOVE per two CARRY is enough on
         // roads. Haulers never carry WORK parts (owner rule #1).
+        // 1000 energy per trip (M5 fault 4): at RCL 5 the two source
+        // containers hold 20 energy per tick, and one hauler with the 600
+        // body below empties a cycle in ~60 ticks = 10 per tick - the
+        // containers stay full and the miners drop. Two haulers with this
+        // body move 25 per tick, ahead of the income. 10 MOVE keeps the 20
+        // CARRY moving every tick on roads (2 fatigue per part per step vs
+        // 2 per MOVE part per tick).
+        [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE], // 1500
         [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE, MOVE], // 800
         [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE], // 550
-        [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE], // 450
+        [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE], // 500
         [CARRY, CARRY, MOVE, MOVE], // 200
     ],
     defender: [
@@ -371,7 +379,11 @@ function minCreepsPerRole(room: Room): Record<Role, number>
         harvester: harvesterCount,
         builder: siteCount > 0 ? row.builder : 0,
         upgrader: row.upgrader,
-        hauler: containerCount > 0 ? row.hauler : 0,
+        // M5 fault 4: at least ONE hauler per source container (2 at level
+        // 5) - minerCount counts exactly the sources with a built neighbour
+        // container. A single hauler cannot serve 30 extensions, 2 towers
+        // and the spawn (owner feedback 2026-11-04).
+        hauler: minerCount > 0 ? Math.max(row.hauler, minerCount) : 0,
         defender,
     };
 }

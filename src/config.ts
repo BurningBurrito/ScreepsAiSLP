@@ -261,3 +261,15 @@ export const CONTROLLER_SIGN_TEXT = "ScreepsAiSLP - https://github.com/BurningBu
  * body stays balanced (see bodyTemplates in managers/spawnManager).
  */
 export const CONTROLLER_CONTAINER_RANGE = 3;
+
+/**
+ * Hauler delivery order (owner feedback 2026-11-04, fault 3): the energy
+ * level below which a tower is a PRIORITY target. Towers constantly spend
+ * energy repairing ramparts and roads, so if every tower were served before
+ * the extensions, the extensions would starve. The hauler therefore fills
+ * spawn and extensions first in peace, but a tower BELOW this level comes
+ * first: at that level it can no longer afford to keep repairing, and in
+ * defend or war mode a low tower is the colony's whole defense.
+ * The level-5 tower capacity is 1000 energy, so this is half a tank.
+ */
+export const TOWER_REFILL_PRIORITY_ENERGY = 500;
