@@ -23,6 +23,14 @@ declare global {
   interface CreepMemory {
     /** Role of the creep: harvester, upgrader, or builder */
     role: Role;
+    /**
+     * Hauler phase latch (M5 hauler rewrite, owner feedback 2026-11-04):
+     * true while the hauler delivers (keep going to the next target with
+     * free capacity until the store is empty), false while it collects
+     * from source containers. Losing it in a global reset is fine: the
+     * hauler re-derives it from the store's contents on the next tick.
+     */
+    delivering?: boolean;
     /** ID of the source this creep is assigned to: a persistent assignment
      *  for harvesters, a per-work-cycle latch for upgraders (see upgrader.ts) */
     sourceId?: string;
