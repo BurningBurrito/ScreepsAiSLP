@@ -240,19 +240,6 @@ export const TOWER_ENERGY_RESERVE = 500;
 export const CONTAINER_BOOST_MAX_LEVEL = 2;
 
 /**
- * M5 build order (owner feedback 2026-11-04, blocker 2): at controller level
- * 4 and above a container site leads the build queue right after the first
- * tower is finished - ahead of the ramparts and the extension queue. The
- * miner the first container unlocks roughly doubles the room's income, and at
- * level 5 the extension queue holds 30 sites (90,000 build energy), so
- * making the container wait behind it starves the economy for far longer
- * than the M5 test window (5,000 ticks) or the owner's live room. Levels 1-3
- * keep the M2/M3 order: there the extension queue is short, and the density
- * contract (M3/M4) or the bootstrap minimums own the crew.
- */
-export const CONTAINER_FIRST_MIN_LEVEL = 4;
-
-/**
  * M5 container-priority gate (bootstrap case): the number of FINISHED
  * extensions the room must have before a container site may take the whole
  * builder crew at levels 1-2. One is exactly the M2 acceptance minimum
