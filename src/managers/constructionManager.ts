@@ -25,10 +25,45 @@
  * Road sites that are missing from the network are re-attempted every tick
  * (existingRoadPositions check), so a single failed createConstructionSite
  * cannot permanently break the route.
+ *
+ * Site conflict (M5 failure of 2026-11-03, owner feedback 2026-11-04): the
+ * engine allows at most ONE construction site per tile, so a road site on a
+ * container candidate tile blocks the container site forever -
+ * createConstructionSite just returns ERR_INVALID_TARGET every tick. The
+ * container wins the tile: placeContainerSites removes the blocking road
+ * site and places the container; while the container site stands,
+ * placeRoadSites skips the tile (a road site cannot join it), and once the
+ * container is BUILT the road site is re-placed on the same tile (road and
+ * container structures may share a tile). The flood fill counts container
+ * sites and built containers as road tiles so the network stays
+ * "connected" through that window.
  */
 
 import { RAMPART_MIN_LEVEL, TOWER_SITE_DEEP_CANDIDATES, TOWER_SITE_DEEP_RANGES, TOWER_SITE_RANGES } from "config";
 import { isValidTile } from "utils/positions";
+
+// "structureType@x,y" keys of failed site placements already logged this
+// module lifetime. A global reset loses the set, which is exactly right:
+// at most one log line per reset per tile, never one per tick (owner
+// feedback 2026-11-04: log a failed placement once, then move on).
+const siteFailureLog: Set<string> = new Set();
+
+/**
+ * Log a failed createConstructionSite at most once per tile per reset.
+ * @param structureType What we tried to place (for the log line).
+ * @param pos The tile the placement failed on.
+ * @param result The error code the engine returned.
+ */
+function logSiteFailureOnce(structureType: string, pos: RoomPosition, result: number): void
+{
+    const key = `${structureType}@${pos.x},${pos.y}`;
+    if (siteFailureLog.has(key))
+    {
+        return;
+    }
+    siteFailureLog.add(key);
+    console.log(`[Construction] createConstructionSite ${structureType} at ${pos.x},${pos.y} failed with code ${result}`);
+}
 
 /** Get the spawn position in this room */
 function getSpawnPosition(room: Room): RoomPosition | null
@@ -501,10 +536,31 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[]): number
             continue;
         }
 
+        // While a container SITE stands on this tile, a road site cannot be
+        // placed (the engine allows one construction site per tile). The
+        // container wins until it is built; then this same tile takes its
+        // road site and the road and the container share the tile (see
+        // placeContainerSites). Skipping keeps the network from spinning on
+        // a createConstructionSite that can never succeed.
+        const hasContainerSite = pos.lookFor(LOOK_CONSTRUCTION_SITES).some(
+            (site) => site.structureType === STRUCTURE_CONTAINER,
+        );
+        if (hasContainerSite)
+        {
+            continue;
+        }
+
         // createConstructionSite queues an intent; a missing tile that failed
         // for any reason is simply re-attempted on the next tick by this
         // function, which re-runs every tick while the network is incomplete.
-        room.createConstructionSite(pos, STRUCTURE_ROAD);
+        // The code is checked, not assumed: a persistent failure is logged
+        // once per tile so it is visible instead of silent (owner feedback
+        // 2026-11-04).
+        const result = room.createConstructionSite(pos, STRUCTURE_ROAD);
+        if (result !== OK)
+        {
+            logSiteFailureOnce(STRUCTURE_ROAD, pos, result);
+        }
     }
     return 0;  // TODO: Track actually placed roads
 }
@@ -899,7 +955,19 @@ function computeContainerPositions(room: Room): RoomPosition[]
     return positions;
 }
 
-/** Place container construction sites */
+/**
+ * Place container construction sites, one per tick.
+ *
+ * The container wins a contested tile: when the chosen position holds a
+ * road construction site, that site is removed first. The engine allows at
+ * most one construction site per tile, so without the removal
+ * createConstructionSite returns ERR_INVALID_TARGET every tick and the
+ * source keeps no container at all (M5 failure of 2026-11-03, owner
+ * feedback 2026-11-04). The road gets its tile back after the container is
+ * built: road and container structures may share a tile (placeRoadSites).
+ * @param room The room to place sites in.
+ * @param containerPositions Candidate positions, one per source, best first.
+ */
 function placeContainerSites(room: Room, containerPositions: RoomPosition[]): void
 {
     const containersBuilt = room.find(FIND_STRUCTURES, {
@@ -922,11 +990,32 @@ function placeContainerSites(room: Room, containerPositions: RoomPosition[]): vo
         const hasContainer = structures.some((s) => s.structureType === STRUCTURE_CONTAINER);
         const hasSite = sites.some((s) => s.structureType === STRUCTURE_CONTAINER);
 
-        if (!hasContainer && !hasSite)
+        if (hasContainer || hasSite)
         {
-            room.createConstructionSite(pos, STRUCTURE_CONTAINER);
-            return; // Only place one container at a time
+            continue;
         }
+
+        // The container wins the tile: remove any blocking road site before
+        // placing (see the function doc for why the removal is required).
+        for (const site of sites)
+        {
+            if (site.structureType === STRUCTURE_ROAD)
+            {
+                site.remove();
+            }
+        }
+
+        const result = room.createConstructionSite(pos, STRUCTURE_CONTAINER);
+        if (result !== OK)
+        {
+            // The tile is contested in a way we did not expect (another
+            // structure or site type). Log once per tile, then try the next
+            // candidate instead of retrying the same tile every tick.
+            logSiteFailureOnce(STRUCTURE_CONTAINER, pos, result);
+            continue;
+        }
+
+        return; // Only place one container at a time
     }
 }
 
@@ -973,12 +1062,18 @@ function areSourcesAndControllerConnected(room: Room): boolean
         return false;
     }
     
-    // First, collect all tiles that have roads (built or sites)
+    // First, collect all tiles that have roads (built or sites) or containers
+    // (built or sites). Containers count because the engine allows at most one
+    // construction site per tile: while a container site stands on the
+    // network, the road site on that tile cannot exist yet - and once the
+    // container is built, the road lands on the same tile (road and container
+    // structures may share it). Without this, the network would read as
+    // "disconnected" for the whole build time of every on-path container.
     const roadTiles = new Set<string>();
     const structures = room.find(FIND_STRUCTURES);
     for (const structure of structures)
     {
-        if (structure.structureType === STRUCTURE_ROAD)
+        if (structure.structureType === STRUCTURE_ROAD || structure.structureType === STRUCTURE_CONTAINER)
         {
             roadTiles.add(String(structure.pos.x) + ',' + String(structure.pos.y));
         }
@@ -986,7 +1081,7 @@ function areSourcesAndControllerConnected(room: Room): boolean
     const sites = room.find(FIND_CONSTRUCTION_SITES);
     for (const site of sites)
     {
-        if (site.structureType === STRUCTURE_ROAD)
+        if (site.structureType === STRUCTURE_ROAD || site.structureType === STRUCTURE_CONTAINER)
         {
             roadTiles.add(String(site.pos.x) + ',' + String(site.pos.y));
         }

@@ -621,3 +621,69 @@ describe("manageConstruction tower placement in a cramped room (owner feedback 2
         assert.notInclude(extensionSites, "1,24", "the removed site's slot is the tower's now");
     });
 });
+
+describe("container site placement on a contested pocket tile (M5, owner feedback 2026-11-04)", () => {
+    beforeEach(() => {
+        tiles = new Map();
+        setGlobal("OK", OK);
+        setGlobal("FIND_SOURCES", FIND_SOURCES);
+        setGlobal("FIND_MY_SPAWNS", FIND_MY_SPAWNS);
+        setGlobal("FIND_CONSTRUCTION_SITES", FIND_CONSTRUCTION_SITES);
+        setGlobal("FIND_MY_STRUCTURES", FIND_MY_STRUCTURES);
+        setGlobal("FIND_STRUCTURES", FIND_STRUCTURES);
+        setGlobal("LOOK_STRUCTURES", LOOK_STRUCTURES);
+        setGlobal("LOOK_CONSTRUCTION_SITES", LOOK_CONSTRUCTION_SITES);
+        setGlobal("STRUCTURE_TOWER", STRUCTURE_TOWER);
+        setGlobal("STRUCTURE_EXTENSION", STRUCTURE_EXTENSION);
+        setGlobal("STRUCTURE_CONTAINER", STRUCTURE_CONTAINER);
+        setGlobal("STRUCTURE_ROAD", STRUCTURE_ROAD);
+        setGlobal("STRUCTURE_RAMPART", STRUCTURE_RAMPART);
+        setGlobal("STRUCTURE_WALL", STRUCTURE_WALL);
+        setGlobal("TERRAIN_MASK_WALL", TERRAIN_MASK_WALL);
+        setGlobal("RoomPosition", PositionMock);
+    });
+
+    /**
+     * A wall-pocket source: the (10,10) source has exactly one walkable
+     * neighbour tile, (11,11) - its other seven neighbours are natural
+     * walls. The (40,40) source keeps its full open neighbourhood. The
+     * road network to the pocket source runs through the pocket tile, which
+     * is why the M5 room had a road site there and the container site could
+     * never be created (one construction site per tile in the engine).
+     */
+    function makePocketRoom(): any
+    {
+        const room = makeRoom();
+        const pocketWalls = new Set(["9,9", "9,10", "9,11", "10,9", "10,11", "11,9", "11,10"]);
+        room.getTerrain = (): any => ({
+            get: (x: number, y: number): number => (pocketWalls.has(`${x},${y}`) ? TERRAIN_MASK_WALL : 0),
+        });
+        room.findPath = (_from: any, to: any, _opts?: any): any[] =>
+            to.x === 10 && to.y === 10 ? [{x: 11, y: 11}] : [];
+        return room;
+    }
+
+    it("removes the blocking road site and places the container site on the only free pocket tile", () => {
+        const room = makePocketRoom();
+        // The road site on the pocket's only free tile: the exact M5
+        // deadlock, where createConstructionSite for the container returned
+        // ERR_INVALID_TARGET every tick and source A kept no container.
+        room.createConstructionSite(new PositionMock(11, 11, "W0N1"), STRUCTURE_ROAD);
+        assert.include(sitePositions(room, STRUCTURE_ROAD), "11,11", "sanity: the road site blocks the tile");
+        manageConstruction(room);
+        assert.include(sitePositions(room, STRUCTURE_CONTAINER), "11,11", "the container wins the pocket tile");
+        assert.notInclude(sitePositions(room, STRUCTURE_ROAD), "11,11", "the blocking road site is removed");
+        assert.equal(sitePositions(room, STRUCTURE_CONTAINER).length, 1, "one container site per tick (source A's first)");
+    });
+
+    it("does not place a road site on a tile that already holds a container site", () => {
+        const room = makePocketRoom();
+        // The container site already owns the pocket tile (the state after
+        // the first manageConstruction of the previous test).
+        room.createConstructionSite(new PositionMock(11, 11, "W0N1"), STRUCTURE_CONTAINER);
+        manageConstruction(room);
+        assert.include(sitePositions(room, STRUCTURE_CONTAINER), "11,11", "the existing container site survives");
+        assert.notInclude(sitePositions(room, STRUCTURE_ROAD), "11,11", "no road site joins the container site's tile");
+        assert.include(sitePositions(room, STRUCTURE_CONTAINER), "39,39", "source B still gets its own site this tick");
+    });
+});
