@@ -122,7 +122,16 @@ yet.
   road would have, and the harness flood-fill does not count a container
   as reachable; M4 asserts no road reach, so non-blocking. All other lines
   identical.
-- Steps 3 and later: see "In Progress".
+- Step 3a (hauler state machine, done 2026-11-09): clean cherry-pick of
+  a55af67 as 8364c5e - src/roles/hauler.ts collect/deliver state machine
+  (memory.delivering latch), src/types/memory.ts +delivering, new
+  test/unit/hauler.test.ts (4 tests); lint and build clean, 115 unit
+  passing. M4 acceptance PASSED 2026-11-09 05:58 (1 passing, 6001 ticks,
+  EXIT 0): harvested 9.84/tick, construction 4.14/tick, wasted-at-regen
+  8,332, capacity 500, RCL 5/500 - all identical to the step-2 baseline;
+  CPU 2.17/28.45 -> 2.2/28.79; roads 58, 0 console errors. Behavior-neutral
+  at this stage (the hauler row and delivery-group changes are step 3b).
+- Steps 3b and later: see "In Progress".
 
 ### 2026-11-03 (M4 regression fixed: 300-energy pre-container upgrader body restored)
 - **Root cause of the M4 failures on e073eed (extensionsBuilt 1, expected 3).**
@@ -586,15 +595,116 @@ yet.
      2.17/28.45; roads 59 -> 58, reach 2 of 2 -> 1 of 2 (the container
      site takes a road tile; harness flood-fill artifact, M4 asserts no
      road reach) - step complete.
-  4. [ ] Step 3 hauler: a55af67 (state machine) + 2f6ed80 (faults 2-4) - only
+  4. [x] Step 3 hauler: a55af67 (state machine) + 2f6ed80 (faults 2-4) - only
      src/roles/hauler.ts, its unit tests, and the hauler count (one per source
      container).
+     3a DONE 2026-11-09: clean cherry-pick of a55af67 as 8364c5e (its
+     parent cad8c5b touched none of the three files, so it applied onto the
+     a87ecf7 tree with zero conflicts): src/roles/hauler.ts rewritten to the
+     collect/deliver state machine (memory.delivering latch, collection from
+     source containers only), src/types/memory.ts +delivering, new
+     test/unit/hauler.test.ts (4 tests); lint and build clean, 115 unit
+     passing. M4 acceptance PASSED 2026-11-09 05:58 (1 passing, 6001 ticks,
+     EXIT 0): harvested 9.84/tick, construction 4.14/tick, wasted-at-regen
+     8,332 - all identical to the step-2 baseline; CPU 2.17/28.45 ->
+     2.2/28.79; extensions 4, capacity 500, RCL 5/500, roads 58, 0 console
+     errors. Snapshot: 2 towers with ramparts, mode peace, intruder gone in
+     1 tick, maxTowerEnergy 543, 10 creeps (peak 11). The state machine is
+     behavior-neutral at this stage (no hauler row or delivery-group change
+     yet - that is 3b).
+     3b PRE-ANALYSIS (2f6ed80, verified against the post-3a tree): four of
+     the five files are blob-identical to the cherry-pick base (hauler.ts
+     299dff1, spawnManager.ts 06ab3cd, hauler.test.ts 5c896ba,
+     spawnManager.test.ts 1cb6d04) and config.ts differs only by the
+     cad8c5b block (a different region), so `git cherry-pick -n 2f6ed80 --
+     <those five files>` should apply with zero conflicts. Changes: hauler
+     delivery reworked to ONE ordered group list with the free-capacity
+     filter BEFORE the distance pick (fault 2) and the threat-dependent
+     group order (fault 3, Memory.mode), TOWER_REFILL_PRIORITY_ENERGY in
+     config (appends at EOF, which keeps the later b00c0e1 config hunk
+     clean), and the hauler row becomes Math.max(row.hauler, minerCount)
+     with the 1500-energy 20-CARRY body (fault 4).
   5. [ ] Step 4 builder: 3c9a132 - skip obstacle sites with a creep on them, keep
      the energy on ERR_INVALID_TARGET.
+     PRE-ANALYSIS (verified against the tree): the 3c9a132 base carries
+     EXCLUDED intermediate-commit code (extensionFloorState,
+     containerWaitRoadSites, dynamicCostCallback), so three spots need
+     manual resolution; the rest applies.
+     - constructionManager.ts import line: keep our set, DROP
+       EXTENSION_PRIORITY_MIN (not in our config), ADD SPAWN_KEEP_CLEAR_RANGE
+       -> `import { RAMPART_MIN_LEVEL, SPAWN_KEEP_CLEAR_RANGE,
+       TOWER_SITE_DEEP_CANDIDATES, TOWER_SITE_DEEP_RANGES, TOWER_SITE_RANGES }
+       from "config";`. Both body hunks (skip the spawn ring in
+       computeExtensionPositions and computeTowerPositions) anchor on text
+       present in our file.
+     - builder.ts: (a) insert isBlockedByWaitingCreeps after the
+       upgraderBelowMinimum import (our file has no dynamicCostCallback
+       import - drop that context line); (b) selectBuildSite gains the
+       excludeIds parameter, the sitesOf filter and the @param doc line
+       (anchors present); (c) SKIP the waitRoads filter hunk - our tree has
+       no containerWaitRoadSites class (excluded intermediate change);
+       (d) SKIP the focusExtension hunk as-is and apply the equivalent to
+       our INLINE extension block: `const extensionSites =
+       sitesOf(STRUCTURE_EXTENSION).filter((site) =>
+       !isBlockedByWaitingCreeps(site, creep));` (our 040eef6 layout has no
+       focusExtension closure); (e) the ERR_INVALID_TARGET retry block in
+       runBuilder (anchors present).
+     - config.ts: SPAWN_KEEP_CLEAR_RANGE after the TOWER_SITE_DEEP_CANDIDATES
+       line - clean (context matches).
+     - builder.test.ts: ADD `const ERR_INVALID_TARGET = -8;` (after
+       FIND_SOURCES) and `const LOOK_CREEPS = 2;` (after TERRAIN_MASK_WALL) -
+       our file lacks the LOOK_* constants the base has; ADD
+       `lookFor: (): any[] => []` to pos(); ADD global.LOOK_CREEPS and
+       global.ERR_INVALID_TARGET to beforeEach (after global.OK); the three
+       new deadlock tests insert between "equal progress goes to the
+       spawn-side site" (line 415) and "keeps the extension ahead of a
+       container site in a fresh bootstrap room" (line 418) - clean.
+     - constructionManager.test.ts: appends the "manageConstruction spawn
+       parking ring" describe (2 tests) at EOF - clean (our file ends with
+       the contested-pocket describe, all helpers present).
   6. [ ] Step 5 parking: b00c0e1 - parking area outside the extension field.
+     PRE-ANALYSIS (verified against the post-3b/4 tree): harvester.ts,
+     miner.ts, types/memory.ts and test/unit/harvester.test.ts are
+     blob-identical to the cherry-pick base - clean. config.ts appends
+     PARKING_RING_START/PARKING_RING_END after TOWER_REFILL_PRIORITY_ENERGY
+     (the EOF after steps 3b+4) - clean. hauler.ts has exactly two
+     conflicts (its base carries the excluded 7abe755 dynamicCostCallback
+     change): the import block (ADD `import { getParkingPosition } from
+     "managers/constructionManager";`, do NOT add the pathfinding import)
+     and parkNearSpawn (ADD the parking block before the spawn fallback,
+     keep the fallback WITHOUT the costCallback option).
+     constructionManager.ts: one conflict - the import line (ADD
+     PARKING_RING_END, PARKING_RING_START to the step-4 result, still
+     without EXTENSION_PRIORITY_MIN); the four new functions
+     (parkingExcludedTiles, isParkingTileFree, getParkingPosition,
+     ensureParkingPosition) insert at the base's exact anchor (right before
+     the manageConstruction doc comment - the same adjacency in our file),
+     and the ensureParkingPosition call appends to manageConstruction (the
+     roadNetworkTiles/extensionPositions/towerPositions/containerPositions
+     variables all exist at lines 1222/1272/1247/1282).
+     test/unit/constructionManager.test.ts: +109 lines of parking tests
+     (clean once step 4's describe is in place). Also: the harvester's
+     "nothing could take the load" branch changes from drop() to
+     parkWithLoad() (energy stays in the carry, creep parks at the parking
+     area) - in harvester.ts, clean per above.
   7. [ ] Step 6 LAST source container: cad8c5b - the source container right after
      the first tower at level 4+. If M4 fails after it: revert, note the numbers,
      stop there.
+     PRE-ANALYSIS (verified): the cherry-pick base for src/roles/builder.ts
+     IS our current blob (af1a44d), so after step 4's manual edits the only
+     overlap is the selectBuildSite doc comment - step 4 adds the @param
+     excludeIds line BELOW cad8c5b's hunk context, so both land. Hunks:
+     header doc renumber (1-7) clean; CONTAINER_FIRST_MIN_LEVEL added to the
+     config import (our import already has all three CONTAINER_BOOST_*
+     names, lines 114-116) clean; the new level-4+ container branch inserts
+     after the towerSites return clean; the old `const containerSites =
+     sitesOf(STRUCTURE_CONTAINER);` line moves up (context present) clean.
+     config.ts: CONTAINER_FIRST_MIN_LEVEL block inserts between
+     CONTAINER_BOOST_MAX_LEVEL (line 226) and the container-priority-gate
+     comment - a different anchor than step 4's, no overlap - clean.
+     builder.test.ts: two new tests insert between "no container boost at
+     level 3 without a built container" (line 472) and "hands the crew to
+     the container once the bootstrap minimum is met" (line 475) - clean.
 - **Run (2026-11-03): M4 energy-deadlock regression fixed - awaiting the M4
   acceptance result.** The e073eed M5 prereq made the pre-container upgrader
   body 200 energy ([W,C,M]) at 300 capacity, so the upgrader spawned after
