@@ -17,6 +17,17 @@ per the owner's protocol (0ce4712); step 6 (container boost, cad8c5b) is re-appl
 on the step 4 tree (128 unit passing) and its M4 acceptance is the last run of the
 replay.
 
+Gate fix 2026-11-09: the full-suite gate on e996131 passed M1 and M2 and
+failed M3 on "a connected road leads from the spawn to every source"
+(sourcesConnected 1 of 2): replay step 2's container site sits on the pocket
+tile (40,13), Source B's only walkable neighbour, and the M3 harness flood
+fill counts roads only. Fixed by inverting the contested-tile ownership in
+src/managers/constructionManager.ts: the road wins the tile, the container
+site is withheld until the road is built, and the two then coexist on the
+tile (the engine allows structures to share a tile, construction sites
+cannot). 129 unit passing; the M3 re-run and the step 6 M4 run (full suite)
+are in progress.
+
 Gate state verified (2026-11-01, run 37 round 2): the 05:33 gate failed on M2
 (0 finished extensions). The fix (c2b9f5c, 9f0abcf) was verified in this run by
 a full-suite pass on the current src/ (agent-test start all, started 07:53,
@@ -167,6 +178,37 @@ yet.
   difference after the revert is the parking constants git revert
   removed). Lint and build clean, 128 unit passing (126 + 2). M4
   acceptance pending (the last run of the replay).
+- GATE FIX - M3 road reach (the 2026-11-09 full-suite gate on e996131 passed
+  M1 and M2, failed M3 on "a connected road leads from the spawn to every
+  source": sourcesConnected 1 of 2; snapshot roadTiles 58, strayRoads 0,
+  roadsOnWalls 0, roadShare 0, maxTowerEnergy 500, capacity 450, level 3,
+  towersBuilt 1, extensionsBuilt 3 + 7 sites, farthestFromSpawn 6, 10 creeps
+  - every other M3 criterion passing). Root cause: replay step 2 (a87ecf7,
+  the owner-specified fff12dc "container wins the tile") puts the container
+  site on the contested pocket tile (40,13), Source B's only walkable
+  neighbour; the M3 harness flood fill (acceptance-m3.test.ts SNAPSHOT)
+  counts built roads and road sites only, so a container site on the
+  endpoint tile disconnects Source B. The step 2 note called the scorecard's
+  reach 2/2 -> 1/2 "a harness flood-fill artifact, M4 asserts no road
+  reach" - true for M4, but M3 line 133 asserts it, so it was a latent M3
+  break. Fix: invert the contested-tile ownership in
+  src/managers/constructionManager.ts (placeContainerSites now takes the
+  road-network tiles and withholds the site on a road tile until a built
+  road is on it; placeRoadSites removes a legacy container site on a road
+  tile and creates the road site; once the road is built the container site
+  goes on the same tile - structures share a tile, construction sites do
+  not). The M5 property step 2 preserved still holds: the container ends up
+  on the pocket tile, after the road. test/unit/constructionManager.test.ts:
+  the two "container wins the tile" tests (added by a87ecf7, asserting the
+  now-removed behavior) are replaced by three pocket-tile tests (road site
+  preserved and container withheld while the road is unbuilt; container
+  placed once the road is built; legacy container site removed and replaced
+  by the road site). The unit tests are agent-owned and asserted a behavior
+  the protected M3 acceptance test forbids, so they change with the code.
+  Lint and build clean, 129 unit passing (128 + 3 - 2). M3 re-run in
+  progress; M4 has no road/container criteria (checked
+  acceptance-m4.test.ts), so the step 6 M4 run is covered by the full
+  suite.
 ### 2026-11-08 (M4 replay started: owner reset to 040eef6, feedback v9.1 acknowledged)
 - Owner reset main to 040eef6 (the last commit where M4 passes) and moved all M4
   attempts to backup/m4-attempts-2026-11-08 (feedback v9.1). Objective of this and
@@ -848,6 +890,14 @@ yet.
      files are byte-identical to the earlier bf9b796 application; lint/build
      clean, 128 unit passing (126 + 2). M4 acceptance is the last run of the
      replay; if it fails: revert, note the numbers, stop.
+     GATE FIX 2026-11-09 (before the step 6 M4 run): the full-suite gate on
+     e996131 failed M3 (sourcesConnected 1 of 2 - the step 2 container site
+     owns the pocket tile (40,13), Source B's only walkable neighbour, and
+     the M3 flood fill counts roads only). Fixed by inverting the
+     contested-tile ownership in constructionManager.ts (road wins the
+     tile, container waits for the built road, then the two coexist);
+     129 unit passing. M3 re-run in progress, then the full suite
+     (covers the step 6 M4 run).
      PRE-ANALYSIS (verified): the cherry-pick base for src/roles/builder.ts
      IS our current blob (af1a44d), so after step 4's manual edits the only
      overlap is the selectBuildSite doc comment - step 4 adds the @param
@@ -972,6 +1022,29 @@ yet.
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
 
 ## Known Issues / Notes
+- **M3 road reach failed in the 2026-11-09 full-suite gate on e996131 -
+  fixed, re-run in progress (2026-11-09).** The gate ran M1 and M2 (both
+  passing) and failed M3 on "a connected road leads from the spawn to every
+  source": sourcesConnected 1 of 2 (full snapshot in the Change Log; every
+  other M3 criterion passing with margin). Root cause: replay step 2
+  (a87ecf7, owner-specified fff12dc "container wins the tile") puts the
+  container site on the contested pocket tile (40,13), Source B's only
+  walkable neighbour, and the M3 harness flood fill counts built roads and
+  road sites only - a container site on the endpoint tile disconnects
+  Source B from the road network. The step 2 verification note called the
+  scorecard's reach 2/2 -> 1/2 "a harness flood-fill artifact, M4 asserts
+  no road reach" - true for M4, but M3 line 133 asserts exactly that, so it
+  was a latent M3 break, not an artifact. Fix (this run): invert the
+  contested-tile ownership - placeContainerSites takes the road-network
+  tiles and withholds the site on a road tile until a built road is on it;
+  placeRoadSites removes a legacy container site on a road tile and creates
+  the road site; once the road is built the container site goes on the same
+  tile (the engine allows a built road and a container to share a tile,
+  construction sites cannot). The M5 property step 2 preserved still holds:
+  the container ends up on the pocket tile, after the road is built. Safety
+  checked: M2 (needs roadsBuilt >= 1 and 5+ road tiles; the pocket tile
+  gains a road site) and M4 (no road/container criteria in
+  acceptance-m4.test.ts) are unaffected.
 - **Step 5 parking (b00c0e1) broke M4 - reverted per owner protocol, NOT repaired
   (2026-11-09).** Re-applied on the step 4 tree as 06733fc (130 unit passing), M4
   acceptance FAILED: extensionsBuilt 1 (needs 3), energyCapacity 350 (needs 450);

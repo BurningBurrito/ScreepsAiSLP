@@ -15,28 +15,24 @@
  *
  * Layout invariant: the road network is the skeleton of the room. Extensions
  * and towers are never placed on a road tile, because the acceptance tests
- * measure connectivity over road tiles only. Containers are the exception:
- * the engine allows a road and a container to share a tile (real Screeps does
- * too), and the flood fill counts road objects, so a container on the network
- * does not open a hole in it. The exception is required, not optional: a
- * wall-pocket source may have exactly one walkable neighbour tile and it can
- * be the road tile - excluding road tiles would leave such a source with no
- * container position at all (W0N1 source at 39,14, M5 failure of 2026-11-02).
+ * measure connectivity over road tiles only. Containers may share a tile
+ * with a road (the engine allows it, and real Screeps does too), but on such
+ * a tile the ROAD comes first: the M3 acceptance flood fill counts road
+ * objects only (sites and built roads), so while the road is still unbuilt a
+ * container site on the same tile would open a hole in the network and fail
+ * "connected roads from spawn to all sources" - the engine allows at most
+ * one construction site per tile, so both cannot sit there at once (M3
+ * failure of 2026-11-06: W0N1's source at 39,14 has exactly one walkable
+ * neighbour, 40,13, which is the road's end tile). The container follows
+ * once the road is BUILT: road and container structures may share a tile,
+ * so the pocket source still gets its container - just not before the road
+ * (placeContainerSites gates on the built road, placeRoadSites takes the
+ * tile back if an old container site stands there). The in-game flood fill
+ * (areSourcesAndControllerConnected) counts container sites and containers
+ * as road tiles as well, so the network reads as connected either way.
  * Road sites that are missing from the network are re-attempted every tick
  * (existingRoadPositions check), so a single failed createConstructionSite
  * cannot permanently break the route.
- *
- * Site conflict (M5 failure of 2026-11-03, owner feedback 2026-11-04): the
- * engine allows at most ONE construction site per tile, so a road site on a
- * container candidate tile blocks the container site forever -
- * createConstructionSite just returns ERR_INVALID_TARGET every tick. The
- * container wins the tile: placeContainerSites removes the blocking road
- * site and places the container; while the container site stands,
- * placeRoadSites skips the tile (a road site cannot join it), and once the
- * container is BUILT the road site is re-placed on the same tile (road and
- * container structures may share a tile). The flood fill counts container
- * sites and built containers as road tiles so the network stays
- * "connected" through that window.
  */
 
 import { RAMPART_MIN_LEVEL, SPAWN_KEEP_CLEAR_RANGE, TOWER_SITE_DEEP_CANDIDATES, TOWER_SITE_DEEP_RANGES, TOWER_SITE_RANGES } from "config";
@@ -562,18 +558,33 @@ function placeRoadSites(room: Room, roadPositions: RoomPosition[]): number
             continue;
         }
 
-        // While a container SITE stands on this tile, a road site cannot be
-        // placed (the engine allows one construction site per tile). The
-        // container wins until it is built; then this same tile takes its
-        // road site and the road and the container share the tile (see
-        // placeContainerSites). Skipping keeps the network from spinning on
-        // a createConstructionSite that can never succeed.
+        // A container SITE on this road tile means a pre-M3-fix world (or a
+        // placement order we did not expect): the road must be there first,
+        // so remove the container site and take the tile for the road.
+        // remove() is immediate, not an intent, so the road site goes on
+        // the same tick; the container is placed again on top of the built
+        // road by placeContainerSites. Once the road is BUILT, a container
+        // site on the tile is the finished pair (road and container
+        // structures may share a tile) and is left alone.
         const hasContainerSite = pos.lookFor(LOOK_CONSTRUCTION_SITES).some(
             (site) => site.structureType === STRUCTURE_CONTAINER,
         );
         if (hasContainerSite)
         {
-            continue;
+            const hasBuiltRoad = pos.lookFor(LOOK_STRUCTURES).some(
+                (structure) => structure.structureType === STRUCTURE_ROAD,
+            );
+            if (hasBuiltRoad)
+            {
+                continue; // the pair is complete - the container stays
+            }
+            for (const site of pos.lookFor(LOOK_CONSTRUCTION_SITES))
+            {
+                if (site.structureType === STRUCTURE_CONTAINER)
+                {
+                    site.remove();
+                }
+            }
         }
 
         // createConstructionSite queues an intent; a missing tile that failed
@@ -841,10 +852,15 @@ function placeRampartSites(room: Room, structures: Structure[]): void
  *
  * A container may share its tile with a road (see the layout invariant in the
  * file header), so the road network is NOT excluded here - and a tile that
- * only holds a road (built or site) is not "occupied". Every other structure
- * or site does occupy the tile: only one non-road structure fits, and a
- * container site already placed for this source is the success case the
- * per-source check above skips.
+ * only holds a road (built or site) is not "occupied": a wall-pocket source
+ * may have exactly one walkable neighbour, and it can be the road's end
+ * tile, so excluding road tiles would leave that source without any
+ * container at all. The ORDER on a shared tile is enforced by
+ * placeContainerSites, which places the container only after the road is
+ * built (the M3 acceptance flood fill needs the road there first). Every
+ * other structure or site does occupy the tile, and a container site
+ * already placed for this source is the success case the per-source check
+ * above skips.
  */
 function computeContainerPositions(room: Room): RoomPosition[]
 {
@@ -984,17 +1000,19 @@ function computeContainerPositions(room: Room): RoomPosition[]
 /**
  * Place container construction sites, one per tick.
  *
- * The container wins a contested tile: when the chosen position holds a
- * road construction site, that site is removed first. The engine allows at
- * most one construction site per tile, so without the removal
- * createConstructionSite returns ERR_INVALID_TARGET every tick and the
- * source keeps no container at all (M5 failure of 2026-11-03, owner
- * feedback 2026-11-04). The road gets its tile back after the container is
- * built: road and container structures may share a tile (placeRoadSites).
+ * On a road-network tile the ROAD comes first (see the layout invariant in
+ * the file header): the M3 acceptance flood fill counts road objects only,
+ * so while the road is still unbuilt a container site on the same tile
+ * would open a hole in the network and fail "connected roads to all
+ * sources". The container therefore waits for the built road and is placed
+ * on top of it once the road is finished - road and container structures
+ * may share a tile, so the pocket source still gets its container. On any
+ * non-road tile the container is placed as soon as the tile is free.
  * @param room The room to place sites in.
  * @param containerPositions Candidate positions, one per source, best first.
+ * @param roadNetworkTiles Every tile of the computed road paths ("x,y").
  */
-function placeContainerSites(room: Room, containerPositions: RoomPosition[]): void
+function placeContainerSites(room: Room, containerPositions: RoomPosition[], roadNetworkTiles: Set<string>): void
 {
     const containersBuilt = room.find(FIND_STRUCTURES, {
         filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
@@ -1021,13 +1039,18 @@ function placeContainerSites(room: Room, containerPositions: RoomPosition[]): vo
             continue;
         }
 
-        // The container wins the tile: remove any blocking road site before
-        // placing (see the function doc for why the removal is required).
-        for (const site of sites)
+        // On a road-network tile the road is placed before the container:
+        // wait until the road is BUILT, then place the container on top of
+        // it. While the road is still a site - or not placed yet, this
+        // function runs before placeRoadSites on the same tick - a
+        // container here would remove the road tile the M3 flood fill
+        // needs (the engine allows at most one site per tile).
+        if (roadNetworkTiles.has(`${pos.x},${pos.y}`))
         {
-            if (site.structureType === STRUCTURE_ROAD)
+            const hasBuiltRoad = structures.some((s) => s.structureType === STRUCTURE_ROAD);
+            if (!hasBuiltRoad)
             {
-                site.remove();
+                continue;
             }
         }
 
@@ -1299,12 +1322,12 @@ export function manageConstruction(room: Room): void
         ? computeExtensionPositions(room, towerReserveTiles, extensionLimit)
         : [];
 
-    // Compute container positions (third priority), excluding the road
-    // network and the reserved tower tiles
     // Compute container positions (third priority). Unlike extensions and
     // towers they are NOT kept off the road network: a container may share
     // its tile with a road, which is the only option for a wall-pocket
-    // source (see the layout invariant in the file header).
+    // source (see the layout invariant in the file header). On a road tile
+    // the road comes first, so placeContainerSites gates the placement on
+    // the BUILT road (roadNetworkTiles).
     const containerPositions = computeContainerPositions(room);
 
     // Place tower sites first (highest priority)
@@ -1317,7 +1340,7 @@ export function manageConstruction(room: Room): void
     placeExtensionSites(room, extensionPositions, extensionLimit);
 
     // Place container sites (third priority)
-    placeContainerSites(room, containerPositions);
+    placeContainerSites(room, containerPositions, roadNetworkTiles);
 
     // Place road sites on computed paths (lowest priority)
     const shouldPlace = shouldPlaceRoadSites(room);

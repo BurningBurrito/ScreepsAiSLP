@@ -622,7 +622,7 @@ describe("manageConstruction tower placement in a cramped room (owner feedback 2
     });
 });
 
-describe("container site placement on a contested pocket tile (M5, owner feedback 2026-11-04)", () => {
+describe("container and road sharing a pocket tile (M5 owner feedback 2026-11-04, M3 road-first fix 2026-11-06)", () => {
     beforeEach(() => {
         tiles = new Map();
         setGlobal("OK", OK);
@@ -648,8 +648,9 @@ describe("container site placement on a contested pocket tile (M5, owner feedbac
      * neighbour tile, (11,11) - its other seven neighbours are natural
      * walls. The (40,40) source keeps its full open neighbourhood. The
      * road network to the pocket source runs through the pocket tile, which
-     * is why the M5 room had a road site there and the container site could
-     * never be created (one construction site per tile in the engine).
+     * is why the M3 room had a road site there and the container site must
+     * wait for the built road (the engine allows one construction site per
+     * tile, and the acceptance flood fill counts road objects only).
      */
     function makePocketRoom(): any
     {
@@ -663,27 +664,36 @@ describe("container site placement on a contested pocket tile (M5, owner feedbac
         return room;
     }
 
-    it("removes the blocking road site and places the container site on the only free pocket tile", () => {
+    it("keeps the road site on the pocket tile and withholds the container until the road is built", () => {
         const room = makePocketRoom();
-        // The road site on the pocket's only free tile: the exact M5
-        // deadlock, where createConstructionSite for the container returned
-        // ERR_INVALID_TARGET every tick and source A kept no container.
+        // The road site on the pocket's only free tile: the exact M3 state,
+        // where the container grabbed this tile and the acceptance flood
+        // fill (roads only) saw the source as disconnected.
         room.createConstructionSite(new PositionMock(11, 11, "W0N1"), STRUCTURE_ROAD);
-        assert.include(sitePositions(room, STRUCTURE_ROAD), "11,11", "sanity: the road site blocks the tile");
+        assert.include(sitePositions(room, STRUCTURE_ROAD), "11,11", "sanity: the road site holds the tile");
         manageConstruction(room);
-        assert.include(sitePositions(room, STRUCTURE_CONTAINER), "11,11", "the container wins the pocket tile");
-        assert.notInclude(sitePositions(room, STRUCTURE_ROAD), "11,11", "the blocking road site is removed");
-        assert.equal(sitePositions(room, STRUCTURE_CONTAINER).length, 1, "one container site per tick (source A's first)");
+        assert.include(sitePositions(room, STRUCTURE_ROAD), "11,11", "the road keeps the pocket tile");
+        assert.notInclude(sitePositions(room, STRUCTURE_CONTAINER), "11,11", "no container site while the road is unbuilt");
     });
 
-    it("does not place a road site on a tile that already holds a container site", () => {
+    it("places the container on the pocket tile once the road there is built", () => {
         const room = makePocketRoom();
-        // The container site already owns the pocket tile (the state after
-        // the first manageConstruction of the previous test).
+        // The road on the pocket tile is finished: now the container may
+        // share the tile (the engine allows a road and a container structure
+        // on one tile), which is what the pocket source needs.
+        addStructure(room, 11, 11, STRUCTURE_ROAD);
+        manageConstruction(room);
+        assert.include(sitePositions(room, STRUCTURE_CONTAINER), "11,11", "the container lands on the built road");
+    });
+
+    it("takes the pocket tile back from a pre-fix container site and puts the road there", () => {
+        const room = makePocketRoom();
+        // A world built by the pre-M3-fix code: the container site owns the
+        // pocket tile and no road (site or built) is there.
         room.createConstructionSite(new PositionMock(11, 11, "W0N1"), STRUCTURE_CONTAINER);
         manageConstruction(room);
-        assert.include(sitePositions(room, STRUCTURE_CONTAINER), "11,11", "the existing container site survives");
-        assert.notInclude(sitePositions(room, STRUCTURE_ROAD), "11,11", "no road site joins the container site's tile");
+        assert.include(sitePositions(room, STRUCTURE_ROAD), "11,11", "the road site replaces the legacy container site");
+        assert.notInclude(sitePositions(room, STRUCTURE_CONTAINER), "11,11", "the legacy container site is removed");
         assert.include(sitePositions(room, STRUCTURE_CONTAINER), "39,39", "source B still gets its own site this tick");
     });
 });
