@@ -287,19 +287,3 @@ export const CONTROLLER_CONTAINER_RANGE = 3;
  * The level-5 tower capacity is 1000 energy, so this is half a tank.
  */
 export const TOWER_REFILL_PRIORITY_ENERGY = 500;
-
-/**
- * Creep parking area (M4, owner feedback 2026-11-06): the parking tile is
- * the first free tile on the CHEBYSHEV rings around the spawn, searching
- * from PARKING_RING_START outward to PARKING_RING_END. The rings start
- * outside the extension layout (which at level 5 reaches Manhattan
- * distance 8 from the spawn), so a parked creep can never stand on an
- * extension site; planned extension/tower/container tiles and the road
- * network are excluded too. The construction manager recomputes the tile
- * whenever it becomes invalid (a structure or site built on it, the
- * layout reserved it, Memory wiped by a global reset).
- */
-export const PARKING_RING_START = 5;
-
-/** Outer limit of the parking ring search (see PARKING_RING_START). */
-export const PARKING_RING_END = 10;

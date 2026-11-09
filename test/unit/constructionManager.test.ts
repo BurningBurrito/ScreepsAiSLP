@@ -12,7 +12,7 @@
  * searches run exactly as they do in-game.
  */
 import {assert} from "chai";
-import {getParkingPosition, manageConstruction} from "../../src/managers/constructionManager";
+import {manageConstruction} from "../../src/managers/constructionManager";
 
 // Screeps constants referenced as globals by constructionManager.ts. The
 // mock room below dispatches on these exact numbers, so they only have to
@@ -217,20 +217,6 @@ function sitePositions(room: any, structureType: string): string[]
         .filter((s: any) => s.structureType === structureType)
         .map((s: any) => `${s.pos.x},${s.pos.y}`);
 }
-
-// A fresh Memory for every test in this file. manageConstruction now writes
-// the parking tile into Memory.rooms, and the test mocks clone Memory only
-// shallowly - their rooms object is one shared instance across all test
-// files. Without this hook the parking tile written here would leak into
-// the harvester/hauler files, whose room mocks lack getTerrain and would
-// crash the roles' parking check.
-beforeEach(() => {
-    setGlobal("Memory", {rooms: {}});
-});
-afterEach(() => {
-    // Drop the global so the next file's own beforeEach starts clean.
-    setGlobal("Memory", undefined);
-});
 
 describe("manageConstruction tower and extension layout (M4 regression)", () => {
     beforeEach(() => {
@@ -770,98 +756,5 @@ describe("manageConstruction spawn parking ring (M4 builder/extension deadlock, 
         assert.equal(towerSites.length, 1, "one second-tower site");
         assert.include(towerSites, "25,27", "the second tower stays at Chebyshev range 2");
         assert.notInclude(towerSites, "24,26", "no tower on the spawn's diagonal parking tile");
-    });
-});
-
-describe("manageConstruction parking area (M4 stall fix, owner feedback 2026-11-06)", () => {
-    beforeEach(() => {
-        tiles = new Map();
-        setGlobal("OK", OK);
-        setGlobal("FIND_SOURCES", FIND_SOURCES);
-        setGlobal("FIND_MY_SPAWNS", FIND_MY_SPAWNS);
-        setGlobal("FIND_CONSTRUCTION_SITES", FIND_CONSTRUCTION_SITES);
-        setGlobal("FIND_MY_STRUCTURES", FIND_MY_STRUCTURES);
-        setGlobal("FIND_STRUCTURES", FIND_STRUCTURES);
-        setGlobal("LOOK_STRUCTURES", LOOK_STRUCTURES);
-        setGlobal("LOOK_CONSTRUCTION_SITES", LOOK_CONSTRUCTION_SITES);
-        setGlobal("STRUCTURE_TOWER", STRUCTURE_TOWER);
-        setGlobal("STRUCTURE_EXTENSION", STRUCTURE_EXTENSION);
-        setGlobal("STRUCTURE_CONTAINER", STRUCTURE_CONTAINER);
-        setGlobal("STRUCTURE_ROAD", STRUCTURE_ROAD);
-        setGlobal("STRUCTURE_RAMPART", STRUCTURE_RAMPART);
-        setGlobal("STRUCTURE_WALL", STRUCTURE_WALL);
-        setGlobal("TERRAIN_MASK_WALL", TERRAIN_MASK_WALL);
-        setGlobal("RoomPosition", PositionMock);
-    });
-
-    it("caches a free parking tile on a ring around the spawn, outside the layout", () => {
-        const room = makeRoom();
-        manageConstruction(room);
-
-        const roomMemory = (global as any).Memory.rooms["W0N1"];
-        assert.isDefined(roomMemory, "the parking tile is cached in the room memory");
-        assert.match(roomMemory.parkingPos, /^\d+,\d+$/, "the cache is an \"x,y\" string");
-
-        const x = Number(roomMemory.parkingPos.split(",")[0]);
-        const y = Number(roomMemory.parkingPos.split(",")[1]);
-        const spawn = room.spawn.pos;
-        const range = Math.max(Math.abs(x - spawn.x), Math.abs(y - spawn.y));
-        assert.isAtLeast(range, 5, "the tile sits outside the extension layout (rings 2-4)");
-        assert.isAtMost(range, 10, "the tile is still a short move from the spawn");
-
-        // Not on any tile the layout occupies or plans to occupy.
-        const layout = new Set<string>();
-        for (const thing of [...room.sites, ...room.structures])
-        {
-            layout.add(`${thing.pos.x},${thing.pos.y}`);
-        }
-        assert.isFalse(layout.has(`${x},${y}`), "the parking tile is not an extension, tower, container or rampart site");
-    });
-
-    it("hands the cached tile to the roles through getParkingPosition", () => {
-        const room = makeRoom();
-        manageConstruction(room);
-        const cached = (global as any).Memory.rooms["W0N1"].parkingPos.split(",").map(Number);
-        const parking = getParkingPosition(room);
-        assert.isNotNull(parking, "the roles can read the parking tile");
-        assert.equal(parking.x, cached[0], "the position is the cached tile");
-        assert.equal(parking.y, cached[1], "the position is the cached tile");
-    });
-
-    it("keeps the cached tile while it stays free, and recomputes when it is taken", () => {
-        const room = makeRoom();
-        manageConstruction(room);
-        const first = (global as any).Memory.rooms["W0N1"].parkingPos;
-        manageConstruction(room);
-        const second = (global as any).Memory.rooms["W0N1"].parkingPos;
-        assert.equal(second, first, "a free tile is kept, not recomputed every tick");
-
-        // A structure lands on the tile: the next pass must recompute.
-        const x = Number(first.split(",")[0]);
-        const y = Number(first.split(",")[1]);
-        addStructure(room, x, y, STRUCTURE_EXTENSION);
-        manageConstruction(room);
-        const third = (global as any).Memory.rooms["W0N1"].parkingPos;
-        assert.notEqual(third, first, "a taken tile is recomputed");
-        assert.isNotNull(getParkingPosition(room), "the new tile is handed to the roles");
-    });
-
-    it("returns null from getParkingPosition when there is no cache or the tile is taken", () => {
-        const room = makeRoom();
-        assert.isNull(getParkingPosition(room), "no cache yet: the roles fall back to the spawn");
-
-        // Without Memory at all (outside the game sandbox): silently null.
-        setGlobal("Memory", undefined);
-        assert.isNull(getParkingPosition(room), "no Memory: the roles fall back to the spawn");
-        setGlobal("Memory", {rooms: {}});
-
-        (global as any).Memory.rooms["W0N1"] = {parkingPos: "30,30"};
-        const free = getParkingPosition(room);
-        assert.isNotNull(free, "a cached free tile is returned");
-        assert.equal(`${free.x},${free.y}`, "30,30");
-
-        // A structure on the tile: the cache is stale, fall back.
-        addStructure(room, 30, 30, STRUCTURE_EXTENSION);
-        assert.isNull(getParkingPosition(room), "a taken tile is not handed out");
     });
 });

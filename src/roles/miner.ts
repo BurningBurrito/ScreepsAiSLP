@@ -26,7 +26,6 @@
  * source so a hauler can still collect what it harvests.
  */
 
-import { getParkingPosition } from "managers/constructionManager";
 import { moveToToward } from "utils/movement";
 
 /**
@@ -110,26 +109,11 @@ export function runMiner(creep: Creep): void
 }
 
 /**
- * Parks a miner that lost its source at the room's parking area (M4,
- * owner feedback 2026-11-06) - outside the spawn's own ring, where the
- * extension sites and their builders are, so it can never block a
- * builder. Until the construction manager has cached a parking position
- * (early room, or right after a global reset), the old fallback holds:
- * wait a couple of tiles from the spawn.
+ * Parks a miner that lost its source a couple of tiles from the spawn.
  * @param creep The miner to park
  */
 function parkNearSpawn(creep: Creep): void
 {
-    const parking = getParkingPosition(creep.room);
-    if (parking !== null)
-    {
-        if (creep.pos.getRangeTo(parking) > 0)
-        {
-            moveToToward(creep, parking, 0);
-        }
-        return;
-    }
-
     const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
     if (spawn === undefined)
     {

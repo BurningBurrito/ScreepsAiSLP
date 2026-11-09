@@ -29,7 +29,6 @@ import {
     PARTIAL_DELIVERY_FRACTION,
     TOWER_ENERGY_RESERVE
 } from "config";
-import { getParkingPosition } from "managers/constructionManager";
 import { moveToToward } from "utils/movement";
 import { pickSourceClosestTo } from "utils/pickSource";
 
@@ -278,19 +277,12 @@ export function runHarvester(creep: Creep): void
                 }
             }
 
-            // Nothing - every spawn and extension full, every tower at its
-            // reserve - could take the load. Do NOT drop it: the old code
-            // dropped the load on the tile the creep stood on (the spawn's
-            // ring, where the extension sites and their builders are) and
-            // the energy sat on the floor until something walked past it
-            // (M4, owner feedback 2026-11-06). Park at the room's parking
-            // area WITH the load instead: the energy stays in the carry,
-            // the creep leaves the builders' tiles, and on the first tick
-            // a target frees up the delivery loop above finds it and walks
-            // back. working stays true: the load is still ours.
+            // Nothing - extensions full and every tower at its reserve -
+            // could take the load: drop it so a builder can pick it up.
             if (!deliveredToTower)
             {
-                parkWithLoad(creep);
+                creep.drop(RESOURCE_ENERGY);
+                creep.memory.working = false;
                 creep.memory.deliveryAttempts = 0;
                 return;
             }
@@ -300,29 +292,5 @@ export function runHarvester(creep: Creep): void
     {
         // Reset delivery attempts if we're not in working mode
         creep.memory.deliveryAttempts = 0;
-    }
-}
-
-/**
- * Parks a harvester that carries energy nothing can take, on the room's
- * parking area (M4, owner feedback 2026-11-06) - outside the spawn's own
- * ring, where the extension sites and their builders are. The load stays
- * in the carry: the delivery phase re-runs on the next tick (working is
- * still true), and on the first tick a target frees up the creep walks
- * back and delivers it. Without a cached parking position (early room, or
- * right after a global reset) the creep stands where it is and retries
- * next tick.
- * @param creep The harvester to park
- */
-function parkWithLoad(creep: Creep): void
-{
-    const parking = getParkingPosition(creep.room);
-    if (parking === null)
-    {
-        return;
-    }
-    if (creep.pos.getRangeTo(parking) > 0)
-    {
-        moveToToward(creep, parking, 0);
     }
 }
