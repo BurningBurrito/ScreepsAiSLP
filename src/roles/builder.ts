@@ -120,6 +120,34 @@ import { moveToToward } from "utils/movement";
 import { upgraderBelowMinimum } from "managers/spawnManager";
 
 /**
+ * Whether another one of our creeps stands on a construction site's tile.
+ *
+ * build() needs the builder to be the only object on the site's tile -
+ * while a waiting creep sits there the call returns ERR_INVALID_TARGET.
+ * Waiting creeps (harvesters delivering energy, haulers parked by the
+ * spawn) end their moves on the tiles around the spawn, so a site there
+ * is blocked for as long as deliveries keep coming. That is the M4
+ * builder/extension deadlock (owner feedback 2026-11-05, extensionsBuilt
+ * 0 of 3): the blocked site holds the most progress, so it keeps winning
+ * the focus every tick, and the crew spins without finishing anything.
+ * @param site The construction site considered as a build target
+ * @param builder The builder that would work it (excluded from the check)
+ * @returns True when a waiting creep blocks the site's tile
+ */
+function isBlockedByWaitingCreeps(site: ConstructionSite, builder: Creep): boolean
+{
+    const onTile = site.pos.lookFor(LOOK_CREEPS);
+    for (const other of onTile)
+    {
+        if (other.id !== builder.id && other.my)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Selects the next construction site for a builder.
  *
  * Priority (M4): in defend or war mode the rampart sites come first;
@@ -131,13 +159,16 @@ import { upgraderBelowMinimum } from "managers/spawnManager";
  * free-for-all.
  * @param creep The builder that needs a target (used for pathing)
  * @param room The room to search
+ * @param excludeIds Site ids to skip (the ERR_INVALID_TARGET retry passes
+ *        in the site the engine just refused, so the load goes to the next
+ *        best target instead of back to refill)
  * @returns The selected site, or null when nothing is under construction
  */
-function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
+function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<string> = new Set()): ConstructionSite | null
 {
     const sitesOf = (type: BuildableStructureConstant): ConstructionSite[] =>
         room.find(FIND_CONSTRUCTION_SITES, {
-            filter: (site) => site.structureType === type,
+            filter: (site) => site.structureType === type && !excludeIds.has(site.id),
         });
 
     // Rampart focus: the crew works the most advanced rampart (highest
@@ -207,7 +238,9 @@ function selectBuildSite(creep: Creep, room: Room): ConstructionSite | null
     // all compute the same focus from shared room state: no Memory, and a
     // global reset cannot desynchronise the crew. Finishing a site raises
     // the room's energy capacity, which is what the milestone measures.
-    const extensionSites = sitesOf(STRUCTURE_EXTENSION);
+    const extensionSites = sitesOf(STRUCTURE_EXTENSION).filter(
+        (site) => !isBlockedByWaitingCreeps(site, creep),
+    );
     if (extensionSites.length > 0)
     {
         const spawn = room.find(FIND_MY_SPAWNS)[0];
@@ -363,8 +396,36 @@ export function runBuilder(creep: Creep): void
                 return;
             }
 
-            // ERR_NOT_ENOUGH_RESOURCES (store below one build tick's cost) or
-            // ERR_INVALID_TARGET (the site vanished): fall through and refill.
+            if (buildResult === ERR_INVALID_TARGET)
+            {
+                // Owner feedback 2026-11-06: the engine refuses build() while
+                // ANOTHER own creep stands on the tile (or the site just
+                // vanished) - that is NOT "out of energy". The old code
+                // fell through to refill, which threw the whole loaded
+                // store away and restarted the build-refill loop on every
+                // contested tile (the M4 builder/extension stall: progress
+                // grew, nothing finished). The load is still ours, so try
+                // the next best site with it - same priorities, same
+                // blocked-tile skip - before falling back to refill.
+                const next = selectBuildSite(creep, room, new Set([site.id]));
+                if (next !== null)
+                {
+                    const retry = creep.build(next);
+                    if (retry === OK)
+                    {
+                        return;
+                    }
+
+                    if (retry === ERR_NOT_IN_RANGE)
+                    {
+                        moveToToward(creep, next, 3);
+                        return;
+                    }
+                }
+            }
+
+            // ERR_NOT_ENOUGH_RESOURCES (store below one build tick's cost),
+            // or the retry also failed: fall through and refill.
         }
         else
         {

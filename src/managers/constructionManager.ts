@@ -39,7 +39,7 @@
  * "connected" through that window.
  */
 
-import { RAMPART_MIN_LEVEL, TOWER_SITE_DEEP_CANDIDATES, TOWER_SITE_DEEP_RANGES, TOWER_SITE_RANGES } from "config";
+import { RAMPART_MIN_LEVEL, SPAWN_KEEP_CLEAR_RANGE, TOWER_SITE_DEEP_CANDIDATES, TOWER_SITE_DEEP_RANGES, TOWER_SITE_RANGES } from "config";
 import { isValidTile } from "utils/positions";
 
 // "structureType@x,y" keys of failed site placements already logged this
@@ -285,6 +285,20 @@ function computeExtensionPositions(room: Room, excludeTiles: Set<string>, limit:
                 continue;
             }
 
+            // Skip the spawn's parking ring (SPAWN_KEEP_CLEAR_RANGE, see
+            // config): the diagonal tiles of this very ring are where
+            // creeps end a moveTo to the spawn - energy deliveries and
+            // parked haulers. A site on one of them is unbuildable for as
+            // long as a delivery sits on the tile (build() needs the
+            // builder alone on the tile), and as the "focus" site (most
+            // progress) that spins the whole crew: the M4
+            // builder/extension deadlock, 0 of 3 extensions finished
+            // (owner feedback 2026-11-05).
+            if (pos.getRangeTo(spawn) <= SPAWN_KEEP_CLEAR_RANGE)
+            {
+                continue;
+            }
+
             // Skip if not on checkerboard pattern
             const posParity = (pos.x + pos.y) % 2;
             if (posParity !== spawnParity)
@@ -414,6 +428,18 @@ function computeTowerPositions(
             // Never place the tower on a road tile (keeps the road network
             // connected for the acceptance flood-fill).
             if (excludeTiles.has(`${pos.x},${pos.y}`))
+            {
+                continue;
+            }
+
+            // Skip the spawn's parking ring (SPAWN_KEEP_CLEAR_RANGE, see
+            // config): the diamond ring 2 walks the diagonal tiles of the
+            // spawn's own Chebyshev range-1 ring first, and a tower site
+            // there is unbuildable while deliveries occupy the tile - the
+            // same deadlock the extension search avoids (owner feedback
+            // 2026-11-05). The axial tiles of diamond ring 2 sit at
+            // Chebyshev range 2 and stay valid tower positions.
+            if (pos.getRangeTo(spawn) <= SPAWN_KEEP_CLEAR_RANGE)
             {
                 continue;
             }

@@ -206,6 +206,20 @@ export const TOWER_SITE_DEEP_RANGES: number[] = [6, 7, 8];
 export const TOWER_SITE_DEEP_CANDIDATES = 96;
 
 /**
+ * Layout (see computeTowerPositions and computeExtensionPositions in
+ * managers/constructionManager): the Chebyshev range around the spawn that
+ * stays free of extension and tower sites. The eight tiles inside it are
+ * where a creep ends a moveTo to the spawn (energy delivery, parking) - it
+ * cannot stand on the spawn's own tile, so it stops on one of these.
+ * build() needs the builder to be the only object on the site's tile, so an
+ * extension or tower site here is unbuildable for as long as deliveries
+ * keep coming, and a blocked "focus" site (the one with the most progress)
+ * spins the whole crew in place. This was the M4 builder/extension
+ * deadlock: 0 of 3 extensions finished (owner feedback 2026-11-05).
+ */
+export const SPAWN_KEEP_CLEAR_RANGE = 1;
+
+/**
  * Energy a tower keeps in reserve for its defense duty. The tower only
  * repairs (ramparts, roads, containers) while it holds strictly more than
  * this, and harvesters only refill it while it holds strictly less. 500

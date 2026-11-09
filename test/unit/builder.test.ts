@@ -7,6 +7,7 @@ import "../../src/types/memory";
 
 // Define Screeps constants for tests (real values from @types/screeps)
 const RESOURCE_ENERGY = "energy";
+const ERR_INVALID_TARGET = -8;
 const FIND_SOURCES = 105;
 const FIND_SOURCES_ACTIVE = 104;
 const FIND_DROPPED_RESOURCES = 106;
@@ -20,11 +21,13 @@ const STRUCTURE_TOWER = "tower";
 const STRUCTURE_ROAD = "road";
 const STRUCTURE_CONTAINER = "container";
 const TERRAIN_MASK_WALL = 1;
+const LOOK_CREEPS = 2;
 
 /**
  * Builds a position mock that measures Chebyshev distance (the real
  * RoomPosition.getRangeTo), so the source-ranking logic under test behaves
- * exactly as it does in-game.
+ * exactly as it does in-game. lookFor reports no objects on any tile - the
+ * blocked-site tests (isBlockedByWaitingCreeps) override it per site.
  * @param x The x coordinate.
  * @param y The y coordinate.
  * @returns A position-like object with a working getRangeTo.
@@ -35,6 +38,7 @@ function pos(x: number, y: number): any
         x,
         y,
         getRangeTo: (target: any) => Math.max(Math.abs(target.x - x), Math.abs(target.y - y)),
+        lookFor: (): any[] => [],
     };
 }
 
@@ -268,6 +272,10 @@ describe("builder", () => {
         global.ERR_NOT_IN_RANGE = ERR_NOT_IN_RANGE;
         // @ts-ignore
         global.OK = OK;
+        // @ts-ignore
+        global.ERR_INVALID_TARGET = ERR_INVALID_TARGET;
+        // @ts-ignore
+        global.LOOK_CREEPS = LOOK_CREEPS;
         // @ts-ignore : movement.ts counts MOVE parts in the body
         global.MOVE = "move";
         // @ts-ignore : pickSource.ts probes terrain for walls
@@ -413,6 +421,81 @@ describe("builder", () => {
         runBuilder(creep);
 
         assert.equal(calls.lastBuilt, "ext1", "equal progress goes to the spawn-side site");
+    });
+
+    it("skips an extension site whose tile is occupied by a waiting creep", () => {
+        // M4 builder/extension deadlock (owner feedback 2026-11-05): the
+        // layout put an extension site on a tile around the spawn, where a
+        // harvester delivering energy stands to finish its moveTo. build()
+        // needs the builder alone on the tile (ERR_INVALID_TARGET while the
+        // delivery is there), and since the blocked site holds the most
+        // progress it kept winning the focus every tick: 0 of 3 extensions
+        // finished. The focus must skip the blocked tile and build the next
+        // most advanced site instead; when the tile clears, the progress
+        // ordering brings the crew back automatically.
+        const waitingHarvester = { id: "h1", my: true };
+        const { creep, calls } = makeCarryingBuilder([
+            { id: "ext1", structureType: "extension", progress: 2900, pos: { ...pos(14, 20), lookFor: () => [waitingHarvester] } },
+            { id: "ext2", structureType: "extension", progress: 100, pos: pos(18, 25) },
+        ]);
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "ext2", "the blocked focus is skipped, the next extension is built");
+    });
+
+    it("keeps its load and builds the next site on ERR_INVALID_TARGET instead of refilling", () => {
+        // M4 builder/extension deadlock (owner feedback 2026-11-06): while
+        // another own creep stands on the site's tile the engine refuses
+        // build() with ERR_INVALID_TARGET. The old code treated that like
+        // "out of energy" and bailed out to refill - the loaded store was
+        // wasted, and the build-refill loop restarted on the same blocked
+        // tile every cycle (progress grew, nothing finished). The builder
+        // must keep its store and put it on the next best site instead.
+        const { creep, calls } = makeCarryingBuilder([
+            { id: "ext1", structureType: "extension", progress: 2900, pos: pos(14, 20) },
+            { id: "ext2", structureType: "extension", progress: 100, pos: pos(18, 25) },
+        ]);
+        let refillActions = 0;
+        creep.build = (site: any) => {
+            calls.lastBuilt = site.id;
+            return site.id === "ext1" ? ERR_INVALID_TARGET : OK;
+        };
+        creep.withdraw = () => {
+            refillActions++;
+            return ERR_NOT_IN_RANGE;
+        };
+        creep.pickup = () => {
+            refillActions++;
+            return OK;
+        };
+        creep.harvest = () => {
+            refillActions++;
+            return OK;
+        };
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "ext2", "the load goes to the next site, not to refill");
+        assert.equal(refillActions, 0, "no refill action on ERR_INVALID_TARGET");
+    });
+
+    it("keeps working its own site and ignores foreign creeps on the tile", () => {
+        // The block check only counts OTHER own creeps: the builder itself
+        // stands next to (or on the path to) the site, and a hostile on the
+        // tile does not stop the engine's build() the way our own waiting
+        // creeps do. Excluding by id and requiring my: true keeps the focus
+        // stable in both cases.
+        const builderOnTile = { id: "b1", my: true };
+        const hostile = { id: "x1", my: false };
+        const { creep, calls } = makeCarryingBuilder([
+            { id: "ext1", structureType: "extension", progress: 2900, pos: { ...pos(14, 20), lookFor: () => [builderOnTile, hostile] } },
+            { id: "ext2", structureType: "extension", progress: 100, pos: pos(18, 25) },
+        ]);
+
+        runBuilder(creep);
+
+        assert.equal(calls.lastBuilt, "ext1", "its own presence and hostiles do not block the site");
     });
 
     it("keeps the extension ahead of a container site in a fresh bootstrap room", () => {

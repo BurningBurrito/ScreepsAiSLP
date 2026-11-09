@@ -687,3 +687,74 @@ describe("container site placement on a contested pocket tile (M5, owner feedbac
         assert.include(sitePositions(room, STRUCTURE_CONTAINER), "39,39", "source B still gets its own site this tick");
     });
 });
+
+describe("manageConstruction spawn parking ring (M4 builder/extension deadlock, owner feedback 2026-11-05)", () => {
+    beforeEach(() => {
+        tiles = new Map();
+        setGlobal("OK", OK);
+        setGlobal("FIND_SOURCES", FIND_SOURCES);
+        setGlobal("FIND_MY_SPAWNS", FIND_MY_SPAWNS);
+        setGlobal("FIND_CONSTRUCTION_SITES", FIND_CONSTRUCTION_SITES);
+        setGlobal("FIND_MY_STRUCTURES", FIND_MY_STRUCTURES);
+        setGlobal("FIND_STRUCTURES", FIND_STRUCTURES);
+        setGlobal("LOOK_STRUCTURES", LOOK_STRUCTURES);
+        setGlobal("LOOK_CONSTRUCTION_SITES", LOOK_CONSTRUCTION_SITES);
+        setGlobal("STRUCTURE_TOWER", STRUCTURE_TOWER);
+        setGlobal("STRUCTURE_EXTENSION", STRUCTURE_EXTENSION);
+        setGlobal("STRUCTURE_CONTAINER", STRUCTURE_CONTAINER);
+        setGlobal("STRUCTURE_ROAD", STRUCTURE_ROAD);
+        setGlobal("STRUCTURE_RAMPART", STRUCTURE_RAMPART);
+        setGlobal("STRUCTURE_WALL", STRUCTURE_WALL);
+        setGlobal("TERRAIN_MASK_WALL", TERRAIN_MASK_WALL);
+        setGlobal("RoomPosition", PositionMock);
+    });
+
+    /**
+     * The canonical room with the controller moved AWAY from the spawn. In
+     * the canonical layout the controller sits on the spawn's tile, so the
+     * spawn's ring-1 tiles are already excluded by the controller
+     * proximity rule - only with the controller far away is the spawn
+     * parking rule itself (SPAWN_KEEP_CLEAR_RANGE) what keeps the ring
+     * clear, which is what these tests verify.
+     */
+    function makeRoomWithFarController(): any
+    {
+        const room = makeRoom();
+        room.controller.pos = new PositionMock(40, 10, "W0N1");
+        return room;
+    }
+
+    it("keeps the eight tiles around the spawn free of extension sites", () => {
+        const room = makeRoomWithFarController();
+        manageConstruction(room);
+        const extensionPositions = sitePositions(room, STRUCTURE_EXTENSION);
+        assert.equal(extensionPositions.length, 30, "level 5 still places all 30 extension sites");
+        // The eight parking tiles a creep ends on after a moveTo to the
+        // spawn. The diagonal ones (24,24 / 24,26 / 26,24 / 26,26) are
+        // visited by the checkerboard's ring 2 and were taken by the old
+        // layout - a harvester delivering energy stood on the focus
+        // extension's tile and the crew could never build it (M4: 0 of 3
+        // extensions finished). The axial ones sit at Chebyshev range 1
+        // too, even though the checkerboard rings never visit them. None
+        // may hold a site.
+        const parking = ["24,24", "24,25", "24,26", "25,24", "25,26", "26,24", "26,25", "26,26"];
+        for (const key of parking)
+        {
+            assert.notInclude(extensionPositions, key, `extension site on parking tile ${key}`);
+        }
+    });
+
+    it("keeps tower sites off the spawn's parking ring too", () => {
+        const room = makeRoomWithFarController();
+        // The first tower is built at (23,25) (the first Chebyshev-range-2
+        // candidate). Without the spawn rule the second tower's search
+        // walks the diamond ring 2 and takes (24,26) - the spawn's
+        // diagonal parking tile - before it ever reaches (25,27).
+        addStructure(room, 23, 25, STRUCTURE_TOWER);
+        manageConstruction(room);
+        const towerSites = sitePositions(room, STRUCTURE_TOWER);
+        assert.equal(towerSites.length, 1, "one second-tower site");
+        assert.include(towerSites, "25,27", "the second tower stays at Chebyshev range 2");
+        assert.notInclude(towerSites, "24,26", "no tower on the spawn's diagonal parking tile");
+    });
+});
