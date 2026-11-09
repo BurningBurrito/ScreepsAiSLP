@@ -11,11 +11,17 @@ backup/m4-attempts-2026-11-08 and is being taken back one named step at a time -
 "M4 replay"; M5 is parked by the owner until the replay is done. The 2026-11-08 20:10
 gate failed M4 on the pre-reset code ("at least 3 extensions are finished", 0 of 3):
 that failure belongs to the backup branch, not to main. Replay progress: see "In
-Progress". Replay state 2026-11-09: steps 0-4 in and M4-verified; step 5 (parking,
-b00c0e1) FAILED M4 (extensionsBuilt 1, capacity 350 - needs 3/450) and was reverted
-per the owner's protocol (0ce4712); step 6 (container boost, cad8c5b) is re-applied
-on the step 4 tree (128 unit passing) and its M4 acceptance is the last run of the
-replay.
+Progress". Replay state 2026-11-09: the replay is COMPLETE. Steps 0-4 are in
+and M4-verified; step 5 (parking, b00c0e1) FAILED M4 (extensionsBuilt 1,
+capacity 350 - needs 3/450) and was reverted per the owner's protocol
+(0ce4712); the M3 gate break from step 2's contested tile was fixed in
+62963bc and M3 passes (sourcesConnected 2 of 2, roadTiles 59); step 6
+(container boost, cad8c5b) FAILED its M4 acceptance in the 2026-11-09 full
+suite (extensionsBuilt 1, capacity 350 - needs 3/450; every other M4
+criterion passing) and was reverted per the owner's protocol (92f465f).
+The tree is the step 4 tree plus the M3 road fix; per feedback v9.1 the
+replay ends at step 6 and M5 is unblocked. Final full-suite re-verification
+on the reverted tree is running (the gate before the push).
 
 Gate fix 2026-11-09: the full-suite gate on e996131 passed M1 and M2 and
 failed M3 on "a connected road leads from the spawn to every source"
@@ -26,8 +32,10 @@ src/managers/constructionManager.ts: the road wins the tile, the container
 site is withheld until the road is built, and the two then coexist on the
 tile (the engine allows structures to share a tile, construction sites
 cannot). 129 unit passing. M3 re-run PASSED (1 passing, 18m, EXIT 0,
-sourcesConnected 2 of 2, roadTiles 59, strayRoads 0); the step 6 M4 run
-(full suite, agent-test start all) is the last check of the replay.
+sourcesConnected 2 of 2, roadTiles 59, strayRoads 0) and M3 passed again in
+the 2026-11-09 full suite (4,001 ticks) - the fix holds. The full suite then
+ran M4 (the step 6 check): FAILED - see the Change Log; step 6 was reverted
+(92f465f) and the full suite is re-running on the reverted tree.
 
 Gate state verified (2026-11-01, run 37 round 2): the 05:33 gate failed on M2
 (0 finished extensions). The fix (c2b9f5c, 9f0abcf) was verified in this run by
@@ -217,6 +225,34 @@ yet.
   container follows once its road is built). Full suite (agent-test
   start all) running to cover the step 6 M4 run; M1 and M2 were green
   on this exact tree earlier today (gate run e996131).
+- STEP 6 M4 ACCEPTANCE FAILED - full suite (agent-test start all, started
+  05:32, on 7542b1f = step 4 tree + step 6 + the M3 road fix): M1 PASSED
+  (800 ticks), M2 PASSED (3,000 ticks), M3 PASSED (4,001 ticks,
+  sourcesConnected 2 of 2, roadTiles 59 - the M3 fix holds in the suite),
+  M4 FAILED (6,000 ticks, EXIT 1): "at least 3 extensions are finished",
+  actual 1. M4 snapshot: level 5, towersBuilt 2, towerSites 0,
+  towersWithRampart 2, extensionsBuilt 1, extensionSites 29, energyCapacity
+  350 (needs 3 / 450), maxTowerEnergy 1000, spawnHits 5000, spawnHasRampart
+  true, firstHostile 5401 / firstDefend 5401, intruder gone in 1 tick,
+  intruderLeftRoom false, safeModeTicks 0, hostilesAtEnd 0, mode peace, 9
+  creeps, farthestFromSpawn 8 - every criterion except the extension count
+  passes. Measured mechanism: the step 6 container-first order at level 4+
+  queues both source containers (10,000 build energy, plus the 50-energy
+  pocket road from the M3 fix) behind tower 1 and ahead of the extension
+  queue, so the first extension finishes at about tick 5,550 instead of the
+  step 4 run's ~3,350 (c924877: 4 extensions, capacity 500); the extra
+  10,050 build energy is a ~2,200-tick delay at the measured ~4.5 build/tick,
+  and only 1 of the 29 extension sites finishes inside the 6,000-tick window.
+  This is the break the owner predicted for this step (feedback v9.1: "the
+  most likely cause of the M4 break, which is why it comes last"). Per the
+  protocol ("If M4 fails after it, revert it, write the numbers in status.md
+  and stop there") the step was reverted: src/config.ts, src/roles/builder.ts
+  and test/unit/builder.test.ts restored to their pre-step-6 state (92f465f),
+  lint/build clean, 127 unit passing (129 - the 2 step 6 tests). The tree is
+  now the step 4 tree + the M3 road fix; the step 6 change is preserved on
+  backup/m4-attempts-2026-11-08 as cad8c5b - the owner decides about it. The
+  replay ends at step 6; full-suite re-verification on the reverted tree is
+  running (final gate before the push).
 ### 2026-11-08 (M4 replay started: owner reset to 040eef6, feedback v9.1 acknowledged)
 - Owner reset main to 040eef6 (the last commit where M4 passes) and moved all M4
   attempts to backup/m4-attempts-2026-11-08 (feedback v9.1). Objective of this and
@@ -889,15 +925,22 @@ yet.
      "nothing could take the load" branch changes from drop() to
      parkWithLoad() (energy stays in the carry, creep parks at the parking
      area) - in harvester.ts, clean per above.
-  7. [ ] Step 6 LAST source container: cad8c5b - the source container right after
-     the first tower at level 4+. If M4 fails after it: revert, note the numbers,
-     stop there. CODE RE-APPLIED 2026-11-09 (this run) on the step 4 tree after
-     the step 5 revert: the reference diff applied cleanly with git apply
-     (config.ts +CONTAINER_FIRST_MIN_LEVEL = 4, builder.ts level-4+ container
-     class right after the tower class, builder.test.ts +2 tests); the three
-     files are byte-identical to the earlier bf9b796 application; lint/build
-     clean, 128 unit passing (126 + 2). M4 acceptance is the last run of the
-     replay; if it fails: revert, note the numbers, stop.
+  7. [x] Step 6 LAST source container: cad8c5b - the source container right after
+     the first tower at level 4+. Code re-applied on the step 4 tree as e996131
+     (byte-identical to the earlier bf9b796 application; 128 unit passing). M4
+     acceptance FAILED 2026-11-09 in the full suite (the step 6 check): extensionsBuilt
+     1 vs 3, energyCapacity 350 vs 450, every other criterion passing (level 5,
+     towersBuilt 2, towersWithRampart 2, maxTowerEnergy 1000, intruder killed in 1
+     tick, mode peace, 9 creeps). Mechanism: the level-4+ container-first order puts
+     both source containers (10,050 build energy with the M3 pocket road) ahead of
+     the extension queue - first extension at ~tick 5,550 vs ~3,350 on the step 4
+     tree, so only 1 of 29 extension sites finishes in the window. Reverted per the
+     owner's protocol in 92f465f (the three step 6 files back to the pre-step-6
+     state; 127 unit passing) - NOT repaired, the owner decides. Per feedback v9.1
+     ("If M4 fails after it, revert it, write the numbers in status.md and stop
+     there") the replay ENDS here: steps 1-4 in and M4-verified, steps 5 and 6
+     reverted, M5 unblocked. Final full-suite re-verification on the reverted tree
+     running (gate before the push).
      GATE FIX 2026-11-09 (before the step 6 M4 run): the full-suite gate on
      e996131 failed M3 (sourcesConnected 1 of 2 - the step 2 container site
      owns the pocket tile (40,13), Source B's only walkable neighbour, and
@@ -1021,18 +1064,37 @@ yet.
   as soon as container one is done.
 
 ## Upcoming Features
-- [ ] M4 replay: take back the six named changes from backup/m4-attempts-2026-11-08, M4 after every step (in progress 2026-11-08; M5 parked by the owner until this is done)
+- [x] M4 replay (completed 2026-11-09: steps 1-4 taken back and M4-verified; steps 5 and 6 each broke M4 and were reverted per the owner's protocol, unrepaired; the M3 gate break from step 2's contested tile fixed in 62963bc)
 - [x] M2 extensions and roads (completed)
 - [x] M1: basic economy and creep management (completed)
 - [x] M3: build priorities, layout and a tower (completed 2026-10-30, acceptance 1 passing)
 - [x] M4: Hold the room (level 5) - towers, ramparts, defend mode (completed 2026-10-31, acceptance 1 passing)
-- [ ] M5: static mining with containers and haulers (parked by the owner until the M4 replay is done; acceptance test parked out of test/integration)
+- [ ] M5: static mining with containers and haulers (UNBLOCKED - the M4 replay finished 2026-11-09; the parked acceptance test comes back per the owner before M5 starts)
 - [ ] CPU profiling and path caching (former M5, before the M4 renumber)
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
 
 ## Known Issues / Notes
+- **Step 6 container boost (cad8c5b) broke M4 - reverted per owner protocol, NOT repaired
+  (2026-11-09).** Re-applied on the step 4 tree as e996131 (128 unit passing); its M4
+  acceptance ran in the 2026-11-09 full suite (7542b1f): FAILED, extensionsBuilt 1
+  (needs 3), energyCapacity 350 (needs 450); every other M4 criterion passed (level 5,
+  towersBuilt 2, towersWithRampart 2, maxTowerEnergy 1000, spawnHits 5000, spawnHasRampart,
+  firstHostile 5401 / firstDefend 5401, intruder gone in 1 tick, intruderLeftRoom false,
+  safeModeTicks 0, hostilesAtEnd 0, mode peace, 9 creeps, farthestFromSpawn 8). Mechanism
+  (measured from the run's 100-tick samples): at RCL 5 the level-4+ container-first order
+  queues both source containers (10,000 build energy, plus the 50-energy pocket road from
+  the M3 fix) behind tower 1 and ahead of the extension queue, so the first extension
+  finishes at about tick 5,550 instead of the step 4 run's ~3,350 (c924877: 4 extensions,
+  capacity 500) - the extra 10,050 build energy is a ~2,200-tick delay at the measured
+  ~4.5 build/tick, and only 1 of 29 extension sites finishes in the 6,000-tick window.
+  This is the break the owner predicted for this step ("the most likely cause of the M4
+  break, which is why it comes last"). Not repaired: feedback v9.1 says a failing step is
+  reverted and the owner decides; the change is preserved on
+  backup/m4-attempts-2026-11-08 as cad8c5b. Reverted in 92f465f (config.ts, builder.ts,
+  builder.test.ts back to the pre-step-6 state; 127 unit passing). Per the protocol the
+  replay ends here.
 - **M3 road reach failed in the 2026-11-09 full-suite gate on e996131 -
-  fixed, re-run in progress (2026-11-09).** The gate ran M1 and M2 (both
+  fixed and verified (2026-11-09).** The gate ran M1 and M2 (both
   passing) and failed M3 on "a connected road leads from the spawn to every
   source": sourcesConnected 1 of 2 (full snapshot in the Change Log; every
   other M3 criterion passing with margin). Root cause: replay step 2
@@ -1051,9 +1113,13 @@ yet.
   tile (the engine allows a built road and a container to share a tile,
   construction sites cannot). The M5 property step 2 preserved still holds:
   the container ends up on the pocket tile, after the road is built. Safety
-  checked: M2 (needs roadsBuilt >= 1 and 5+ road tiles; the pocket tile
-  gains a road site) and M4 (no road/container criteria in
-  acceptance-m4.test.ts) are unaffected.
+  checked and confirmed in the 2026-11-09 full suite: M2 passed (roadsBuilt
+  11, 59 road tiles at end: 11 built + 48 sites), M3 passed with
+  sourcesConnected 2 of 2 and
+  roadTiles 59, and the M4 failure that run traces to the step 6 container
+  order, not the M3 fix - the only failing M4 criterion was the extension
+  count, and the measured delay (10,050 build energy of queued containers)
+  dwarfs the 50-energy pocket road the fix adds.
 - **Step 5 parking (b00c0e1) broke M4 - reverted per owner protocol, NOT repaired
   (2026-11-09).** Re-applied on the step 4 tree as 06733fc (130 unit passing), M4
   acceptance FAILED: extensionsBuilt 1 (needs 3), energyCapacity 350 (needs 450);
@@ -1128,8 +1194,11 @@ yet.
 - Replay step 5 (parking, b00c0e1): applied as 06733fc, M4 FAILED (extensionsBuilt
   1 vs 3, capacity 350 vs 450, all other criteria passing), reverted in 0ce4712 -
   NOT repaired, the owner decides.
-- Replay step 6 (container boost, cad8c5b): re-applied on the step 4 tree (M4
-  acceptance pending as of this run).
+- Replay step 6 (container boost, cad8c5b): re-applied on the step 4 tree as
+  e996131, M4 FAILED in the 2026-11-09 full suite (extensionsBuilt 1 vs 3,
+  capacity 350 vs 450, every other criterion passing), reverted in 92f465f -
+  NOT repaired, the owner decides. Last step of the replay: the replay is
+  complete and M5 is unblocked.
 - Acknowledged 2026-11-03 (v8.6): URGENT — colony died out (no creep able to
   recover) - done: cold boot + income floor in minCreepsPerRole and the spawn
   decision in src/managers/spawnManager.ts (edb614e), plus unit tests of the

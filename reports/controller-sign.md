@@ -1,6 +1,6 @@
-# Scorecard: controller-sign · 2026-11-03 19:53 · 801 ticks · commit 8e4113e
+# Scorecard: controller-sign · 2026-11-09 13:01 · 801 ticks · commit 92f465f
 
-| Metric (last 320 ticks unless noted) | This run | Previous run (2026-11-03 09:01, 6b3393d) | Change |
+| Metric (last 320 ticks unless noted) | This run | Previous run (2026-11-03 19:53, 8e4113e) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 6.04 | 6.04 | 0 |
 | Energy wasted at source regeneration (sum) | 4,204 | 4,204 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 51 % | 51 % | 0 pts |
 | Spawn busy | 7 % | 7 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 23 % | 23 % | 0 pts |
-| CPU / tick (average, max) | 1.84, 20.64 | 1.84, 20.61 | 0 |
+| CPU / tick (average, max) | 1.84, 20.6 | 1.84, 20.64 | 0 |
 | RCL / progress at end (whole run) | 1 / 150 | 1 / 150 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
 | Energy harvested (whole run) | 3,664 | 3,664 | 0 |
@@ -25,7 +25,7 @@
 Creeps at end by role: builder 3, harvester 2, upgrader 2.
 Structures at end: road 2, spawn 1. Construction sites: 58 (container 1, road 57). Build energy in the window by target: completed 9, road 1064.
 Room energy capacity 300; source capacity 3000 and 3000; Memory 2 KB; bucket 10000.
-Bot console: 15 lines, 0 with errors (reports/controller-sign-console.log). Probe results missing for 0 ticks.
+Bot console: 16 lines, 0 with errors (reports/controller-sign-console.log). Probe results missing for 0 ticks.
 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
@@ -37,4 +37,4 @@ Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tic
       600 | builder 3, harvester 2, upgrader 2       |   4.2 |   0.6 |   131/300 | idle | 1.6
       700 | builder 3, harvester 2, upgrader 2       |     6 |   0.4 |   300/300 | idle | 1.9
       800 | builder 3, harvester 2, upgrader 2       |   8.1 |     0 |   300/300 | idle | 2.1
-      801 | builder 3, harvester 2, upgrader 2       |    12 |     0 |   300/300 | idle | 1.7
+      801 | builder 3, harvester 2, upgrader 2       |    12 |     0 |   300/300 | idle | 1.8
