@@ -1,23 +1,17 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state after run 38 (2026-11-01): the 20:16 gate failure is fixed (reverted the
-unvalidated RCL 1 builder-minimum / surplus-cap config to the verified-green 9df73af, commit
-54fb465) and the owner's URGENT edge-position crash is fully addressed: isValidTile bounds
-guard in constructionManager (08424f2), per-room try/catch in main.ts (08424f2), TEMP-DEBUG
-removed (6a038a1), and three edge-position unit tests that fail on the old code and pass on
-the new (f695cfd). Unit suite is 78 passing (was 75); lint and build are clean. M5 (static
-mining + surplus-energy spend) remains the open milestone but its acceptance test is not in
-this repo copy (only test/integration/m5-candidate.test.ts), so it is measured by the
-candidate/smoke/spawnprobe scorecards, not an acceptance gate.
-Full suite verified this run (agent-test start all, EXIT 1 only from the M5 draft candidate):
-acceptance-m1..m4 all PASS with scorecards byte-for-byte identical to the 21d2356 baseline
-(M1 6.28/tick L1/174, M2 9.83/tick L2/150, M3 11.12/tick L3/251, M4 12.66/tick L5/444), smoke
-and spawnprobe pass, 78 unit passing, lint and build clean. The single red is
-test/integration/m5-candidate.test.ts, the human's M5 static-mining draft (header: "not a
-replacement", "must not edit"); it fails because M5 is not implemented (1 of 2 containers,
-1 miner, 9.82 vs required 12 harvested/tick) and it is unchanged by the run 38 fixes -
-expected, not a regression.
+Current state after the owner's reset (2026-11-08, feedback v9.1): main was reset to
+040eef6 (2026-11-04), the last commit where acceptance-m4 passed (9.84 harvested/tick,
+4 extensions, capacity 500, RCL 5; reports/latest.md of 2026-11-04 18:05). The two owner
+chore commits on top (57e2a1d, 8374bbf) only park the M5 tests and change no game code.
+Every M4-attempt change since 11-05 (crew rows, floors, lanes, staggered replacement,
+recovery sizing, builder yield, pathfinding) lives on the branch
+backup/m4-attempts-2026-11-08 and is being taken back one named step at a time - the
+"M4 replay"; M5 is parked by the owner until the replay is done. The 2026-11-08 20:10
+gate failed M4 on the pre-reset code ("at least 3 extensions are finished", 0 of 3):
+that failure belongs to the backup branch, not to main. Replay progress: see "In
+Progress".
 
 Gate state verified (2026-11-01, run 37 round 2): the 05:33 gate failed on M2
 (0 finished extensions). The fix (c2b9f5c, 9f0abcf) was verified in this run by
@@ -100,6 +94,20 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-08 (M4 replay started: owner reset to 040eef6, feedback v9.1 acknowledged)
+- Owner reset main to 040eef6 (the last commit where M4 passes) and moved all M4
+  attempts to backup/m4-attempts-2026-11-08 (feedback v9.1). Objective of this and
+  the following runs: the replay - take back six named changes in order, M4 after
+  every step. No other changes this run (no crew rows, floors, lanes, staggered
+  replacement, recovery sizing, builder yield, pathfinding or probes).
+- Step 0 (baseline): acceptance-m4 on the current tree (040eef6 + the two owner
+  chore commits, which change no src/ files) - PASSED 2026-11-09 04:54 (6001
+  ticks, EXIT 0): harvested 9.84/tick (last 1000), construction 4.14/tick,
+  4 extensions + 26 sites, capacity 500, RCL 5/500, CPU 2.22 avg / 29.53 max,
+  0 console errors; scorecard identical to the 2026-11-04 reference (every
+  "Change" column 0). Full detail under "In Progress", step 1.
+- Steps 1 and later: see "In Progress".
+
 ### 2026-11-03 (M4 regression fixed: 300-energy pre-container upgrader body restored)
 - **Root cause of the M4 failures on e073eed (extensionsBuilt 1, expected 3).**
   e073eed's M5 prereq removed the 300-energy [W,W,C,M] row from the upgrader's
@@ -537,6 +545,32 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **M4 replay (current milestone; M5 parked by the owner, feedback v9.1, 2026-11-08).**
+  One M4 acceptance run (agent-test, ~30 min) after every step; each passing step is
+  committed with before/after numbers, each failing step is reverted and its numbers
+  noted here and in the Change Log. Cherry-picked commits: only the files the step
+  names are kept, the stale reports/ files from those commits are dropped.
+  1. [x] Step 0 baseline: acceptance-m4 on 040eef6 as-is - PASSED 2026-11-09
+     04:54 (6001 ticks, EXIT 0): harvested 9.84/tick (last 1000), construction
+     4.14/tick, wasted-at-regen 8,332, 4 extensions + 26 sites, capacity 500,
+     RCL 5/500, CPU 2.22 avg / 29.53 max, 0 console errors. Snapshot: 2
+     towers with ramparts, mode peace, safe mode 0 ticks, intruder gone in
+     1 tick, maxTowerEnergy 543. Scorecard identical to the 2026-11-04
+     reference (all "Change" columns 0) - the reset restored the last
+     known-good state exactly.
+  2. [ ] Step 1 blog: git checkout backup/m4-attempts-2026-11-08 -- blog/
+     test/unit/blog.test.ts (unit tests only, no M4 run), commit.
+  3. [ ] Step 2 container wins the tile: cherry-pick fff12dc
+     (src/managers/constructionManager.ts + its unit tests only).
+  4. [ ] Step 3 hauler: a55af67 (state machine) + 2f6ed80 (faults 2-4) - only
+     src/roles/hauler.ts, its unit tests, and the hauler count (one per source
+     container).
+  5. [ ] Step 4 builder: 3c9a132 - skip obstacle sites with a creep on them, keep
+     the energy on ERR_INVALID_TARGET.
+  6. [ ] Step 5 parking: b00c0e1 - parking area outside the extension field.
+  7. [ ] Step 6 LAST source container: cad8c5b - the source container right after
+     the first tower at level 4+. If M4 fails after it: revert, note the numbers,
+     stop there.
 - **Run (2026-11-03): M4 energy-deadlock regression fixed - awaiting the M4
   acceptance result.** The e073eed M5 prereq made the pre-container upgrader
   body 200 energy ([W,C,M]) at 300 capacity, so the upgrader spawned after
@@ -636,11 +670,12 @@ yet.
   as soon as container one is done.
 
 ## Upcoming Features
+- [ ] M4 replay: take back the six named changes from backup/m4-attempts-2026-11-08, M4 after every step (in progress 2026-11-08; M5 parked by the owner until this is done)
 - [x] M2 extensions and roads (completed)
 - [x] M1: basic economy and creep management (completed)
 - [x] M3: build priorities, layout and a tower (completed 2026-10-30, acceptance 1 passing)
 - [x] M4: Hold the room (level 5) - towers, ramparts, defend mode (completed 2026-10-31, acceptance 1 passing)
-- [ ] M5: static mining with containers and haulers (implemented, smoke green 2026-11-01; owner's acceptance test not in this repo copy)
+- [ ] M5: static mining with containers and haulers (parked by the owner until the M4 replay is done; acceptance test parked out of test/integration)
 - [ ] CPU profiling and path caching (former M5, before the M4 renumber)
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
 
@@ -681,6 +716,10 @@ yet.
 - Energy delivery issue: previous scorecard showed 72.7 energy delivered/tick vs ~3 harvested (energy going in circles) - this is now fixed by hauler changes
 
 ## Feedback acknowledged
+- Acknowledged 2026-11-08 (v9.1): RESET - owner moved the M4 attempts to
+  backup/m4-attempts-2026-11-08, reset main to 040eef6, parked M5 - doing the
+  replay step by step; one line per replay step is added below as each step
+  completes (done in which commit with numbers, or reverted with numbers).
 - Acknowledged 2026-11-03 (v8.6): URGENT — colony died out (no creep able to
   recover) - done: cold boot + income floor in minCreepsPerRole and the spawn
   decision in src/managers/spawnManager.ts (edb614e), plus unit tests of the
