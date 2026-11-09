@@ -25,8 +25,9 @@ fill counts roads only. Fixed by inverting the contested-tile ownership in
 src/managers/constructionManager.ts: the road wins the tile, the container
 site is withheld until the road is built, and the two then coexist on the
 tile (the engine allows structures to share a tile, construction sites
-cannot). 129 unit passing; the M3 re-run and the step 6 M4 run (full suite)
-are in progress.
+cannot). 129 unit passing. M3 re-run PASSED (1 passing, 18m, EXIT 0,
+sourcesConnected 2 of 2, roadTiles 59, strayRoads 0); the step 6 M4 run
+(full suite, agent-test start all) is the last check of the replay.
 
 Gate state verified (2026-11-01, run 37 round 2): the 05:33 gate failed on M2
 (0 finished extensions). The fix (c2b9f5c, 9f0abcf) was verified in this run by
@@ -205,10 +206,17 @@ yet.
   placed once the road is built; legacy container site removed and replaced
   by the road site). The unit tests are agent-owned and asserted a behavior
   the protected M3 acceptance test forbids, so they change with the code.
-  Lint and build clean, 129 unit passing (128 + 3 - 2). M3 re-run in
-  progress; M4 has no road/container criteria (checked
-  acceptance-m4.test.ts), so the step 6 M4 run is covered by the full
-  suite.
+  Lint and build clean, 129 unit passing (128 + 3 - 2). M3 re-run
+  PASSED 2026-11-09 (1 passing, 18m, 4,001 ticks, EXIT 0): snapshot
+  sourcesConnected 2 of 2, controllerConnected true, roadTiles 59,
+  roadsOnWalls 0, strayRoads 0, towersBuilt 1 (maxTowerEnergy 500),
+  extensionsBuilt 3 + 7 sites, capacity 450, level 3, 10 creeps, 0
+  console errors. End state: 59 road sites (the pocket tile (40,13)
+  among them - the builder was still extension-first in the M3 window)
+  and 1 container site (the open-neighborhood source's; the pocket
+  container follows once its road is built). Full suite (agent-test
+  start all) running to cover the step 6 M4 run; M1 and M2 were green
+  on this exact tree earlier today (gate run e996131).
 ### 2026-11-08 (M4 replay started: owner reset to 040eef6, feedback v9.1 acknowledged)
 - Owner reset main to 040eef6 (the last commit where M4 passes) and moved all M4
   attempts to backup/m4-attempts-2026-11-08 (feedback v9.1). Objective of this and
@@ -896,8 +904,9 @@ yet.
      the M3 flood fill counts roads only). Fixed by inverting the
      contested-tile ownership in constructionManager.ts (road wins the
      tile, container waits for the built road, then the two coexist);
-     129 unit passing. M3 re-run in progress, then the full suite
-     (covers the step 6 M4 run).
+     129 unit passing. M3 re-run PASSED 2026-11-09 (1 passing, 18m,
+     EXIT 0, sourcesConnected 2 of 2, roadTiles 59, strayRoads 0);
+     full suite running (covers the step 6 M4 run).
      PRE-ANALYSIS (verified): the cherry-pick base for src/roles/builder.ts
      IS our current blob (af1a44d), so after step 4's manual edits the only
      overlap is the selectBuildSite doc comment - step 4 adds the @param
