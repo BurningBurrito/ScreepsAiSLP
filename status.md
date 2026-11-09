@@ -131,7 +131,31 @@ yet.
   8,332, capacity 500, RCL 5/500 - all identical to the step-2 baseline;
   CPU 2.17/28.45 -> 2.2/28.79; roads 58, 0 console errors. Behavior-neutral
   at this stage (the hauler row and delivery-group changes are step 3b).
-- Steps 3b and later: see "In Progress".
+- Step 3b (hauler faults 2-4, done 2026-11-09): 2f6ed80 applied onto the
+  post-3a tree as 9e33c99. git cherry-pick takes no pathspec, so the four
+  blob-identical files (src/roles/hauler.ts, src/managers/spawnManager.ts,
+  test/unit/hauler.test.ts, test/unit/spawnManager.test.ts) were checked out
+  with git checkout 2f6ed80 -- <file> and src/config.ts got the
+  TOWER_REFILL_PRIORITY_ENERGY block appended by hand (same content, same
+  position: after TOWER_ENERGY_RESERVE at EOF, keeping the later b00c0e1
+  config hunk clean); every resulting blob verified against the target
+  except config.ts, which differs only by the cad8c5b block that step 6
+  will still take back. Changes: hauler delivery reworked to ONE ordered
+  group list with the free-capacity filter BEFORE the distance pick
+  (fault 2) and the threat-dependent group order (fault 3, Memory.mode);
+  TOWER_REFILL_PRIORITY_ENERGY in config; the hauler row becomes
+  Math.max(row.hauler, minerCount) with the 1500-energy 20-CARRY body
+  (fault 4). Lint and build clean, 121 unit passing (115 + 6). M4
+  acceptance PASSED 2026-11-09 06:27 (6001 ticks, EXIT 0, 1584 s):
+  harvested 9.84/tick, construction 4.14/tick, wasted-at-regen 8,332,
+  capacity 500, RCL 5/500, CPU 2.2/28.79 -> 2.17/30.47 - every scorecard
+  line identical to the step-3a run (all "Change" columns 0). Snapshot: 4
+  extensions + 26 sites, 2 towers with ramparts, mode peace, intruder
+  gone in 1 tick, 10 creeps (peak 11), 0 console errors. The hauler
+  changes stay dormant during M4: no source container is ever built in
+  the window, so minerCount is 0 and the hauler row stays 0 - baseline
+  parity, as expected for a replay step.
+- Steps 4-6: see "In Progress".
 
 ### 2026-11-03 (M4 regression fixed: 300-energy pre-container upgrader body restored)
 - **Root cause of the M4 failures on e073eed (extensionsBuilt 1, expected 3).**
@@ -612,18 +636,21 @@ yet.
      1 tick, maxTowerEnergy 543, 10 creeps (peak 11). The state machine is
      behavior-neutral at this stage (no hauler row or delivery-group change
      yet - that is 3b).
-     3b PRE-ANALYSIS (2f6ed80, verified against the post-3a tree): four of
-     the five files are blob-identical to the cherry-pick base (hauler.ts
-     299dff1, spawnManager.ts 06ab3cd, hauler.test.ts 5c896ba,
-     spawnManager.test.ts 1cb6d04) and config.ts differs only by the
-     cad8c5b block (a different region), so `git cherry-pick -n 2f6ed80 --
-     <those five files>` should apply with zero conflicts. Changes: hauler
-     delivery reworked to ONE ordered group list with the free-capacity
-     filter BEFORE the distance pick (fault 2) and the threat-dependent
-     group order (fault 3, Memory.mode), TOWER_REFILL_PRIORITY_ENERGY in
-     config (appends at EOF, which keeps the later b00c0e1 config hunk
-     clean), and the hauler row becomes Math.max(row.hauler, minerCount)
-     with the 1500-energy 20-CARRY body (fault 4).
+     3b DONE 2026-11-09: 2f6ed80 applied as 9e33c99 - the four
+     blob-identical files (hauler.ts, spawnManager.ts, hauler.test.ts,
+     spawnManager.test.ts) via git checkout 2f6ed80 -- <file>, and
+     TOWER_REFILL_PRIORITY_ENERGY appended to config.ts by hand (git
+     cherry-pick takes no pathspec; every blob verified against the
+     target, config.ts differs only by the cad8c5b block step 6 takes
+     back). Lint and build clean, 121 unit passing (115 + 6). M4
+     acceptance PASSED 2026-11-09 06:27 (6001 ticks, EXIT 0, 1584 s):
+     harvested 9.84/tick, construction 4.14/tick, wasted-at-regen 8,332,
+     capacity 500, RCL 5/500 - every scorecard line identical to the
+     step-3a run; CPU 2.2/28.79 -> 2.17/30.47; 4 extensions + 26 sites,
+     2 towers with ramparts, mode peace, intruder gone in 1 tick, 10
+     creeps (peak 11), 0 console errors. The hauler changes are dormant
+     during M4 (no source container built in the window -> minerCount 0
+     -> no haulers), so parity is expected.
   5. [ ] Step 4 builder: 3c9a132 - skip obstacle sites with a creep on them, keep
      the energy on ERR_INVALID_TARGET.
      PRE-ANALYSIS (verified against the tree): the 3c9a132 base carries
