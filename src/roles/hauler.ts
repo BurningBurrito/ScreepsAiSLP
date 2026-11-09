@@ -32,6 +32,7 @@
  */
 
 import { CONTROLLER_CONTAINER_RANGE, TOWER_REFILL_PRIORITY_ENERGY } from "config";
+import { getParkingPosition } from "managers/constructionManager";
 import { moveToToward } from "utils/movement";
 
 /** Every structure a hauler may deliver energy to. */
@@ -256,12 +257,27 @@ function pickSourceContainer(creep: Creep): StructureContainer | null
 }
 
 /**
- * Waits near the spawn (within range 3) - the hauler's parking spot when
- * there is nothing to collect or nothing left to fill.
+ * Waits at the room's parking area - the hauler's parking spot when there
+ * is nothing to collect or nothing left to fill. The parking area sits
+ * outside the spawn's own ring (the tiles the extension sites and their
+ * builders are on), so a parked hauler can never block a builder (M4,
+ * owner feedback 2026-11-06). Until the construction manager has cached a
+ * parking position (early room, or right after a global reset), the old
+ * fallback holds: wait within range 3 of the spawn.
  * @param creep The hauler to park
  */
 function parkNearSpawn(creep: Creep): void
 {
+    const parking = getParkingPosition(creep.room);
+    if (parking !== null)
+    {
+        if (creep.pos.getRangeTo(parking) > 0)
+        {
+            moveToToward(creep, parking, 0);
+        }
+        return;
+    }
+
     const spawn = creep.pos.findClosestByPath(FIND_MY_STRUCTURES, {
         filter: (structure) => structure.structureType === STRUCTURE_SPAWN,
     });

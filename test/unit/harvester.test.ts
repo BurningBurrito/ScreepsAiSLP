@@ -144,15 +144,19 @@ describe("harvester", () => {
         assert.equal(calls.drop ?? 0, 0, "no drop when delivery succeeds");
     });
 
-    it("drops the load when spawn is full and no tower or extension exists", () => {
+    it("keeps the load and parks when the spawn is full and no tower or extension exists", () => {
+        // M4 owner feedback 2026-11-06: the old code DROPPED the load on
+        // the creep's tile (the spawn's ring, where the builders work) and
+        // the energy sat on the floor. Now the load stays in the carry and
+        // the creep parks (parkWithLoad) until a target frees up.
         const source = { id: "s1", energy: 0, pos: { getRangeTo: () => 1 }, rangeFromCreep: 1 };
         const { creep, calls } = makeCreep(50, 50, true, [source], 0);
 
         runHarvester(creep);
 
         assert.equal(calls.transfer ?? 0, 0, "transfer should not be called when the spawn is full");
-        assert.equal(calls.drop, 1, "energy should be dropped as last resort");
-        assert.isFalse(creep.memory.working, "creep should stop working after dropping");
+        assert.equal(calls.drop ?? 0, 0, "the load must NOT be dropped - it stays in the carry");
+        assert.isTrue(creep.memory.working, "working stays true: the delivery phase retries next tick");
     });
 
     it("delivers a partial load when the assigned source ran dry", () => {

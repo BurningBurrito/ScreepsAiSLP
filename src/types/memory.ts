@@ -81,6 +81,15 @@ declare global {
      * this tick is at least config.DEFEND_REVERT_TICKS old.
      */
     lastHostileTick?: number;
+    /**
+     * The room's creep parking tile ("x,y"), computed by the construction
+     * manager and cached here so it survives a global reset (M4, owner
+     * feedback 2026-11-06). Parked creeps - idle haulers, miners that
+     * lost their source, harvesters that cannot deliver their load - stand
+     * on it, outside the extension layout, so they never block a builder's
+     * tile. Undefined until the manager computes it.
+     */
+    parkingPos?: string;
   }
 
   /**
