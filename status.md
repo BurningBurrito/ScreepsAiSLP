@@ -653,6 +653,28 @@ yet.
      -> no haulers), so parity is expected.
   5. [ ] Step 4 builder: 3c9a132 - skip obstacle sites with a creep on them, keep
      the energy on ERR_INVALID_TARGET.
+     4 DONE 2026-11-09 (code, pre-M4): applied manually as 7232135 (git
+     cherry-pick takes no pathspec, so hunk by hunk, as in steps 3a/3b):
+     src/managers/constructionManager.ts gets the SPAWN_KEEP_CLEAR_RANGE
+     import plus the parking-ring skip in computeExtensionPositions and
+     computeTowerPositions; src/roles/builder.ts gets isBlockedByWaitingCreeps,
+     the excludeIds parameter on selectBuildSite, the blocked-tile filter on
+     the inline extension block (the focusExtension closure does not exist
+     pre-M5 - the equivalent filter went on sitesOf(STRUCTURE_EXTENSION)
+     directly), and the ERR_INVALID_TARGET retry that keeps the load and
+     builds the next best site (the waitRoads hunk was skipped:
+     containerWaitRoadSites is M5 rework not in the six commits);
+     src/config.ts gets SPAWN_KEEP_CLEAR_RANGE = 1; test/unit/builder.test.ts
+     gets ERR_INVALID_TARGET/LOOK_CREEPS, the lookFor default on pos(), the
+     two globals, and the three deadlock tests (adapted to the pre-M5
+     makeCarryingBuilder mock - its find already applies opts.filter, so the
+     excludeIds path is exercised); test/unit/constructionManager.test.ts
+     gets the spawn-parking-ring describe block at EOF (verbatim - all its
+     helpers already existed). Verified every residual diff against
+     3c9a132 is only previously-excluded M5 rework. Lint and build clean,
+     126 unit passing (121 + 5). M4 acceptance started 2026-11-09 (baseline
+     to compare: step 3b run, harvested 9.84/tick, construction 4.14/tick,
+     wasted-at-regen 8,332, capacity 500, RCL 5/500).
      PRE-ANALYSIS (verified against the tree): the 3c9a132 base carries
      EXCLUDED intermediate-commit code (extensionFloorState,
      containerWaitRoadSites, dynamicCostCallback), so three spots need
