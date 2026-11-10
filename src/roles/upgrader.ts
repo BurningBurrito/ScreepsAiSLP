@@ -23,6 +23,18 @@
  * A half-full store at a depleted source still leaves (PARTIAL_DELIVERY_FRACTION):
  * carrying it to the controller beats idling here until the 300-tick refill.
  *
+ * From M5 (owner feedback 2026-11-09, idea d) there is a preferred third
+ * cycle: while the controller container (rung 4 of the builder's ladder,
+ * placed by constructionManager) exists and still holds energy, it is the
+ * upgrader's fuel stop. The upgrader stands ON the container's tile - within
+ * CONTROLLER_CONTAINER_RANGE of the controller, so the upgrade works from
+ * there - withdraws while the store has space and upgrades while it doesn't:
+ * one action per tick, no walking. That takes the upgrader's round trips out
+ * of the source area, where its traffic was what starved the miners of their
+ * pocket tiles (the M5 mined-share criterion). Only when the container runs
+ * empty does the source cycle below run; the haulers refill the container
+ * last of all (hauler.ts), so the source path stays the robust fallback.
+ *
  * Source choice: the source nearest the controller (Chebyshev) that still has
  * a free tile to stand on, latched in memory for the whole work cycle. The
  * distance minimises the fixed source <-> controller round trip; the
@@ -39,7 +51,7 @@
  * tick of the long return walk and re-create the oscillation. See pickSource.
  */
 
-import { CONTROLLER_SIGN_TEXT, PARTIAL_DELIVERY_FRACTION } from "config";
+import { CONTROLLER_CONTAINER_RANGE, CONTROLLER_SIGN_TEXT, PARTIAL_DELIVERY_FRACTION } from "config";
 import { hasPriorityBuildSites, runBuilder } from "roles/builder";
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
 import { moveToToward } from "utils/movement";
@@ -50,6 +62,10 @@ import { moveToToward } from "utils/movement";
  * Order of checks:
  *   0. While a tower or extension site exists, build instead (see the file
  *      header): the WORK energy goes into the construction, not RCL.
+ *   0.5. Controller container (M5, owner feedback 2026-11-09 idea d): while
+ *      the container near the controller holds energy, withdraw from it and
+ *      upgrade from its tile - the source cycle is skipped entirely (see the
+ *      file header).
  *   1. Pick the harvest target (source nearest the controller, from the
  *      active sources; the nearest of all when both are dry - it refills on
  *      the 300-tick cycle).
@@ -78,6 +94,36 @@ export function runUpgrader(creep: Creep): void
     const energy = creep.store[RESOURCE_ENERGY] ?? 0;
     const capacity = creep.store.getCapacity(RESOURCE_ENERGY);
     const controller = room.controller;
+
+    // M5 (owner feedback 2026-11-09, idea d): the controller container is
+    // the upgrader's fuel stop while it holds energy. The upgrader stands
+    // ON the container's tile (within CONTROLLER_CONTAINER_RANGE of the
+    // controller, so the upgrade works from there), withdraws while the
+    // store has space and upgrades while it doesn't - one action per tick,
+    // zero walking once on the tile. With an empty container it falls
+    // through to the source cycle below; the haulers refill the container
+    // last of all (hauler.ts), so the source path stays the fallback.
+    const ctrlContainer = findControllerContainer(room);
+    if (ctrlContainer !== null)
+    {
+        const containerEnergy = ctrlContainer.store.getUsedCapacity(RESOURCE_ENERGY);
+        if (energy < capacity && containerEnergy > 0)
+        {
+            if (creep.pos.getRangeTo(ctrlContainer) > 0)
+            {
+                moveToToward(creep, ctrlContainer, 0);
+                return;
+            }
+            creep.withdraw(ctrlContainer, RESOURCE_ENERGY);
+            return;
+        }
+        if (energy > 0)
+        {
+            upgradeFromHere(creep, controller);
+            return;
+        }
+        // Empty store and empty container: fall through to the source cycle.
+    }
 
     // Harvest target: the source nearest the controller (the upgrader repeats
     // this exact round trip for its whole life, see the file header), with a
@@ -134,21 +180,39 @@ export function runUpgrader(creep: Creep): void
         return;
     }
 
-    // Upgrade phase: burn the store at the controller.
+    // Upgrade phase: burn the store at the controller. Shared with the
+    // controller-container cycle above - see upgradeFromHere.
+    upgradeFromHere(creep, controller);
+}
+
+/**
+ * Upgrades the controller from the creep's current position, applying the
+ * owner sign first when it is missing or stale.
+ *
+ * Controller sign (owner request, feedback 2026-11-02): every owned room
+ * carries the fixed project sign, and the upgrader is the creep that already
+ * parks at the controller - a harvester is never diverted for it. The sign
+ * lives 50,000 ticks, so the cost is one action when it is missing or wrong;
+ * when the text is already right this is a single string compare and the
+ * upgrade below runs untouched (never re-sign). signController needs range 1
+ * while the upgrade stops at range 3, so a pending sign walks in two tiles
+ * closer first; the tick after the sign lands, the text check passes and the
+ * upgrade resumes.
+ *
+ * Both energy cycles share this tail: the source cycle walks to range 3 of
+ * the controller, the controller-container cycle stands on the container
+ * tile within CONTROLLER_CONTAINER_RANGE of it - either way the only walk
+ * happens while the creep is still on the way.
+ * @param creep The upgrader holding energy
+ * @param controller The room controller, when in vision
+ */
+function upgradeFromHere(creep: Creep, controller: StructureController | undefined): void
+{
     if (controller === undefined || !controller.my)
     {
         return;
     }
 
-    // Controller sign (owner request, feedback 2026-11-02): every owned room
-    // carries the fixed project sign, and this creep is the one that already
-    // parks at the controller - a harvester is never diverted for it. The
-    // sign lives 50,000 ticks, so the cost is one action when it is missing
-    // or wrong; when the text is already right this is a single string
-    // compare and the upgrade below runs untouched (never re-sign).
-    // signController needs range 1 while the upgrade stops at range 3, so a
-    // pending sign walks in two tiles closer first; the tick after the sign
-    // lands, the text check passes and the upgrade resumes at range 3.
     if (controller.sign === undefined || controller.sign.text !== CONTROLLER_SIGN_TEXT)
     {
         if (creep.signController(controller, CONTROLLER_SIGN_TEXT) === ERR_NOT_IN_RANGE)
@@ -165,6 +229,34 @@ export function runUpgrader(creep: Creep): void
         moveToToward(creep, controller, 3);
     }
     // OK, ERR_NOT_ENOUGH_RESOURCES (store below one upgrade tick's cost -
-    // the phase switch catches it on the next tick) or ERR_INVALID_TARGET:
+    // the caller re-routes on the next tick) or ERR_INVALID_TARGET:
     // nothing else to do this tick.
+}
+
+/**
+ * The built container that serves as the upgrader's fuel stop: a container
+ * within CONTROLLER_CONTAINER_RANGE of the controller - the same range the
+ * construction manager's site search (idea d) and builder.ts's ladder check
+ * use, so "the" controller container is unambiguous. One find per tick; the
+ * result cannot go stale inside the tick.
+ * @param room The room the upgrader is in
+ * @returns The container, or null when none is built
+ */
+function findControllerContainer(room: Room): StructureContainer | null
+{
+    const controller = room.controller;
+    if (controller === undefined || controller === null)
+    {
+        return null;
+    }
+    const candidates = room.find(FIND_STRUCTURES, {
+        // Type predicate: narrows to the containers near the controller.
+        // FIND_STRUCTURES (not FIND_MY_STRUCTURES): the type definitions do
+        // not list containers among the owned structures, and this mirrors
+        // pickControllerContainer in hauler.ts.
+        filter: (structure): structure is StructureContainer =>
+            structure.structureType === STRUCTURE_CONTAINER &&
+            structure.pos.getRangeTo(controller.pos) <= CONTROLLER_CONTAINER_RANGE,
+    });
+    return candidates.length > 0 ? candidates[0] : null;
 }

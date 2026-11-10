@@ -11,11 +11,13 @@ const RESOURCE_ENERGY = "energy";
 const FIND_SOURCES = 105;
 const FIND_CREEPS = 101;
 const FIND_MY_STRUCTURES = 108;
+const FIND_STRUCTURES = 107;
 const FIND_CONSTRUCTION_SITES = 111;
 const FIND_MY_SPAWNS = 112;
 const STRUCTURE_EXTENSION = "extension";
 const STRUCTURE_TOWER = "tower";
 const STRUCTURE_ROAD = "road";
+const STRUCTURE_CONTAINER = "container";
 const TERRAIN_MASK_WALL = 1;
 
 /**
@@ -31,7 +33,13 @@ function pos(x: number, y: number): any
     return {
         x,
         y,
-        getRangeTo: (target: any) => Math.max(Math.abs(target.x - x), Math.abs(target.y - y)),
+        // The real getRangeTo accepts a position OR any object that carries
+        // one (creeps, structures). Production code passes the container
+        // itself, so the mock must resolve .pos the same way.
+        getRangeTo: (target: any) => {
+            const p = target.pos !== undefined ? target.pos : target;
+            return Math.max(Math.abs(p.x - x), Math.abs(p.y - y));
+        },
     };
 }
 
@@ -49,9 +57,11 @@ type CallCounts = {
     upgrade?: number;
     moveTo?: number;
     sign?: number;
+    withdraw?: number;
     lastSignText?: string;
     lastMoveOpts?: any;
     lastHarvested?: string;
+    lastWithdrawn?: string;
 };
 
 function makeUpgrader(memory: Record<string, any>):
@@ -100,6 +110,11 @@ function makeUpgrader(memory: Record<string, any>):
         harvest: (source: any) => {
             calls.harvest = (calls.harvest ?? 0) + 1;
             calls.lastHarvested = source.id;
+            return OK;
+        },
+        withdraw: (structure: any) => {
+            calls.withdraw = (calls.withdraw ?? 0) + 1;
+            calls.lastWithdrawn = structure.id;
             return OK;
         },
         upgradeController: () => {
@@ -229,6 +244,8 @@ describe("upgrader", () => {
         // @ts-ignore
         global.FIND_MY_STRUCTURES = FIND_MY_STRUCTURES;
         // @ts-ignore
+        global.FIND_STRUCTURES = FIND_STRUCTURES;
+        // @ts-ignore
         global.FIND_CONSTRUCTION_SITES = FIND_CONSTRUCTION_SITES;
         // @ts-ignore
         global.FIND_MY_SPAWNS = FIND_MY_SPAWNS;
@@ -238,6 +255,8 @@ describe("upgrader", () => {
         global.STRUCTURE_TOWER = STRUCTURE_TOWER;
         // @ts-ignore
         global.STRUCTURE_ROAD = STRUCTURE_ROAD;
+        // @ts-ignore
+        global.STRUCTURE_CONTAINER = STRUCTURE_CONTAINER;
         // @ts-ignore
         global.RESOURCE_ENERGY = RESOURCE_ENERGY;
         // @ts-ignore
@@ -400,6 +419,127 @@ describe("upgrader", () => {
             assert.equal(calls.moveTo, 1, "and walks toward the controller");
             assert.equal(calls.lastMoveOpts.range, 1, "to range 1 - signController's range");
             assert.equal(calls.upgrade, undefined, "no upgrade while the sign is pending");
+        });
+    });
+
+    describe("controller container cycle (M5, owner feedback 2026-11-09 idea d)", () => {
+        /**
+         * A container mock with the store shape the cycle reads.
+         * @param energy The energy currently in the container.
+         * @param x The x coordinate (Chebyshev distance to the controller
+         *        at 25,25 decides whether the lookup finds it).
+         * @param y The y coordinate.
+         * @returns The container mock.
+         */
+        function makeContainer(energy: number, x: number, y: number): any
+        {
+            return {
+                id: `container-${x}-${y}`,
+                structureType: STRUCTURE_CONTAINER,
+                pos: pos(x, y),
+                store: {
+                    [RESOURCE_ENERGY]: energy,
+                    getUsedCapacity: () => energy,
+                    getFreeCapacity: () => 2000 - energy,
+                },
+            };
+        }
+
+        /**
+         * Patches the room's find so FIND_STRUCTURES (the lookup
+         * findControllerContainer uses, filter honoured) returns the
+         * container; every other type keeps the original dispatch.
+         * @param creep The mock creep to patch.
+         * @param container The container to report (or null for none).
+         */
+        function withContainer(creep: any, container: any): void
+        {
+            const originalFind = creep.room.find;
+            creep.room.find = (type: number, opts?: any): any[] =>
+            {
+                if (type === FIND_STRUCTURES)
+                {
+                    const candidates = container !== null ? [container] : [];
+                    return opts !== undefined && typeof opts.filter === "function"
+                        ? candidates.filter(opts.filter)
+                        : candidates;
+                }
+                return originalFind(type);
+            };
+        }
+
+        it("walks to the controller container (range 0) instead of harvesting", () => {
+            const { creep, calls } = makeUpgrader({});
+            withContainer(creep, makeContainer(100, 25, 23)); // range 2 from the controller
+
+            runUpgrader(creep);
+
+            assert.equal(calls.withdraw, undefined, "no withdraw until it reaches the container");
+            assert.equal(calls.harvest, undefined, "the container cycle pre-empts the source cycle");
+            assert.equal(calls.moveTo, 1, "it walks to the container");
+            assert.equal(calls.lastMoveOpts.range, 0, "onto the container tile (the upgrade works from there)");
+        });
+
+        it("withdraws from the container it stands on - one action per tick", () => {
+            const { creep, calls } = makeUpgrader({});
+            const container = makeContainer(100, 25, 23);
+            withContainer(creep, container);
+            creep.pos = container.pos; // arrived on the container's tile
+
+            runUpgrader(creep);
+
+            assert.equal(calls.withdraw, 1, "it withdraws on the container tile");
+            assert.equal(calls.lastWithdrawn, container.id, "from the controller container");
+            assert.equal(calls.harvest, undefined, "and never walks to a source");
+            assert.equal(calls.moveTo, undefined, "no walk: the zero-walk criterion");
+        });
+
+        it("upgrades with a full store while standing on the container tile", () => {
+            const { creep, calls } = makeUpgrader({});
+            const container = makeContainer(100, 25, 23);
+            withContainer(creep, container);
+            creep.pos = container.pos;
+            creep.store[RESOURCE_ENERGY] = 50;
+
+            runUpgrader(creep);
+
+            assert.equal(calls.upgrade, 1, "the full store upgrades from the container tile");
+            assert.equal(calls.withdraw, undefined, "nothing left to withdraw");
+            assert.equal(calls.moveTo, undefined, "still standing on the container tile");
+        });
+
+        it("falls back to the source cycle when the container is empty", () => {
+            const { creep, calls } = makeUpgrader({working: true, sourceId: "sA"});
+            withContainer(creep, makeContainer(0, 25, 23));
+
+            runUpgrader(creep);
+
+            assert.equal(calls.harvest, 1, "the empty container is skipped");
+            assert.equal(calls.lastHarvested, "sA", "back to the latched source");
+            assert.equal(calls.withdraw, undefined, "nothing to withdraw");
+        });
+
+        it("keeps upgrading a full store even when the container is empty", () => {
+            const { creep, calls } = makeUpgrader({working: true, sourceId: "sA"});
+            withContainer(creep, makeContainer(0, 25, 23));
+            creep.store[RESOURCE_ENERGY] = 50;
+
+            runUpgrader(creep);
+
+            assert.equal(calls.upgrade, 1, "the carried energy is burned at the controller");
+            assert.equal(calls.harvest, undefined, "no detour to a source while carrying");
+            assert.equal(calls.withdraw, undefined, "the empty container holds nothing");
+        });
+
+        it("ignores a container out of CONTROLLER_CONTAINER_RANGE of the controller", () => {
+            const { creep, calls } = makeUpgrader({working: true, sourceId: "sA"});
+            withContainer(creep, makeContainer(100, 20, 25)); // range 5 from the controller
+
+            runUpgrader(creep);
+
+            assert.equal(calls.harvest, 1, "an out-of-range container is not the delivery point");
+            assert.equal(calls.lastHarvested, "sA", "the upgrader stays on its source cycle");
+            assert.equal(calls.withdraw, undefined, "no withdraw from it");
         });
     });
 });

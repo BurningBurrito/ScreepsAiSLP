@@ -47,7 +47,7 @@
  * cannot permanently break the route.
  */
 
-import { CONTAINER_BOOST_MIN_LEVEL, RAMPART_MIN_LEVEL, SPAWN_KEEP_CLEAR_RANGE, TOWER_SITE_DEEP_CANDIDATES, TOWER_SITE_DEEP_RANGES, TOWER_SITE_RANGES } from "config";
+import { CONTAINER_BOOST_MIN_LEVEL, CONTAINER_EARLY_MIN_LEVEL, CONTROLLER_CONTAINER_RANGE, MAX_CONTAINERS_PER_ROOM, RAMPART_MIN_LEVEL, SPAWN_KEEP_CLEAR_RANGE, TOWER_SITE_DEEP_CANDIDATES, TOWER_SITE_DEEP_RANGES, TOWER_SITE_RANGES } from "config";
 import { isValidTile } from "utils/positions";
 
 // "structureType@x,y" keys of failed site placements already logged this
@@ -128,6 +128,7 @@ function structureLimit(structureType: BuildableStructureConstant, level: number
     {
         const fallback: Partial<Record<BuildableStructureConstant, { [level: number]: number }>> = {
             extension: { 1: 0, 2: 5, 3: 10, 4: 20, 5: 30, 6: 40, 7: 50, 8: 60 },
+            container: { 1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 5, 7: 5, 8: 5 },
             tower: { 1: 0, 2: 0, 3: 1, 4: 1, 5: 2, 6: 2, 7: 3, 8: 6 },
             rampart: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 10, 6: 20, 7: 30, 8: 40 },
         };
@@ -139,6 +140,14 @@ function structureLimit(structureType: BuildableStructureConstant, level: number
     }
     if (table === undefined)
     {
+        // CONTROLLER_STRUCTURES has no "container" row in the game runtime
+        // (the engine caps containers at a flat five per room, whatever the
+        // level): serve the cap from config instead of returning 0, which
+        // would keep the C_ctrl site from ever being placed in-game.
+        if (structureType === STRUCTURE_CONTAINER)
+        {
+            return MAX_CONTAINERS_PER_ROOM;
+        }
         return 0;
     }
     return table[level] ?? 0;
@@ -1118,6 +1127,142 @@ function placeContainerSites(room: Room, containerPositions: RoomPosition[], roa
     }
 }
 
+/**
+ * M5 (owner feedback 2026-11-09, idea d): place the controller container
+ * site - a container within CONTROLLER_CONTAINER_RANGE of the controller so
+ * the upgrader can withdraw energy on the spot (it stands on the container
+ * tile, which is still within range 3 of the controller) instead of walking
+ * to a source. That upgrader traffic through the source area is what starved
+ * the miners of their pocket tiles (the M5 mined-share criterion).
+ *
+ * Placement rules:
+ * - Only from CONTAINER_EARLY_MIN_LEVEL on: below it builder.ts's ladder does
+ *   not count a controller container as a pause rung, and a level 3-4 room
+ *   must spend its five container slots on the source containers that unlock
+ *   static mining.
+ * - Never a second one: a container or an open container site within
+ *   CONTROLLER_CONTAINER_RANGE of the controller already serves the upgrader
+ *   (this includes a source container that happens to sit close to the
+ *   controller - the upgrader's own lookup does not care which kind it is).
+ *   The room's CONTROLLER_STRUCTURES container budget (5 at every level) is
+ *   respected, so the two source containers keep their claim on it.
+ * - Deterministic candidate walk: Chebyshev rings 1..CONTROLLER_CONTAINER_RANGE
+ *   around the controller in a fixed order, so the choice survives global
+ *   resets. Ring 1 first: the road to the controller ends there, so the
+ *   hauler's delivery walk ends on the road.
+ * - A tile is skipped when reserved for another plan (the extension grid, the
+ *   spawn's parking ring) or occupied: a road may share the tile (the engine
+ *   allows it, and placeRoadSites already treats a container site as the
+ *   tile's intended owner from level 4 up), but any other structure or a
+ *   construction site of any type takes the tile away.
+ *
+ * @param room The room to manage
+ * @param extensionPositions The extension grid computed by manageConstruction
+ *                           (may be empty while the extensions are gated)
+ */
+function placeControllerContainerSite(room: Room, extensionPositions: RoomPosition[]): void
+{
+    const level = getControllerLevel(room);
+    if (level < CONTAINER_EARLY_MIN_LEVEL)
+    {
+        return;
+    }
+
+    const controller = room.controller;
+    if (controller === undefined || controller === null)
+    {
+        return;
+    }
+    const controllerPos = controller.pos;
+
+    // FIND_STRUCTURES (not FIND_MY_STRUCTURES): the type definitions do not
+    // list containers among the owned structures (see the same lookup in
+    // computeContainerPositions above).
+    const containers = room.find(FIND_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
+    });
+    if (containers.length >= structureLimit(STRUCTURE_CONTAINER, level))
+    {
+        return; // budget spent on the source containers
+    }
+
+    const withinRange = (pos: RoomPosition): boolean =>
+        pos.getRangeTo(controllerPos) <= CONTROLLER_CONTAINER_RANGE;
+    const servesUpgrader = containers.some((structure) => withinRange(structure.pos));
+    const nearSite = room.find(FIND_CONSTRUCTION_SITES, {
+        filter: (site) => site.structureType === STRUCTURE_CONTAINER && withinRange(site.pos),
+    }).length > 0;
+    if (servesUpgrader || nearSite)
+    {
+        return; // one controller container per room, never a second
+    }
+
+    // Reserved for other plans: the extension grid (one construction site
+    // per tile - the C_ctrl site must not take an extension slot, the
+    // extensions raise the energy capacity the creep bodies are built from)
+    // and the spawn's parking ring (creeps idle there, not under a
+    // structure). The road network is deliberately NOT reserved: a container
+    // may share a road tile, and one at the end of the controller road keeps
+    // the hauler's last step on the road.
+    const reserved = new Set<string>(extensionPositions.map((pos) => `${pos.x},${pos.y}`));
+    const spawn = getSpawnPosition(room);
+    if (spawn !== null)
+    {
+        for (let dy = -SPAWN_KEEP_CLEAR_RANGE; dy <= SPAWN_KEEP_CLEAR_RANGE; dy++)
+        {
+            for (let dx = -SPAWN_KEEP_CLEAR_RANGE; dx <= SPAWN_KEEP_CLEAR_RANGE; dx++)
+            {
+                reserved.add(`${spawn.x + dx},${spawn.y + dy}`);
+            }
+        }
+    }
+
+    for (let range = 1; range <= CONTROLLER_CONTAINER_RANGE; range++)
+    {
+        for (let dy = -range; dy <= range; dy++)
+        {
+            for (let dx = -range; dx <= range; dx++)
+            {
+                if (Math.max(Math.abs(dx), Math.abs(dy)) !== range)
+                {
+                    continue; // interior of the square: an inner ring visited it
+                }
+                const x = controllerPos.x + dx;
+                const y = controllerPos.y + dy;
+                if (!isValidTile(x, y))
+                {
+                    continue; // off the room (the constructor would throw)
+                }
+                const key = `${x},${y}`;
+                if (reserved.has(key))
+                {
+                    continue;
+                }
+                const pos = new RoomPosition(x, y, room.name);
+                if (isWallPosition(pos, room))
+                {
+                    continue;
+                }
+                // A road may share the tile; any other structure or a
+                // construction site of any type takes the tile away.
+                const occupied = pos.lookFor(LOOK_STRUCTURES).some(
+                    (structure) => structure.structureType !== STRUCTURE_ROAD,
+                ) || pos.lookFor(LOOK_CONSTRUCTION_SITES).length > 0;
+                if (occupied)
+                {
+                    continue;
+                }
+                const result = room.createConstructionSite(pos, STRUCTURE_CONTAINER);
+                if (result === OK)
+                {
+                    return;
+                }
+                logSiteFailureOnce(STRUCTURE_CONTAINER, pos, result);
+            }
+        }
+    }
+}
+
 /** Check if we should place road sites */
 function shouldPlaceRoadSites(room: Room): boolean
 {
@@ -1392,6 +1537,13 @@ export function manageConstruction(room: Room): void
 
     // Place container sites (third priority)
     placeContainerSites(room, containerPositions, roadNetworkTiles);
+
+    // M5 (owner feedback 2026-11-09, idea d): the controller container, the
+    // upgrader's zero-walk fuel stop - rung 4 of the builder's ladder. It is
+    // placed after the source containers (they keep their tiles first) and
+    // receives the extension grid so its site never takes an extension slot
+    // (one construction site per tile).
+    placeControllerContainerSite(room, extensionPositions);
 
     // Place road sites on computed paths (lowest priority)
     const shouldPlace = shouldPlaceRoadSites(room);

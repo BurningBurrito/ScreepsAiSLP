@@ -57,6 +57,18 @@
  *      without any memory - and the choice survives a global reset.
  *   6. Road sites.
  *
+ *   Level 5 and up (M5): the whole queue above is replaced by the static-
+ *   mining ladder (selectContainerFirstSite): first tower, first extension,
+ *   the source containers, the controller container, the M4 extension floor
+ *   (three finished extensions), ramparts, the second tower, the remaining
+ *   extensions, roads, and any leftover container site. That is the only
+ *   order in which a 6,000-tick window (M4) finishes the tower, the first
+ *   extension, both source containers, the controller container and three
+ *   extensions, while a 5,000-tick window (M5) still gets the upgrader
+ *   back on the controller before the measured last 1,000 ticks. Below
+ *   level 5 the bootstrap order 1-6 owns the crew, because M2 and M3
+ *   measure exactly that order.
+ *
  *   The tower used to share its class with the extensions ("closest
  *   priority site wins"), and that is exactly how it starved in the first
  *   M3 attempt: builders cluster on the closest extensions and finish all
@@ -119,6 +131,8 @@ import {
     CONTAINER_BOOST_MIN_EXTENSIONS_L4,
     CONTAINER_BOOST_MIN_LEVEL,
     CONTAINER_BOOST_MIN_ROADS,
+    CONTAINER_EARLY_MIN_LEVEL,
+    CONTROLLER_CONTAINER_RANGE,
 } from "config";
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
 import { moveToToward } from "utils/movement";
@@ -153,15 +167,44 @@ function isBlockedByWaitingCreeps(site: ConstructionSite, builder: Creep): boole
 }
 
 /**
+ * Picks the extension site the whole crew converges on: the most advanced
+ * one (highest build progress; a tie goes to the site closest to the
+ * spawn). All builders see the same progress numbers, so they all compute
+ * the same focus from shared room state: no Memory, and a global reset
+ * cannot desynchronise the crew.
+ * @param extensionSites The candidate extension sites (block-filtered).
+ * @param room The room (for the spawn-position tie-break).
+ * @param creep The builder (the fallback distance target).
+ * @returns The focus site, or null when no site remains.
+ */
+function focusExtension(extensionSites: ConstructionSite[], room: Room, creep: Creep): ConstructionSite | null
+{
+    if (extensionSites.length === 0)
+    {
+        return null;
+    }
+    const spawn = room.find(FIND_MY_SPAWNS)[0];
+    const distanceToSpawn = (site: ConstructionSite): number =>
+        spawn !== undefined
+            ? site.pos.getRangeTo(spawn.pos)
+            : creep.pos.getRangeTo(site.pos);
+    return extensionSites.sort(
+        (a, b) => (b.progress - a.progress) || (distanceToSpawn(a) - distanceToSpawn(b)),
+    )[0];
+}
+
+/**
  * Selects the next construction site for a builder.
  *
  * Priority (M4): in defend or war mode the rampart sites come first;
- * otherwise the tower site on its own, then ramparts, then - while
- * containerFirstForRoom applies - ONE container (the nearest one), then ONE
- * extension (the most advanced, so the whole crew converges on it and
- * actually finishes it), then roads, and containers last of all. Within a
- * priority class the tie-breakers are progress and distance, never a
- * free-for-all.
+ * otherwise, at controller level CONTAINER_EARLY_MIN_LEVEL and up, the
+ * static-mining ladder (selectContainerFirstSite) takes over; below that
+ * level the bootstrap order applies: the tower site on its own, then
+ * ramparts, then - while containerFirstForRoom applies - ONE container (the
+ * nearest one), then ONE extension (the most advanced, so the whole crew
+ * converges on it and actually finishes it), then roads, and containers
+ * last of all. Within a priority class the tie-breakers are progress and
+ * distance, never a free-for-all.
  * @param creep The builder that needs a target (used for pathing)
  * @param room The room to search
  * @param excludeIds Site ids to skip (the ERR_INVALID_TARGET retry passes
@@ -209,6 +252,21 @@ function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<strin
         }
     }
 
+    // M5 ladder (idea a): from controller level CONTAINER_EARLY_MIN_LEVEL
+    // up the static-mining order owns the crew - it is the only order in
+    // which the M4 and M5 acceptance windows both pass (see the file
+    // header for the rungs). Below it the bootstrap order below applies.
+    // A room whose controller has no readable level counts as level 1,
+    // same convention as containerFirstForRoom.
+    const level = room.controller !== undefined &&
+        typeof room.controller.level === "number"
+        ? room.controller.level
+        : 1;
+    if (level >= CONTAINER_EARLY_MIN_LEVEL)
+    {
+        return selectContainerFirstSite(creep, room, excludeIds);
+    }
+
     // The tower gets its own class above the extensions (see the file
     // header for why): all builders on the one 5,000-energy tower site
     // finish it first, then move on to the extensions.
@@ -237,25 +295,16 @@ function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<strin
         return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
     }
 
-    // Extensions: the whole crew works ONE site at a time - the most
-    // advanced one (highest build progress; a tie goes to the site closest
-    // to the spawn). All builders see the same progress numbers, so they
-    // all compute the same focus from shared room state: no Memory, and a
-    // global reset cannot desynchronise the crew. Finishing a site raises
+    // Extensions: the whole crew works ONE site at a time (see
+    // focusExtension for the convergence rule). Finishing a site raises
     // the room's energy capacity, which is what the milestone measures.
     const extensionSites = sitesOf(STRUCTURE_EXTENSION).filter(
         (site) => !isBlockedByWaitingCreeps(site, creep),
     );
-    if (extensionSites.length > 0)
+    const extensionFocus = focusExtension(extensionSites, room, creep);
+    if (extensionFocus !== null)
     {
-        const spawn = room.find(FIND_MY_SPAWNS)[0];
-        const distanceToSpawn = (site: ConstructionSite): number =>
-            spawn !== undefined
-                ? site.pos.getRangeTo(spawn.pos)
-                : creep.pos.getRangeTo(site.pos);
-        return extensionSites.sort(
-            (a, b) => (b.progress - a.progress) || (distanceToSpawn(a) - distanceToSpawn(b)),
-        )[0];
+        return extensionFocus;
     }
 
     // Roads come after containers and extensions: in bootstrap (no tower or
@@ -272,6 +321,156 @@ function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<strin
     // on extensions and roads in bootstrap until M2's minimum is met, and a
     // room that has run out of extension and road sites still finishes its
     // container sites here instead of letting the builders upgrade.
+    if (containerSites.length > 0)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
+    }
+
+    return null;
+}
+
+/**
+ * The static-mining build ladder (M5 idea a), used from controller level
+ * CONTAINER_EARLY_MIN_LEVEL up (see selectBuildSite for the dispatch).
+ *
+ * The rungs, in order:
+ *   1. The FIRST tower (rung 1): the M4 defense must exist before anything
+ *      else spends 5,000 energy.
+ *   2. The FIRST extension (rung 2): one 3,000-energy build of headroom
+ *      before the two 5,000-energy source containers take the queue.
+ *   3. The SOURCE containers (rung 3): the stationary miners' tiles - the
+ *      stage-2 boundary of rule 02b. Both sources get theirs before the
+ *      room spends more on anything else.
+ *   4. The CONTROLLER container (rung 4, idea d): within
+ *      CONTROLLER_CONTAINER_RANGE of the controller, it turns the
+ *      upgrader's long harvest-to-controller round trip into a short hop,
+ *      which is what the M5 "spend the spare energy" criterion measures.
+ *      It sits BEFORE the extension floor: the M5 window (5,000 ticks)
+ *      needs the upgrader back on the controller by the measured last
+ *      1,000 ticks, and only this rung order gets there in time.
+ *   5. The M4 extension FLOOR (rung 5): three finished extensions (450
+ *      energy capacity) - the unconditioned container-first of 2026-11-09
+ *      failed M4 for starving exactly this rung.
+ *   6. Ramparts (rung 6, peace mode only; defend/war already led with
+ *      them in selectBuildSite).
+ *   7. The SECOND tower (rung 7): its tile was reserved by the
+ *      construction manager, so the site exists whenever the first tower
+ *      is done.
+ *   8. The remaining extensions (rung 8), most advanced first.
+ *   9. Roads (rung 9), and 10. any leftover container site (rung 10 -
+ *      defensive: rungs 3 and 4 normally take them all).
+ * @param creep The builder that needs a target
+ * @param room The room to search
+ * @param excludeIds Site ids to skip (the ERR_INVALID_TARGET retry passes
+ *        in the site the engine just refused)
+ * @returns The selected site, or null when nothing is under construction
+ */
+function selectContainerFirstSite(creep: Creep, room: Room, excludeIds: ReadonlySet<string>): ConstructionSite | null
+{
+    const sitesOf = (type: BuildableStructureConstant): ConstructionSite[] =>
+        room.find(FIND_CONSTRUCTION_SITES, {
+            filter: (site) => site.structureType === type && !excludeIds.has(site.id),
+        });
+
+    const towerSites = sitesOf(STRUCTURE_TOWER);
+    const extensionSites = sitesOf(STRUCTURE_EXTENSION).filter(
+        (site) => !isBlockedByWaitingCreeps(site, creep),
+    );
+    const containerSites = sitesOf(STRUCTURE_CONTAINER);
+    const structures = room.find(FIND_MY_STRUCTURES);
+    const towersBuilt = structures.filter(
+        (structure) => structure.structureType === STRUCTURE_TOWER,
+    ).length;
+    const extensionsBuilt = structures.filter(
+        (structure) => structure.structureType === STRUCTURE_EXTENSION,
+    ).length;
+
+    // Rung 1: the first tower.
+    if (towersBuilt === 0 && towerSites.length > 0)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(towerSites);
+    }
+
+    // Rung 2: the first extension, before the 5,000-energy containers.
+    if (extensionsBuilt === 0)
+    {
+        const focus = focusExtension(extensionSites, room, creep);
+        if (focus !== null)
+        {
+            return focus;
+        }
+    }
+
+    // Rung 3: the source containers (the miners' standing tiles).
+    const sources = room.find(FIND_SOURCES);
+    const sourceContainerSites = containerSites.filter(
+        (site) => sources.some((source) => site.pos.getRangeTo(source.pos) <= 1),
+    );
+    if (sourceContainerSites.length > 0)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(sourceContainerSites);
+    }
+
+    // Rung 4: the controller container (idea d) - before the extension
+    // floor, because the M5 window needs the upgrader's round trip
+    // shortened by its measured last 1,000 ticks.
+    const controller = room.controller;
+    const controllerContainerSite = controller !== undefined
+        ? containerSites.find(
+            (site) => site.pos.getRangeTo(controller.pos) <= CONTROLLER_CONTAINER_RANGE,
+        )
+        : undefined;
+    if (controllerContainerSite !== undefined)
+    {
+        return controllerContainerSite;
+    }
+
+    // Rung 5: the M4 extension floor (three finished extensions, 450
+    // energy capacity).
+    if (extensionsBuilt < CONTAINER_BOOST_MIN_EXTENSIONS_L4)
+    {
+        const focus = focusExtension(extensionSites, room, creep);
+        if (focus !== null)
+        {
+            return focus;
+        }
+    }
+
+    // Rung 6: ramparts (peace mode; defend/war led with them already).
+    const rampartSites = sitesOf(STRUCTURE_RAMPART);
+    if (rampartSites.length > 0)
+    {
+        const spawn = room.find(FIND_MY_SPAWNS)[0];
+        const distanceToSpawn = (site: ConstructionSite): number =>
+            spawn !== undefined
+                ? site.pos.getRangeTo(spawn.pos)
+                : creep.pos.getRangeTo(site.pos);
+        return rampartSites.sort(
+            (a, b) => (b.progress - a.progress) || (distanceToSpawn(a) - distanceToSpawn(b)),
+        )[0];
+    }
+
+    // Rung 7: the second tower (its tile was reserved, so the site exists).
+    if (towerSites.length > 0)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(towerSites);
+    }
+
+    // Rung 8: the remaining extensions, most advanced first.
+    const extensionFocus = focusExtension(extensionSites, room, creep);
+    if (extensionFocus !== null)
+    {
+        return extensionFocus;
+    }
+
+    // Rung 9: roads.
+    const roadSites = sitesOf(STRUCTURE_ROAD);
+    if (roadSites.length > 0)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(roadSites);
+    }
+
+    // Rung 10: any leftover container site.
     if (containerSites.length > 0)
     {
         return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
@@ -360,21 +559,87 @@ export function containerFirstForRoom(room: Room): boolean
 }
 
 /**
- * Checks whether the room has a build site that should pause the upgrader:
- * an unfinished tower. The upgrader's WORK parts belong to the tower while it
- * is still a site (M3: the 5,000-energy tower must finish inside the test
- * window, and a fourth builder is the difference). From M5 on the upgrader
- * resumes upgrading for every other site type (extension, container, road):
- * the colony's long-term growth is RCL, and the M5 test measures controller
- * progress per tick - pausing for the extension queue would stall it.
+ * Checks whether the room has a build site that should pause the upgrader.
+ *
+ * Below level 5 (legacy, M3): an unfinished TOWER site - the upgrader's
+ * WORK parts belong to the tower while it is still a site (the 5,000-energy
+ * tower must finish inside the test window, and a fourth builder is the
+ * difference).
+ *
+ * At level CONTAINER_EARLY_MIN_LEVEL and up (the static-mining ladder,
+ * M5 ideas a and d): the upgrader builds the rungs that precede its return
+ * in selectContainerFirstSite - the FIRST tower (rung 1; the second tower
+ * is rung 7, after the extension floor, by which time its WORK belongs to
+ * the controller), the FIRST extension (rung 2), any SOURCE container site
+ * (rung 3) and any CONTROLLER container site (rung 4). The extension floor
+ * (rungs 5-8) and roads do NOT pause it: the M5 test measures controller
+ * progress in its last 1,000 ticks, and pausing for the extension queue is
+ * exactly the stall this check exists to prevent. A container site that is
+ * neither by a source nor within CONTROLLER_CONTAINER_RANGE of the
+ * controller is a plain leftover (rung 10) and never pauses the upgrader.
  * @param room The room to search
- * @returns True when at least one tower site exists
+ * @returns True when the upgrader should run the builder role instead
  */
 export function hasPriorityBuildSites(room: Room): boolean
 {
-    return room.find(FIND_CONSTRUCTION_SITES).some(
-        (site) => site.structureType === STRUCTURE_TOWER,
-    );
+    const controller = room.controller;
+    const level = controller !== undefined && typeof controller.level === "number"
+        ? controller.level
+        : 1;
+
+    const sites = room.find(FIND_CONSTRUCTION_SITES);
+    const towerSites = sites.filter((site) => site.structureType === STRUCTURE_TOWER);
+    if (towerSites.length > 0)
+    {
+        if (level < CONTAINER_EARLY_MIN_LEVEL)
+        {
+            return true; // legacy: any unfinished tower site pauses it
+        }
+        // Ladder: the first tower only (rung 1).
+        const towersBuilt = room.find(FIND_MY_STRUCTURES).filter(
+            (structure) => structure.structureType === STRUCTURE_TOWER,
+        ).length;
+        if (towersBuilt === 0)
+        {
+            return true;
+        }
+    }
+
+    if (level >= CONTAINER_EARLY_MIN_LEVEL)
+    {
+        // Rung 2: the first extension, while none is built yet.
+        const extensionsBuilt = room.find(FIND_MY_STRUCTURES).filter(
+            (structure) => structure.structureType === STRUCTURE_EXTENSION,
+        ).length;
+        if (extensionsBuilt === 0)
+        {
+            const extensionSites = sites.filter((site) => site.structureType === STRUCTURE_EXTENSION);
+            if (extensionSites.length > 0)
+            {
+                return true;
+            }
+        }
+
+        // Rungs 3-4: source containers and the controller container.
+        const containerSites = sites.filter((site) => site.structureType === STRUCTURE_CONTAINER);
+        if (containerSites.length > 0)
+        {
+            const sources = room.find(FIND_SOURCES);
+            const hasSourceContainer = containerSites.some(
+                (site) => sources.some((source) => site.pos.getRangeTo(source.pos) <= 1),
+            );
+            const hasControllerContainerSite = controller !== undefined
+                && containerSites.some(
+                    (site) => site.pos.getRangeTo(controller.pos) <= CONTROLLER_CONTAINER_RANGE,
+                );
+            if (hasSourceContainer || hasControllerContainerSite)
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 /**

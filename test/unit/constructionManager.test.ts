@@ -13,6 +13,7 @@
  */
 import {assert} from "chai";
 import {manageConstruction} from "../../src/managers/constructionManager";
+import {CONTAINER_EARLY_MIN_LEVEL, CONTROLLER_CONTAINER_RANGE, SPAWN_KEEP_CLEAR_RANGE} from "../../src/config";
 
 // Screeps constants referenced as globals by constructionManager.ts. The
 // mock room below dispatches on these exact numbers, so they only have to
@@ -794,5 +795,120 @@ describe("manageConstruction spawn parking ring (M4 builder/extension deadlock, 
         assert.equal(towerSites.length, 1, "one second-tower site");
         assert.include(towerSites, "25,27", "the second tower stays at Chebyshev range 2");
         assert.notInclude(towerSites, "24,26", "no tower on the spawn's diagonal parking tile");
+    });
+});
+
+describe("manageConstruction controller container (M5, owner feedback 2026-11-09 idea d)", () => {
+    beforeEach(() => {
+        tiles = new Map();
+        setGlobal("OK", OK);
+        setGlobal("FIND_SOURCES", FIND_SOURCES);
+        setGlobal("FIND_MY_SPAWNS", FIND_MY_SPAWNS);
+        setGlobal("FIND_CONSTRUCTION_SITES", FIND_CONSTRUCTION_SITES);
+        setGlobal("FIND_MY_STRUCTURES", FIND_MY_STRUCTURES);
+        setGlobal("FIND_STRUCTURES", FIND_STRUCTURES);
+        setGlobal("LOOK_STRUCTURES", LOOK_STRUCTURES);
+        setGlobal("LOOK_CONSTRUCTION_SITES", LOOK_CONSTRUCTION_SITES);
+        setGlobal("STRUCTURE_TOWER", STRUCTURE_TOWER);
+        setGlobal("STRUCTURE_EXTENSION", STRUCTURE_EXTENSION);
+        setGlobal("STRUCTURE_CONTAINER", STRUCTURE_CONTAINER);
+        setGlobal("STRUCTURE_ROAD", STRUCTURE_ROAD);
+        setGlobal("STRUCTURE_RAMPART", STRUCTURE_RAMPART);
+        setGlobal("STRUCTURE_WALL", STRUCTURE_WALL);
+        setGlobal("TERRAIN_MASK_WALL", TERRAIN_MASK_WALL);
+        setGlobal("RoomPosition", PositionMock);
+    });
+
+    /** Container sites within CONTROLLER_CONTAINER_RANGE of the controller, as "x,y". */
+    function controllerContainerSites(room: any): string[]
+    {
+        return room.sites
+            .filter((s: any) =>
+                s.structureType === STRUCTURE_CONTAINER
+                && s.pos.getRangeTo(room.controller.pos) <= CONTROLLER_CONTAINER_RANGE)
+            .map((s: any) => `${s.pos.x},${s.pos.y}`);
+    }
+
+    /** Register a construction site on a tile (both the room and the tile map). */
+    function addSite(room: any, x: number, y: number, structureType: string): void
+    {
+        const site: any = {structureType, pos: new PositionMock(x, y, "W0N1")};
+        room.sites.push(site);
+        tileAt(x, y).sites.push(site);
+    }
+
+    it("places one controller container site within range at level 5", () => {
+        const room = makeRoom();
+        manageConstruction(room);
+        const near = controllerContainerSites(room);
+        assert.equal(near.length, 1, "exactly one controller container site at level 5");
+        const site = near[0];
+        // The site must not take a tile reserved for another plan: the
+        // extension grid, the towers or the ramparts (one site per tile,
+        // and the extension slots raise the energy capacity the creep
+        // bodies are built from).
+        assert.notInclude(sitePositions(room, STRUCTURE_EXTENSION), site, "no overlap with the extension grid");
+        assert.notInclude(sitePositions(room, STRUCTURE_TOWER), site, "no overlap with a tower tile");
+        assert.notInclude(sitePositions(room, STRUCTURE_RAMPART), site, "no overlap with a rampart tile");
+        // And it must keep the spawn's parking ring clear: the creeps that
+        // idle there stand on the spawn's ring-1 tiles, not under a site.
+        const [x, y] = site.split(",").map(Number);
+        const chebyshev = Math.max(Math.abs(x - 25), Math.abs(y - 25));
+        assert.isTrue(chebyshev > SPAWN_KEEP_CLEAR_RANGE, "off the spawn's parking ring");
+        assert.isTrue(chebyshev <= CONTROLLER_CONTAINER_RANGE, "still within the upgrader's range");
+    });
+
+    it("does not place a controller container site below CONTAINER_EARLY_MIN_LEVEL", () => {
+        const room = makeRoom();
+        room.controller.level = CONTAINER_EARLY_MIN_LEVEL - 1;
+        manageConstruction(room);
+        assert.deepEqual(controllerContainerSites(room), [], "the level gate holds");
+    });
+
+    it("never places a site while a built container already serves the controller", () => {
+        const room = makeRoom();
+        addStructure(room, 26, 25, STRUCTURE_CONTAINER);
+        manageConstruction(room);
+        assert.deepEqual(
+            controllerContainerSites(room),
+            [],
+            "a built container within range serves the upgrader - no second one",
+        );
+    });
+
+    it("does not duplicate an open container site near the controller", () => {
+        const room = makeRoom();
+        addSite(room, 26, 25, STRUCTURE_CONTAINER);
+        manageConstruction(room);
+        assert.deepEqual(
+            controllerContainerSites(room),
+            ["26,25"],
+            "the open site stands, no second one is created",
+        );
+    });
+
+    it("respects the five-container budget", () => {
+        const room = makeRoom();
+        addStructure(room, 10, 10, STRUCTURE_CONTAINER);
+        addStructure(room, 11, 10, STRUCTURE_CONTAINER);
+        addStructure(room, 40, 40, STRUCTURE_CONTAINER);
+        addStructure(room, 41, 40, STRUCTURE_CONTAINER);
+        addStructure(room, 12, 12, STRUCTURE_CONTAINER);
+        manageConstruction(room);
+        assert.deepEqual(
+            controllerContainerSites(room),
+            [],
+            "all five container slots are spent - the C_ctrl must not exceed the cap",
+        );
+    });
+
+    it("still places the two source container sites alongside the C_ctrl", () => {
+        const room = makeRoom();
+        manageConstruction(room);
+        console.log("DEBUG SITES:", JSON.stringify(room.sites.map((s: any) => `${s.structureType} ${s.pos.x},${s.pos.y}`)));
+        const containerSites = sitePositions(room, STRUCTURE_CONTAINER);
+        assert.include(containerSites, "10,10", "source A keeps its container");
+        assert.include(containerSites, "40,40", "source B keeps its container");
+        assert.equal(controllerContainerSites(room).length, 1, "and exactly one C_ctrl on top");
     });
 });

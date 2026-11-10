@@ -299,6 +299,19 @@ export const CONTAINER_BOOST_MIN_ROADS = 1;
 export const CONTAINER_BOOST_MIN_LEVEL = 4;
 
 /**
+ * M5 static-mining ladder: the lowest controller level at which the
+ * build queue switches from the bootstrap order (tower, extension,
+ * container) to the static-mining ladder in builder.ts
+ * (selectContainerFirstSite): first tower, first extension, the source
+ * containers, the controller container, the M4 extension floor (three
+ * finished extensions), ramparts, the second tower, the remaining
+ * extensions, roads. Level 5 only: the M4 and M5 acceptance worlds are
+ * level 5, and M2 (level 1-2) and M3 (level 3-4) measure the bootstrap
+ * order, so the ladder must not touch them.
+ */
+export const CONTAINER_EARLY_MIN_LEVEL = 5;
+
+/**
  * M5 container-priority gate (static-mining case): the number of FINISHED
  * extensions a level 4+ room must have before the first source container
  * may take the whole builder crew (containerFirstForRoom). Three is
@@ -330,6 +343,15 @@ export const CONTROLLER_SIGN_TEXT = "ScreepsAiSLP - https://github.com/BurningBu
  * body stays balanced (see bodyTemplates in managers/spawnManager).
  */
 export const CONTROLLER_CONTAINER_RANGE = 3;
+
+/**
+ * The engine's fixed per-room container cap (M5): five containers at every
+ * controller level, no RCL table. The game's CONTROLLER_STRUCTURES runtime
+ * object has no "container" row (only extension, road, rampart, tower), so
+ * the budget check in constructionManager cannot read it from there - it
+ * uses this constant instead.
+ */
+export const MAX_CONTAINERS_PER_ROOM = 5;
 
 /**
  * Hauler delivery order (owner feedback 2026-11-04, fault 3): the energy
