@@ -1,7 +1,7 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state (2026-11-10, run 3 in progress): the M5 "early container"
+Current state (2026-11-10, run 4 in progress): the M5 "early container"
 build priority (owner idea a: 5d4b87e original, 7dc4775 scoped) is
 REVERTED to the 88fb080 priority logic. containerFirstForRoom is back to
 the three cases (a container is already built / RCL <= 2 after the M2
@@ -118,6 +118,22 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-10 (run 4: M5 gate unit-test failure fixed - wrong test expectations)
+- LAST_GATE 2026-11-10 (failed at 55bb96d): lint ok, unit step exit 1 -
+  "test/unit/constructionManager.test.ts: still places the two source
+  container sites alongside the C_ctrl" expected container sites at 10,10
+  and 40,40 - the source tiles themselves. The engine refuses structures
+  on a source tile (createConstructionSite -> ERR_INVALID_TARGET,
+  @types/screeps), and placeContainerSites deliberately picks the
+  source's neighbour closest to the spawn (11,11 for A, 39,39 for B),
+  one source container per tick (the "return; // Only place one container
+  at a time" guard). The test (added in 55bb96d) encoded unverified
+  coordinates and a one-tick assumption - the manager was right, the test
+  was wrong. Fixed to expect 11,11 / 39,39 after two manageConstruction
+  calls and removed the leftover DEBUG console.log. 163 unit passing,
+  lint + build clean. Note: the gate runs ALL tests before pushing, so
+  acceptance-m5 (last EXIT 1 on the idea-a tree, minedShare 0.5853 < 0.6)
+  must also pass for the push - the v9.2 iteration below is the way there.
 ### 2026-11-10 (M5 run 3: M4 regression on idea a - full revert of the container priority)
 - M4 regression CONFIRMED on the scoped idea-a tree (7dc4775 plus the
   uncommitted builder fix): acceptance-m4 (6000 ticks, EXIT 1) ended at
@@ -864,6 +880,12 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **M5 gate fix (2026-11-10, run 4):** the unit-test failure is fixed
+  (wrong expectations in the C_ctrl source-container test, see Change Log;
+  163 unit passing). The v9.2 iteration resumes now - next: M5 acceptance
+  baseline on the CURRENT tree (post idea-a revert: ideas b/c/d + builder
+  pool-drain fix in, no container-first priority), then M4 regression,
+  then the single change most likely to flip the failing criteria.
 - **M5 iteration per owner feedback v9.2 (2026-11-09, one change at a time).**
   The protected acceptance-m5.test.ts was missing from the working tree (parked
   2026-11-08, "the test comes back"); it was restored verbatim from the git

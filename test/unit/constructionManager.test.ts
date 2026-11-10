@@ -904,11 +904,18 @@ describe("manageConstruction controller container (M5, owner feedback 2026-11-09
 
     it("still places the two source container sites alongside the C_ctrl", () => {
         const room = makeRoom();
+        // Two ticks: placeContainerSites opens one source container site per
+        // tick, so the second source's site lands on the next call.
         manageConstruction(room);
-        console.log("DEBUG SITES:", JSON.stringify(room.sites.map((s: any) => `${s.structureType} ${s.pos.x},${s.pos.y}`)));
+        manageConstruction(room);
         const containerSites = sitePositions(room, STRUCTURE_CONTAINER);
-        assert.include(containerSites, "10,10", "source A keeps its container");
-        assert.include(containerSites, "40,40", "source B keeps its container");
+        // A source container stands on the source's neighbour that is
+        // closest to the spawn - never on the source tile itself: the
+        // engine refuses structures on a source tile
+        // (createConstructionSite returns ERR_INVALID_TARGET there).
+        // Source A (10,10) takes (11,11), source B (40,40) takes (39,39).
+        assert.include(containerSites, "11,11", "source A keeps its container");
+        assert.include(containerSites, "39,39", "source B keeps its container");
         assert.equal(controllerContainerSites(room).length, 1, "and exactly one C_ctrl on top");
     });
 });
