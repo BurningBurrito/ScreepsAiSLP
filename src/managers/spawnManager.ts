@@ -52,7 +52,7 @@
  *   is what lands RCL 2 inside the 500-tick smoke window.
  */
 
-import { CONTROLLER_CONTAINER_RANGE, ENERGY_INCOME_FLOOR, MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX } from "config";
+import { CONTAINER_BOOST_MIN_LEVEL, CONTAINER_HAULER_SPARE, CONTROLLER_CONTAINER_RANGE, ENERGY_INCOME_FLOOR, MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX, UNCOVERED_SOURCE_HARVESTERS_L4 } from "config";
 import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
 
 /** Roles checked each tick, highest priority first (owner rule #5). The miner
@@ -326,12 +326,23 @@ function minCreepsPerRole(room: Room): Record<Role, number>
 
     // M5: split the source workers by source state instead of a level table.
     // A source that has a built container on a neighbour tile is mined by a
-    // stationary miner; every other source is still served by a bootstrap
-    // harvester. The two counts sum to the number of sources, so the colony
+    // stationary miner; every other source is still served by bootstrap
+    // harvesters. The two counts sum to the number of sources, so the colony
     // transitions source by source as the containers come up - there is never
     // an unmined source (waste) and never a miner and a harvester stacked on
     // the same source. Until the first container this is simply "all
     // harvesters", which keeps the M1-M4 bootstrap unchanged.
+    //
+    // M5 (2026-11-10, owner feedback v9.2 idea a): at level 4 and up an
+    // uncovered source keeps TWO harvesters, not one. By RCL 4-5 the miner
+    // body tops out at 2-3 WORK (4-6 energy per tick - the room holds
+    // 300-450 energy) and can no longer drain a source's 10-per-tick refill
+    // on its own, so a source still needs a walking harvester beside the
+    // miner to get its energy out. This is what idea-a's run was missing:
+    // harvestedShare 0.488 and harvest 9.08/tick with the first container
+    // built in tick 3369. Below level 4 the bootstrap table rows (row.max
+    // below) already cover every source, so the split stays at one worker
+    // per container-less source there.
     const sources = room.find(FIND_SOURCES);
     const containers = room.find(FIND_STRUCTURES, {
         filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
@@ -347,7 +358,9 @@ function minCreepsPerRole(room: Room): Record<Role, number>
         }
         else
         {
-            harvesterCount += 1;
+            harvesterCount += level >= CONTAINER_BOOST_MIN_LEVEL
+                ? UNCOVERED_SOURCE_HARVESTERS_L4
+                : 1;
         }
     }
 
@@ -383,7 +396,16 @@ function minCreepsPerRole(room: Room): Record<Role, number>
         // 5) - minerCount counts exactly the sources with a built neighbour
         // container. A single hauler cannot serve 30 extensions, 2 towers
         // and the spawn (owner feedback 2026-11-04).
-        hauler: minerCount > 0 ? Math.max(row.hauler, minerCount) : 0,
+        // M5 (2026-11-10, owner feedback v9.2 idea a): from level 4 up the
+        // colony also keeps CONTAINER_HAULER_SPARE (one) extra hauler on
+        // top of the per-container minimum: a hauler that dies is only
+        // replaced on the next spawn tick, and at RCL 5 a dead hauler is
+        // the single point of failure between the source containers and
+        // every consumer - the containers drop while it is out.
+        hauler: minerCount > 0
+            ? Math.max(row.hauler, minerCount)
+                + (level >= CONTAINER_BOOST_MIN_LEVEL ? CONTAINER_HAULER_SPARE : 0)
+            : 0,
         defender,
     };
 }

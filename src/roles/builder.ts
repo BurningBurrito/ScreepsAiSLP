@@ -35,19 +35,24 @@
  *      finished tower's tile. Each costs only 300 energy for 10,000 hits -
  *      cheap insurance, and the M4 spec puts them right after the towers.
  *   4. Container sites (M5) - at level CONTAINER_EARLY_MIN_LEVEL (5) and
- *      up right after the towers (the M5 spec order: tower, source
- *      container, rampart, extension, road); below that level the ramparts
- *      keep this slot and the container waits in its gated slot below.
- *      The first container is what unlocks the stationary miner, so once it
- *      is right to build containers first, the crew stays on them: while a
- *      container is ALREADY BUILT (rule 02b's stage boundary - bootstrap
- *      ends when the first container exists, and the remaining container
- *      queue then matters as much as the first one), in a level 1-2 room
- *      once the FIRST extension and road are finished (the M2 layout
- *      minimum is met, so the container may take the crew), and in a level
- *      4+ room once three extensions are finished (the M5 static-mining
- *      stage: the container sits right after the towers, gated on the M4
- *      extension floor so it cannot starve the third extension). The
+ *      up, the FIRST source container right after the towers (the M5 spec
+ *      order: tower, source container, rampart, extension, road); below
+ *      that level the ramparts keep this slot and the container waits in
+ *      its gated slot below. The first container is what unlocks the
+ *      stationary miner, so once it is right to build containers first,
+ *      the crew stays on them: while a container is ALREADY BUILT (rule
+ *      02b's stage boundary - bootstrap ends when the first container
+ *      exists, and the remaining container queue then matters as much as
+ *      the first one), in a level 1-2 room once the FIRST extension and
+ *      road are finished (the M2 layout minimum is met, so the container
+ *      may take the crew), and in a level 4+ room once three extensions
+ *      are finished (the M5 static-mining stage: the container sits right
+ *      after the towers, gated on the M4 extension floor so it cannot
+ *      starve the third extension). At level 5+ the gate is scoped (2026-
+ *      11-10, idea-a regression fix): only the FIRST container leads
+ *      unconditionally; once it is built, the floor above re-gates the
+ *      rest of the container queue, because the unconditional version let
+ *      the crew build C2, C3, ... past the M4 extension floor. The
  *      M1/M2/M3 order otherwise keeps containers behind extensions and
  *      roads: the unconditional container-first of 2026-11-01 pinned the
  *      whole crew on the first 5,000-energy container site from ~tick 400
@@ -230,15 +235,19 @@ function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<strin
     const containerFirst = containerSites.length > 0 && containerFirstForRoom(room);
     const level = room.controller !== undefined ? room.controller.level : 1;
 
-    // M5 (2026-11-09, owner feedback v9.2 idea a): at
-    // CONTAINER_EARLY_MIN_LEVEL (5) and up the source container leads the
-    // queue right after the towers - the M5 spec build order (tower,
-    // source container, rampart, extension, road). The M5 acceptance
-    // counts the share of ticks (from tick 3000 on) in which a miner
-    // stands on a source container; the 2026-11-09 baseline showed the
-    // L4 extension floor (containerFirstForRoom case 3) left the first
-    // container unbuilt at tick 5000. Below that level the ramparts keep
-    // this slot and the container keeps its gated slot below.
+    // M5 (2026-11-10, scoped idea a): at CONTAINER_EARLY_MIN_LEVEL (5)
+    // and up the FIRST source container leads the queue right after the
+    // towers - the M5 spec build order (tower, source container, rampart,
+    // extension, road). The M5 acceptance counts the share of ticks (from
+    // tick 3000 on) in which a miner stands on a source container; the
+    // 2026-11-09 baseline showed the L4 extension floor (containerFirst-
+    // ForRoom case 3) left the first container unbuilt at tick 5000. The
+    // gate containerFirstForRoom is scoped: once the first container is
+    // built it re-gates on the M4 extension floor (three finished
+    // extensions), which is what the unconditional version of 2026-11-09
+    // skipped and what regressed M4 (one extension at the end of its
+    // window). Below that level the ramparts keep this slot and the
+    // container keeps its gated slot below.
     if (level >= CONTAINER_EARLY_MIN_LEVEL && containerFirst)
     {
         return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
@@ -313,34 +322,44 @@ function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<strin
  * placed one - at RCL 1, ~400 ticks in (smoke: 401 build energy on the
  * container at tick 500) - so in the 3,000-tick M2 window neither an
  * extension nor a road ever finished (gate failure of 2026-11-01: 0 of
- * each). Containers now lead only in the two situations where nothing M2 or
- * M3 measures can starve:
- *   1. A container is already BUILT: rule 02b's stage boundary - bootstrap
+ * each). Containers now lead only in the four situations below:
+ *   1. A container is already BUILT, in a room below
+ *      CONTAINER_EARLY_MIN_LEVEL: rule 02b's stage boundary - bootstrap
  *      ends when the first container exists, and from there the remaining
  *      container queue matters as much as the first one (its miner is what
  *      pays for it).
- *   2. The room is at controller level CONTAINER_BOOST_MAX_LEVEL (2) or
+ *   2. The room is at controller level CONTAINER_EARLY_MIN_LEVEL (5) or
+ *      above and NO container is built yet (M5, 2026-11-09 idea a, scoped
+ *      2026-11-10): the FIRST source container leads right after the
+ *      towers, ahead of the ramparts. The M5 acceptance starts at level 5
+ *      and needs a miner on a source container from tick 3000 on; the M4
+ *      extension floor (case 3) would leave the first container unbuilt at
+ *      tick 5000 (baseline run of 2026-11-09). The gate is scoped on
+ *      "no container built yet" because the 2026-11-09 version was
+ *      unconditional at level 5 and up: the crew kept building C2, C3, ...
+ *      straight after C1 and the M4 "3 finished extensions by tick 6000"
+ *      contract went unmet (one extension at the end of the M4 window).
+ *      Once the first container is built, control falls to case 3 and the
+ *      floor re-gates the rest of the container queue - the second
+ *      container waits behind the three finished extensions, exactly like
+ *      level 4. M4 also starts at level 5, so no level gate can tell the
+ *      two worlds apart - the M4 acceptance re-run is the regression guard.
+ *   3. The room is at controller level CONTAINER_BOOST_MIN_LEVEL (4) or
+ *      above and has already finished at least
+ *      CONTAINER_BOOST_MIN_EXTENSIONS_L4 (3) extensions: the M5 static-
+ *      mining stage (rule 02b) - the source container is right after the
+ *      towers in build order, but only once the M4 extension floor
+ *      ("at least 3 extensions are finished") is met, so the boost cannot
+ *      starve the third extension (the unconditioned L4+ boost failed the
+ *      M4 acceptance on 2026-11-09: extensionsBuilt 1, capacity 350).
+ *      At level 5 and up this case also catches the scoped case 2 above
+ *      (first container built, floor not met yet).
+ *   4. The room is at controller level CONTAINER_BOOST_MAX_LEVEL (2) or
  *      below and has already finished at least CONTAINER_BOOST_MIN_EXTENSIONS
  *      extension and CONTAINER_BOOST_MIN_ROADS road: the M2 layout minimum
  *      ("extension built >= 1" and "road built >= 1") is met, so the
  *      container may take the crew - that is what unlocks the stationary
  *      miner inside the M2/M5 window.
- *   3. The room is at controller level CONTAINER_BOOST_MIN_LEVEL (4) or
- *      above and has already finished at least
- *      CONTAINER_BOOST_MIN_EXTENSIONS_L4 (3) extensions: the M5 static-
- *      mining stage (rule 02b) - the first source container is right after
- *      the towers in build order, but only once the M4 extension floor
- *      ("at least 3 extensions are finished") is met, so the boost cannot
- *      starve the third extension (the unconditioned L4+ boost failed the
- *      M4 acceptance on 2026-11-09: extensionsBuilt 1, capacity 350).
- *   4. The room is at controller level CONTAINER_EARLY_MIN_LEVEL (5) or
- *      above (M5, 2026-11-09): containers lead unconditionally, ahead of
- *      the ramparts. The M5 acceptance starts at level 5 and needs a miner
- *      on a source container from tick 3000 on; case 3's floor would leave
- *      the first container unbuilt at tick 5000 (baseline run of
- *      2026-11-09). M4 also starts at level 5, so no level gate can tell
- *      the two worlds apart - the M4 acceptance re-run is the regression
- *      guard.
  * At controller level 3 the tower-plus-extension density contract
  * (M3) owns the crew instead, and containers wait for case 1.
  * @param room The room to check
@@ -355,28 +374,31 @@ export function containerFirstForRoom(room: Room): boolean
     // every check below (CPU: the builders call this once per tick each
     // while a container site exists).
     const structures = room.find(FIND_STRUCTURES);
-    const builtContainer = structures.some(
+    const builtContainers = structures.filter(
         (structure) => structure.structureType === STRUCTURE_CONTAINER,
-    );
-    if (builtContainer)
-    {
-        return true;
-    }
+    ).length;
     // Same undefined guard as spawnManager: a room without a visible
     // controller counts as level 1 for this check.
     const level = room.controller !== undefined ? room.controller.level : 1;
-    // M5 (2026-11-09): at CONTAINER_EARLY_MIN_LEVEL (5) and up the source
-    // container leads unconditionally, ahead of the ramparts (case 4) - the
-    // M5 acceptance needs a miner on a source container from tick 3000 on,
-    // which the M4 extension floor (case 3) would delay to ~tick 5300.
+    // M5 (2026-11-10, scoped idea a): at CONTAINER_EARLY_MIN_LEVEL (5) and
+    // up the FIRST source container leads unconditionally (case 2); once it
+    // is built the M4 extension floor (case 3) re-gates the queue, so C2
+    // and beyond can no longer starve the third extension.
     if (level >= CONTAINER_EARLY_MIN_LEVEL)
+    {
+        return builtContainers === 0
+            || structures.filter(
+                (structure) => structure.structureType === STRUCTURE_EXTENSION,
+            ).length >= CONTAINER_BOOST_MIN_EXTENSIONS_L4;
+    }
+    if (builtContainers > 0)
     {
         return true;
     }
     if (level > CONTAINER_BOOST_MAX_LEVEL)
     {
-        // M5 static-mining stage (case 3): at level 4 and up the first
-        // source container takes the crew - right after the towers in
+        // M5 static-mining stage (case 3): at level 4 and up the source
+        // container takes the crew - right after the towers in
         // selectBuildSite - once the M4 extension floor is finished. The
         // floor is load-bearing: boosted right after the tower, the crew
         // camps the 5,000-energy container site and the third extension
@@ -402,20 +424,48 @@ export function containerFirstForRoom(room: Room): boolean
 
 /**
  * Checks whether the room has a build site that should pause the upgrader:
- * an unfinished tower. The upgrader's WORK parts belong to the tower while it
- * is still a site (M3: the 5,000-energy tower must finish inside the test
- * window, and a fourth builder is the difference). From M5 on the upgrader
- * resumes upgrading for every other site type (extension, container, road):
- * the colony's long-term growth is RCL, and the M5 test measures controller
- * progress per tick - pausing for the extension queue would stall it.
+ * an unfinished tower, or the FIRST source container in a room at
+ * CONTAINER_EARLY_MIN_LEVEL (5) or up. The upgrader's WORK parts belong to
+ * those sites while they are still sites (M3: the 5,000-energy tower must
+ * finish inside the test window, and a fourth builder is the difference;
+ * M5 idea a: the first 5,000-energy container is what the whole static-
+ * mining stage pays for, and the M5 acceptance measures a miner standing
+ * on it from tick 3000 on - while it is a site, every upgrader's WORK
+ * parts go to it, exactly as they do to the tower).
+ *
+ * The first-container branch is scoped the same way as
+ * containerFirstForRoom is (2026-11-10, idea a regression fix): it only
+ * applies while zero containers are built. The M5 test's upgrade window
+ * starts at tick 4000, long after the first container is up, so pausing
+ * the upgrader here costs nothing the test measures - and buying the full
+ * crew on the site is what keeps the M4 extension floor (3 extensions by
+ * tick 6000) finishing in the same window. From the second container on
+ * the upgrader resumes upgrading: the colony's long-term growth is RCL,
+ * and every other site type (extension, container, road) never pauses it.
  * @param room The room to search
- * @returns True when at least one tower site exists
+ * @returns True when a tower site exists, or the first source container
+ *          site exists in a level 5+ room
  */
 export function hasPriorityBuildSites(room: Room): boolean
 {
-    return room.find(FIND_CONSTRUCTION_SITES).some(
-        (site) => site.structureType === STRUCTURE_TOWER,
-    );
+    const sites = room.find(FIND_CONSTRUCTION_SITES);
+    if (sites.some((site) => site.structureType === STRUCTURE_TOWER))
+    {
+        return true;
+    }
+    const level = room.controller !== undefined ? room.controller.level : 1;
+    if (level < CONTAINER_EARLY_MIN_LEVEL)
+    {
+        return false;
+    }
+    // Only the FIRST container: once one is built, the remaining container
+    // queue goes back behind the M4 extension floor and the upgrader's
+    // WORK parts belong to the controller again.
+    const builtContainers = room.find(FIND_STRUCTURES).filter(
+        (structure) => structure.structureType === STRUCTURE_CONTAINER,
+    ).length;
+    return builtContainers === 0
+        && sites.some((site) => site.structureType === STRUCTURE_CONTAINER);
 }
 
 /**

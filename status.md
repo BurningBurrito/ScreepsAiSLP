@@ -813,14 +813,22 @@ yet.
        take energy from containers); (3) miner replacement lead and (4)
        hauler pick policy not observable (no container ever appeared).
   2. [ ] Change 1 (owner's idea a): first source container right after the
-     towers at L5+ (spec order tower -> container -> rampart -> extension ->
-     road), gated so M4 (also L5, intruder at 5400) stays green. Implemented
-     in 5d4b87e (CONTAINER_EARLY_MIN_LEVEL in src/config.ts, container-first
-     branch in src/roles/builder.ts); M1-M3 pass on it (history.csv 11-10);
-     M5 + M4 verification runs this run (2026-11-10). Expected M4 timeline
-     with 3 builders 2W (BUILD_POWER 5 = 30 progress/tick at full duty):
-     queue T1, C1, T2, C2, E1, E2, E3 finishes ~tick 1500, well inside the
-     M4 deadlines (E3 by 3600, ramparts built before 5400).
+     towers at L5+, gated so M4 (also L5, intruder at 5400) stays green.
+     Original implementation 5d4b87e (CONTAINER_EARLY_MIN_LEVEL, container-first
+     branch in builder.ts) passed M1-M3 (history.csv 11-10) but was never
+     M5/M4-verified. Refined this run (2026-11-10, uncommitted) into the SCOPED
+     version: at L5+ the first container leads the build queue only while zero
+     containers are built (containerFirstForRoom, case 4); once it is up, the
+     M4 3-extension floor (CONTAINER_BOOST_MIN_EXTENSIONS_L4) re-gates the
+     queue so the extensions cannot starve. hasPriorityBuildSites swaps
+     upgraders to builder work for the first container site at L5+ (whole crew
+     on the 5,000-energy site). Crew scaling in spawnManager.ts: uncovered
+     sources keep 2 harvesters at L4+ (UNCOVERED_SOURCE_HARVESTERS_L4) because
+     the miner body tops out at 2-3 WORK there, and a spare hauler rides along
+     at L4+ (CONTAINER_HAULER_SPARE); SURPLUS_BUILDER_MAX raised 3 -> 5. 141
+     unit passing (9 new/updated), lint + build clean, smoke passed (0 console
+     errors, all metrics unchanged). M5 acceptance RUNNING (started 02:57);
+     M4 regression runs after.
   3. [ ] Change 2 (owner's idea b): spend surplus energy on upgraders -
      the upgrader withdraws from containers (not the spawn/extensions) and
      the spawn manager adds a surplus upgrader while the pool is full and a

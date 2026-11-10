@@ -59,12 +59,40 @@ export const ENERGY_INCOME_FLOOR = 2;
 export const SURPLUS_UPGRADER_MAX = 2;
 
 /**
- * Total builders (including the minimum one) the spawn may keep while
- * construction sites exist. Three is the M3 decision (see
- * MIN_CREEPS_BY_LEVEL): enough to finish the tower and the extensions in
- * the test windows; more only adds walk time.
+ * Total builders (including the minimum three) the spawn may keep while
+ * construction sites exist. M5 (2026-11-10, owner feedback v9.2 idea a):
+ * three is the M3 decision and it worked for a single 5,000-energy tower
+ * - but the static-mining transition builds the first 5,000-energy
+ * container while the M4 extension floor (three 3,000-energy extensions)
+ * still has to finish in the same window, and the crew also carries
+ * roads. With three builders the first container starved the extensions
+ * (one extension at the end of the M4 window, four containers under
+ * construction). Five doubles the build pace while the minimums (three)
+ * still hold the steady-state crew; the surplus is spent only while a
+ * site exists AND the energy store is full, so it cannot drain the
+ * economy in a steady-state room.
  */
-export const SURPLUS_BUILDER_MAX = 3;
+export const SURPLUS_BUILDER_MAX = 5;
+
+/**
+ * Harvesters kept per container-less source at level 4 and up, where the
+ * miner body tops out at 2-3 WORK (4-6 energy per tick - the RCL 4-5 room
+ * holds 300-450 energy) and so can no longer drain a source's 10-per-tick
+ * refill on its own (owner feedback v9.2 idea a, 2026-11-10). Below level
+ * 4 the bootstrap table rows already cover every source, so the split
+ * stays at one worker per container-less source (M5 design).
+ */
+export const UNCOVERED_SOURCE_HARVESTERS_L4 = 2;
+
+/**
+ * Extra hauler the spawn keeps beyond the one-per-source-container
+ * minimum at level 4 and up (owner feedback v9.2 idea a, 2026-11-10): a
+ * hauler that dies is only replaced on the next spawn tick, and at
+ * RCL 5 a dead hauler is the single point of failure between the two
+ * source containers and 30+ consumers - every container drops while it
+ * is out. One spare keeps the pipeline moving through that gap.
+ */
+export const CONTAINER_HAULER_SPARE = 1;
 
 /**
  * Fraction of the room's energy capacity at or above which a builder
@@ -285,17 +313,27 @@ export const CONTAINER_BOOST_MIN_LEVEL = 4;
 export const CONTAINER_BOOST_MIN_EXTENSIONS_L4 = 3;
 
 /**
- * M5 container-priority gate (2026-11-09, owner feedback v9.2 idea a): the
- * lowest controller level at which the first source container is built
- * right after the towers - the M5 spec build order (tower, source
- * container, rampart, extension, road) - instead of waiting for the L4
- * extension floor above. The M5 acceptance starts at level 5 and counts
- * the share of ticks (from tick 3000 on) in which a miner stands on a
- * source container; with the floor gate the first container was still
- * unbuilt at tick 5000 of the 2026-11-09 baseline run (the floor only
- * opened when the third extension finished around tick 4700). M4 also
- * starts at level 5, so the gate cannot distinguish the two worlds by
- * level; the M4 acceptance re-run is the regression guard instead.
+ * M5 container-priority gate (2026-11-09, owner feedback v9.2 idea a,
+ * scoped 2026-11-10 after idea a regressed M4): the lowest controller
+ * level at which the first source container is built right after the
+ * towers - the M5 spec build order (tower, source container, rampart,
+ * extension, road) - instead of waiting for the L4 extension floor
+ * above. The M5 acceptance starts at level 5 and counts the share of
+ * ticks (from tick 3000 on) in which a miner stands on a source
+ * container; with the floor gate the first container was still unbuilt
+ * at tick 5000 of the 2026-11-09 baseline run (the floor only opened
+ * when the third extension finished around tick 4700).
+ *
+ * The gate is scoped in builder.containerFirstForRoom: at these levels
+ * it leads the queue ONLY while zero containers are built. The 2026-11-09
+ * version was unconditional, so the crew kept building C2, C3, ... after
+ * the first container and the M4 "3 finished extensions by tick 6000"
+ * contract went unmet (one extension at test end, four containers under
+ * construction). Once the first container is BUILT, the extension floor
+ * above re-gates the queue at these levels too - the second container
+ * waits behind the three finished extensions, exactly like level 4.
+ * M4 also starts at level 5, so the gate cannot distinguish the two
+ * worlds by level; the M4 acceptance re-run is the regression guard.
  */
 export const CONTAINER_EARLY_MIN_LEVEL = 5;
 

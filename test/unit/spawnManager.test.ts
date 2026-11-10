@@ -355,7 +355,8 @@ describe("spawnManager", () => {
     // M5 fault 4: one hauler per source container - a single hauler cannot
     // keep 20 energy per tick flowing through 30 extensions, two towers and
     // the spawn at RCL 5. Both sources have built containers, so the
-    // minimum is 2; one hauler is alive, so the second one spawns.
+    // minimum is 3 (two per-container + the level-4+ spare of 2026-11-10);
+    // one hauler is alive, so the second one spawns (one per spawn tick).
     addCreeps({
       "miner-0": {role: "miner", sourceId: "source-1"},
       "miner-1": {role: "miner", sourceId: "source-2"},
@@ -388,6 +389,101 @@ describe("spawnManager", () => {
       ...new Array(10).fill(MOVE),
     ];
     assert.deepEqual(calls[0].body, expectedBody);
+  });
+
+  it("keeps two harvesters per uncovered source at level 5 (the M5 crew scaling)", () => {
+    // M5 (2026-11-10, owner feedback v9.2 idea a): at level 4 and up an
+    // uncovered source keeps TWO harvesters, not one - the 2-3 WORK miner
+    // (4-6 per tick) can no longer drain a source's 10-per-tick refill on
+    // its own. Source 1 has a built container (the miner works it); source
+    // 2 is uncovered and holds only one harvester, so the second one
+    // spawns.
+    addCreeps({
+      "miner-0": {role: "miner", sourceId: "source-1"},
+      "upgrader-1": {role: "upgrader"},
+      "hauler-2": {role: "hauler"},
+      "hauler-3": {role: "hauler"},
+      "harvester-4": {role: "harvester", sourceId: "source-2"},
+    });
+    // Five creeps already exist, so the next name uses counter value 5.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 5;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 0,
+      containers: 1,
+      controllerLevel: 5,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "harvester-5");
+    assert.equal(calls[0].memory.role, "harvester");
+  });
+
+  it("keeps one harvester per uncovered source below level 4 (no crew scaling leak)", () => {
+    // The two-per-uncovered-source minimum of 2026-11-10 is gated at level
+    // 4: at level 1 (no visible controller) the source state split is back
+    // to one worker per container-less source, the hauler has no spare, and
+    // with every minimum met the store not full the spawn does nothing.
+    addCreeps({
+      "miner-0": {role: "miner", sourceId: "source-1"},
+      "upgrader-1": {role: "upgrader"},
+      "hauler-2": {role: "hauler"},
+      "harvester-3": {role: "harvester", sourceId: "source-2"},
+    });
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 200,
+      sites: 0,
+      containers: 1,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    assert.equal(calls.length, 0, "no extra harvester and no spare hauler below level 4");
+  });
+
+  it("adds one spare hauler on top of the per-container minimum at level 5", () => {
+    // M5 (2026-11-10, owner feedback v9.2 idea a): from level 4 up the
+    // colony keeps CONTAINER_HAULER_SPARE (one) extra hauler beyond the
+    // one-per-source-container minimum. One container, one miner, the
+    // uncovered source covered by its two harvesters, and one hauler
+    // alive - the spare hauler is the only unmet minimum, so it spawns.
+    addCreeps({
+      "miner-0": {role: "miner", sourceId: "source-1"},
+      "upgrader-1": {role: "upgrader"},
+      "hauler-2": {role: "hauler"},
+      "harvester-3": {role: "harvester", sourceId: "source-2"},
+      "harvester-4": {role: "harvester", sourceId: "source-2"},
+    });
+    // Five creeps already exist, so the next name uses counter value 5.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 5;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 0,
+      containers: 1,
+      controllerLevel: 5,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "hauler-5");
+    assert.equal(calls[0].memory.role, "hauler");
   });
 
   it("spawns one harvester per container-less source (the M5 source-state split)", () => {
@@ -747,7 +843,8 @@ describe("spawnManager", () => {
 
     // Sources covered, both upgraders alive (the cap), one builder (the
     // minimum): the surplus step adds a second builder because construction
-    // sites exist (capped at SURPLUS_BUILDER_MAX = 3 total).
+    // sites exist (capped at SURPLUS_BUILDER_MAX = 5 total - raised from
+    // three for the M5 static-mining transition, 2026-11-10).
     assert.equal(calls.length, 1);
     assert.equal(calls[0].name, "builder-5");
     assert.equal(calls[0].memory.role, "builder");
@@ -815,6 +912,8 @@ describe("spawnManager", () => {
       "builder-4": {role: "builder"},
       "builder-5": {role: "builder"},
       "builder-6": {role: "builder"},
+      "builder-7": {role: "builder"},
+      "builder-8": {role: "builder"},
     });
     const {room, calls} = makeRoom({
       capacity: 300,
@@ -828,7 +927,8 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
-    // Sources covered, two upgraders (the cap), three builders (the cap):
+    // Sources covered, two upgraders (the cap), five builders (the cap -
+    // raised from three for the M5 static-mining transition, 2026-11-10):
     // the surplus step has nothing left to spend the idle energy on, so the
     // spawn idles - correct now, because every sink is busy.
     assert.equal(calls.length, 0);
