@@ -1,27 +1,27 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state (2026-11-10): the M4 replay is complete and the tree is the
-88fb080 state (gated container boost at RCL 4+ with 3 built extensions;
-M4 green - see Change Log 2026-11-09). M5 (static mining, 5000 ticks,
-starts RCL 5) is the active milestone. Step-0 baseline ran on the
-untouched tree: 4 failing / 2 passing - no source container was ever
-built before tick 5000 (minedShare 0 %), harvested ~6.7-11.1/tick (need
-13), upgraded ~0.22/tick (need 1), spawn idle-while-full far above 30 %;
-avg dropped 0 (passes) and source-site coverage (passes via t0 sites).
-Per feedback v9.2 the work is one change at a time, each verified
-against M5 AND M4 before the next. This run: change 1 (owner idea a -
-first source container right after the towers at L5+, i.e.
-CONTAINER_EARLY_MIN_LEVEL in src/config.ts + the container-first branch
-in src/roles/builder.ts) was already implemented in the previous run
-(5d4b87e) but was never M5/M4-verified and an unexplained staged revert
-of it was found uncommitted - the revert was dropped and the
-implementation restored, so verification (M5 then M4) is this run's
-first action. Changes 2-5 are owner ideas b, d, c in that order plus a
-pool-consuming builder crew (reordered from the feedback list a, b, c, d:
-step-0 numbers show drops already pass while upgraded/tick and
-spawn-idle-full are the hard failures, so b and d come before c - see
-the In Progress plan).
+Current state (2026-11-10, run 3 in progress): the M5 "early container"
+build priority (owner idea a: 5d4b87e original, 7dc4775 scoped) is
+REVERTED to the 88fb080 priority logic. containerFirstForRoom is back to
+the three cases (a container is already built / RCL <= 2 after the M2
+extension + road minimum / RCL 4+ after the M4 3-extension floor); the
+CONTAINER_EARLY_MIN_LEVEL constant and the L5 container-first branch are
+gone, and hasPriorityBuildSites pauses the upgrader only for tower
+sites again. PRESERVED: the builder getUsedCapacity withdrawal fix
+(verified active in-game by the run-2 pool sawtooth) and the L4+ crew
+scaling (SURPLUS_BUILDER_MAX 5, UNCOVERED_SOURCE_HARVESTERS_L4,
+CONTAINER_HAULER_SPARE). M4 regression CONFIRMED on the scoped idea-a
+tree: acceptance-m4 (6000 ticks, EXIT 1) ended at extensionsBuilt 1 of
+3, energyCapacity 350 of 450, 29 extension sites still open - the
+first 5,000-energy container consumed the build bandwidth the 3-
+extension floor (3 x 3,000 energy) needs in the same window; every
+other M4 criterion passed (2 towers with ramparts, maxTowerEnergy 1000,
+spawnHits 5000, spawnHasRampart, firstHostile 5401 / firstDefend 5401,
+intruder gone in 1 tick). M4 acceptance re-verification is RUNNING on
+the reverted tree; the commit is blocked until it passes. 139 unit
+passing, lint + build clean; git diff against 88fb080 now touches only
+the withdrawal fix, the crew-scaling constants and the builder tests.
 
 Gate fix 2026-11-09: the full-suite gate on e996131 passed M1 and M2 and
 failed M3 on "a connected road leads from the spawn to every source"
@@ -118,7 +118,83 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
-### 2026-11-09 (M5: construction priorities - gated container boost, L4+ pocket tiles)
+### 2026-11-10 (M5 run 3: M4 regression on idea a - full revert of the container priority)
+- M4 regression CONFIRMED on the scoped idea-a tree (7dc4775 plus the
+  uncommitted builder fix): acceptance-m4 (6000 ticks, EXIT 1) ended at
+  extensionsBuilt 1 of 3, energyCapacity 350 of 450, 29 extension sites
+  still open. Mechanism: at L5 the container-first branch led the crew
+  to the first 5,000-energy container before the extensions, and the
+  scoped "first container built" condition still let the container queue
+  re-arm after C1 while the floor was unmet - the 3 x 3,000-energy
+  extension floor never finished in the window. Every other M4 criterion
+  passed (level 5, 2 towers with ramparts, maxTowerEnergy 1000,
+  spawnHits 5000, spawnHasRampart, firstHostile 5401 / firstDefend 5401,
+  intruder gone in 1 tick, hostilesAtEnd 0, mode peace).
+- Revert to the 88fb080 priority logic (UNCOMMITTED, this run):
+  src/roles/builder.ts containerFirstForRoom back to the three cases
+  (built container / RCL <= 2 after the M2 extension + road minimum /
+  RCL 4+ after the M4 3-extension floor), the CONTAINER_EARLY_MIN_LEVEL
+  import and L5 branch removed, hasPriorityBuildSites back to "tower
+  sites only" (the upgrader-to-builder swap for the first container site
+  goes with it). src/config.ts: CONTAINER_EARLY_MIN_LEVEL deleted.
+  PRESERVED: the builder getUsedCapacity withdrawal fix (run-2 verified
+  active in-game) and the L4+ crew scaling. test/unit/builder.test.ts:
+  the three idea-a tests removed; regression guard "keeps the extension
+  ahead of the first container at level 5 below the M4 extension floor"
+  and "does not pause the upgrader for a container site at level 5"
+  added. 139 unit passing, lint + build clean. git diff 88fb080..working
+  tree now touches only the withdrawal fix, the crew-scaling constants
+  and the builder tests.
+- M4 acceptance re-verification on the reverted tree: RUNNING (started
+  this session, previous run took ~44 min). Next run: re-plan the M5
+  early container behind the M4 3-extension floor (first container
+  leads only once 3 extensions are finished) or otherwise budget it so
+  the floor still finishes by tick 6000 - a blanket L5 override cannot
+  coexist with the M4 contract.
+### 2026-11-10 (M5 run 2: builder inverted capacity check - root cause, fix, verification)
+- Refined idea a (container boost) into the SCOPED version (7dc4775, morning
+  session): at L5+ the first container leads the builder queue only while
+  zero containers are built (containerFirstForRoom, case 4); from the second
+  container on the M4 3-extension floor
+  (CONTAINER_BOOST_MIN_EXTENSIONS_L4) re-gates the queue. Crew scaling in
+  src/managers/spawnManager.ts: uncovered sources keep 2 harvesters at L4+
+  (UNCOVERED_SOURCE_HARVESTERS_L4) because the miner body is 1 WORK at
+  capacity 300, a spare hauler rides along at L4+ (CONTAINER_HAULER_SPARE),
+  SURPLUS_BUILDER_MAX 3 -> 5. Pre-fix M5 baseline (5000 ticks, 22m, EXIT 1):
+  5 of 10 criteria fail - minedShare 0.585 (< 0.6), harvested 10.13 (< 13),
+  upgraded 0 (< 1), spawn-idle-full 0.942 (> 0.3), avgDropped 617 (> 300);
+  pool pinned 300/300, build 2.64/tick, 1 container, 0 extensions.
+- Root cause of the pinned pool: src/roles/builder.ts checked
+  spawn/extension store.getFreeCapacity(energy) > 0 before withdrawing -
+  the INVERTED check: a full spawn has zero free capacity, so the builders
+  skipped exactly the structures that hold energy and fell through to
+  self-harvesting from the far source (24+ tick walk), returning full to a
+  spawn they could not transfer into. Fix (UNCOMMITTED, this run): both
+  withdrawal loops now check getUsedCapacity; regression unit test
+  "withdraws from a FULL spawn above the floor instead of self-harvesting"
+  in test/unit/builder.test.ts. 142 unit passing, lint + build clean.
+- Post-fix M5 verification (this session, 5000 ticks, 22m, EXIT 1, "0
+  passing, 1 failing"): the fix is provably active - the pool now
+  sawtooths (samples 169/300 at 2000, 108/300 at 3300-3400, 58/300 at 3800;
+  pre-fix the pool could only dip when the spawn itself spent) - but every
+  last-window (4000-5000) metric is IDENTICAL to the pre-fix baseline:
+  harvested 10.13, upgraded 0, build 2.64, spawn-idle-full 0.942,
+  minedShare 0.585 (first failing assertion), avgDropped 617,
+  maxContainerEnergy 1354, 1 container built (~3900), 0 extensions, RCL
+  5(0), 13 creeps (harvester 3, builder 5, upgrader 2, miner 1, hauler 2).
+- Interpretation: the builder fix is correct but is not the M5 lever. The
+  L5 build queue (30 extensions + second tower + ramparts + ~59 road sites
+  ~ 45,000 energy) cannot be cleared in 5000 ticks at the walk-limited
+  builder drain; last-window build mix was road 401 / rampart 203 /
+  extension 96 / tower 50 (per 1000-tick window). Delivery (~8-9/tick)
+  outpaces the drain, so the pool sits at its 300 cap in 94 % of the last
+  window, exactly as pre-fix. Next levers, in order: extension-priority
+  build queue (extensions are near the spawn and unlock the 3-extension
+  floor -> second container, the 5-WORK miner body [needs capacity 600 = 6
+  extensions] and the harvest >= 13 criterion), then upgrader container
+  fuel (change 2/3) for upgraded >= 1, then hauler ground-pickup for
+  avgDropped <= 300.
+- M4 regression: started 05:08 (6000 ticks); commit after the result.
 - Implemented the M5 construction priorities on the step 4 tree (3642fd2),
   i.e. the reverted step 6 change re-applied with the M4 safety gate:
   - src/config.ts: CONTAINER_BOOST_MIN_LEVEL (4) and
@@ -816,19 +892,28 @@ yet.
      towers at L5+, gated so M4 (also L5, intruder at 5400) stays green.
      Original implementation 5d4b87e (CONTAINER_EARLY_MIN_LEVEL, container-first
      branch in builder.ts) passed M1-M3 (history.csv 11-10) but was never
-     M5/M4-verified. Refined this run (2026-11-10, uncommitted) into the SCOPED
-     version: at L5+ the first container leads the build queue only while zero
-     containers are built (containerFirstForRoom, case 4); once it is up, the
-     M4 3-extension floor (CONTAINER_BOOST_MIN_EXTENSIONS_L4) re-gates the
-     queue so the extensions cannot starve. hasPriorityBuildSites swaps
-     upgraders to builder work for the first container site at L5+ (whole crew
-     on the 5,000-energy site). Crew scaling in spawnManager.ts: uncovered
-     sources keep 2 harvesters at L4+ (UNCOVERED_SOURCE_HARVESTERS_L4) because
-     the miner body tops out at 2-3 WORK there, and a spare hauler rides along
-     at L4+ (CONTAINER_HAULER_SPARE); SURPLUS_BUILDER_MAX raised 3 -> 5. 141
-     unit passing (9 new/updated), lint + build clean, smoke passed (0 console
-     errors, all metrics unchanged). M5 acceptance RUNNING (started 02:57);
-     M4 regression runs after.
+     M5/M4-verified. Refined 2026-11-10 (run 1, committed 7dc4775) into the
+     SCOPED version: at L5+ the first container leads the build queue only
+     while zero containers are built (containerFirstForRoom, case 4); once it
+     is up, the M4 3-extension floor (CONTAINER_BOOST_MIN_EXTENSIONS_L4)
+     re-gates the queue so the extensions cannot starve.
+     hasPriorityBuildSites swaps upgraders to builder work for the first
+     container site at L5+ (whole crew on the 5,000-energy site). Crew
+     scaling in spawnManager.ts: uncovered sources keep 2 harvesters at L4+
+     (UNCOVERED_SOURCE_HARVESTERS_L4) because the miner body tops out at
+     2-3 WORK there, a spare hauler rides along at L4+
+     (CONTAINER_HAULER_SPARE); SURPLUS_BUILDER_MAX raised 3 -> 5.
+     M5 baseline (pre-fix, 5000 ticks, 22m, EXIT 1, recorded last run):
+     5 of 10 criteria fail - minedShare 0.585 (< 0.6), harvested 10.13
+     (< 13), upgraded 0 (< 1), spawn-idle-full 0.942 (> 0.3), avgDropped
+     617 (> 300); 1 container built, 0 extensions, pool pinned 300/300,
+     build 2.64/tick, RCL 5(0), 13 creeps (harvester 3, builder 5,
+     upgrader 2, miner 1, hauler 2), maxContainerEnergy 1354. Post-fix M5
+     re-run (this run, 22m, EXIT 1, "0 passing, 1 failing"): identical
+     last-window numbers - first failing assertion minedShare 0.5853 <
+     0.6 (full breakdown in item 5). M4 regression RUNNING (started
+     05:06); the builder fix (the only uncommitted code change) gets
+     committed after it.
   3. [ ] Change 2 (owner's idea b): spend surplus energy on upgraders -
      the upgrader withdraws from containers (not the spawn/extensions) and
      the spawn manager adds a surplus upgrader while the pool is full and a
@@ -841,9 +926,41 @@ yet.
      upgrader stops walking 24 tiles per load (the step-0 run's upgrader
      starved because its fuel source was across the room).
   5. [ ] Change 4 (pool drain - not an owner idea, forced by step-0's
-     spawn-idle-full failure): raise the L5 builder crew so the pool is
-     consumed, not pinned full (hauler inflow ~20/tick vs spawn outflow
-     ~0.35/tick pins the pool at full with the current 3 builders).
+     spawn-idle-full failure). ROOT CAUSE FOUND (2026-11-10 run 2): not a
+     crew-size problem but a logic bug in src/roles/builder.ts - the
+     withdrawal phase checked spawn/extension store.getFreeCapacity(energy)
+     > 0 before withdrawing, which is the inverted check: a full spawn has
+     zero free capacity, so the builders skipped the very structures that
+     hold energy and fell through to self-harvesting (far source, 24+ tick
+     walk), returning full to a full spawn they could not transfer into.
+     FIX APPLIED this run: the check now uses getUsedCapacity (spawn and
+     extension loops); regression unit test "withdraws from a FULL spawn
+     above the floor instead of self-harvesting" added
+     (test/unit/builder.test.ts), 142 unit passing, lint + build clean.
+     M5 re-run on the fix FINISHED (5000 ticks, 22m, EXIT 1, "0 passing,
+     1 failing"): the fix is provably active in-game - the pool is no
+     longer pinned, it sawtooths (samples 169/300 at 2000, 108/300 at
+     3300-3400, 58/300 at 3800; pre-fix the pool could not fall below the
+     spawn-spending dips at all) - but EVERY last-window (4000-5000) M5
+     metric is unchanged from the pre-fix baseline: harvested 10.13 (< 13),
+     upgraded 0 (< 1), build 2.64, spawn-idle-full 0.942 (> 0.3),
+     minedShare 0.585 (< 0.6), avgDropped 617 (> 300), maxContainerEnergy
+     1354, 1 container built (~3900), 0 extensions (capacity 300 at end),
+     RCL 5(0), 13 creeps (harvester 3, builder 5, upgrader 2, miner 1,
+     hauler 2). First failing assertion: minedShare 0.5853 < 0.6.
+     WHY UNCHANGED: the steady state re-converges. Hauler + harvester
+     delivery (~8-9/tick) outpaces the walk-limited builder drain (build
+     2.64/tick), so the pool ends at its 300 cap in 94 % of the last
+     window (samples 4100-5000 all 300/300, spawn idle) exactly as pre-fix.
+     The real M5 bottlenecks, in order: (1) 0 extensions ever built at
+     L5, so capacity stays 300 and the M4 3-extension floor that gates the
+     second container never opens - whether the extension SITES were even
+     placed is unverified (this M5 run wrote no report file: the harness
+     could not parse the mocha result of the long run, so the per-type
+     site count is unknown; needs a probe); (2) upgrader latch starvation
+     (upgrade 0); (3) miner is 1 WORK at capacity 300 (2/tick) so harvest
+     tops out ~10; (4) hauler ground-pickup missing (dropped 617).
+     M4 regression RUNNING (started 05:06); commit after it.
   6. [ ] Change 5 (owner's idea c): hauler ground pickup - pick up energy
      dropped on/near source tiles before collecting from the container
      (safety net for the avg-dropped criterion; passes at 0 in step 0).

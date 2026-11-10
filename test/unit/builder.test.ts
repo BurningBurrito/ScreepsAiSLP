@@ -72,7 +72,10 @@ function makeBuilder(
     const sourceA = { id: "sA", energy: 500, pos: pos(14, 18) }; // pocket: near the spawn
     const sourceB = { id: "sB", energy: 500, pos: pos(39, 14) }; // open: far from the spawn
     const controller = { my: true, pos: pos(25, 25) };
-    const spawn = { pos: pos(13, 20), store: { getFreeCapacity: () => 0 } };
+    const spawn = {
+        pos: pos(13, 20),
+        store: { getFreeCapacity: () => 0, getUsedCapacity: () => 300 }, // full spawn
+    };
     const neighbours = options.neighbours ?? [];
     const sites = options.sites ?? [];
     const worldSources = options.sources ?? [sourceA, sourceB];
@@ -158,7 +161,10 @@ function makeCarryingBuilder(
     const sourceA = { id: "sA", energy: 500, pos: pos(14, 18) };
     const sourceB = { id: "sB", energy: 500, pos: pos(39, 14) };
     const controller = { my: true, level: options.level ?? 1, pos: pos(25, 25) };
-    const spawn = { pos: pos(13, 20), store: { getFreeCapacity: () => 0 } };
+    const spawn = {
+        pos: pos(13, 20),
+        store: { getFreeCapacity: () => 0, getUsedCapacity: () => 300 }, // full spawn
+    };
     const creep: any = {
         id: "b1",
         memory: { working: true, role: "builder" },
@@ -312,12 +318,39 @@ describe("builder", () => {
         creep.room.energyAvailable = 200; // above the 150 floor
         const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
         spawn.store.getFreeCapacity = () => 50; // the spawn can accept energy
+        spawn.store.getUsedCapacity = () => 250; // and it holds energy to give
         let withdrew = 0;
         creep.withdraw = () => { withdrew += 1; return OK; };
 
         runBuilder(creep);
 
         assert.equal(withdrew, 1, "the builder withdraws from the room above the floor");
+        assert.equal(calls.harvest ?? 0, 0, "the builder does not self-harvest when it can withdraw");
+    });
+
+    it("withdraws from a FULL spawn above the floor instead of self-harvesting", () => {
+        // The M5 regression (2026-11-10): the level 5 world starts with the
+        // spawn full (300/300), and the old free-capacity check skipped a
+        // full spawn every tick, so the builders self-harvested from the far
+        // source for the whole run while the room sat full and the spawn
+        // idled (construction crawled at ~1-3 progress/tick, upgraded/tick
+        // 0, no container before tick 5000). A full spawn holds all the
+        // energy and must be the first place a builder withdraws.
+        const { creep, calls } = makeBuilder(() => 0, { working: false });
+        // @ts-ignore : an upgrader is alive, so the hold-back does not apply
+        global.Game.creeps = { u1: { memory: { role: "upgrader" } } };
+        creep.room.energyAvailable = 300; // room full, above the 150 floor
+        const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
+        spawn.store.getFreeCapacity = () => 0; // spawn full: nothing to accept
+        spawn.store.getUsedCapacity = () => 300; // ...but everything to give
+        let withdrew = 0;
+        let withdrawnFrom: any = null;
+        creep.withdraw = (target: any) => { withdrew += 1; withdrawnFrom = target; return OK; };
+
+        runBuilder(creep);
+
+        assert.equal(withdrew, 1, "the builder withdraws from the full spawn above the floor");
+        assert.equal(withdrawnFrom, spawn, "the full spawn is the withdrawal target");
         assert.equal(calls.harvest ?? 0, 0, "the builder does not self-harvest when it can withdraw");
     });
 
@@ -607,14 +640,14 @@ describe("builder", () => {
         assert.equal(calls.lastBuilt, "ext2", "two built extensions keep the container in the fallback slot");
     });
 
-    it("leads with the first container at level 5 while none is built (scoped idea a)", () => {
-        // M5 (2026-11-10, owner feedback v9.2 idea a, scoped): at level 5
-        // the FIRST source container leads the queue right after the
-        // towers, even though nothing is built beyond the tower - the M5
-        // acceptance counts a miner standing on a source container from
-        // tick 3000 on, which the M4 extension floor would delay past the
-        // test end. The container site is the closer one, but it must win
-        // by priority, not by distance.
+    it("keeps the extension ahead of the first container at level 5 below the M4 extension floor", () => {
+        // M4 regression guard (2026-11-10): M4 also starts at level 5, so
+        // the level-4 extension floor must hold at level 5 too. While no
+        // container is built and fewer than three extensions are finished,
+        // the crew stays on the extension site - the 2026-11-09
+        // container-first ordering (and the 2026-11-10 "scoped" version,
+        // which still let the FIRST container lead at level 5) both failed
+        // M4 with one finished extension and 29 extension sites still open.
         const { creep, calls } = makeCarryingBuilder(
             [
                 { id: "ext1", structureType: "extension", progress: 0, pos: pos(14, 20) },
@@ -628,60 +661,8 @@ describe("builder", () => {
 
         runBuilder(creep);
 
-        assert.equal(calls.build, 1, "the builder builds while the first container site exists");
-        assert.equal(calls.lastBuilt, "con1", "the first container leads at level 5 while none is built");
-    });
-
-    it("keeps the extension ahead of the second container at level 5 below the M4 extension floor", () => {
-        // The regression the scoping fixes: with the first container BUILT
-        // and only two extensions finished, the 2026-11-09 unconditional
-        // version let the crew camp the second container and the M4 "3
-        // finished extensions by tick 6000" contract went unmet. The gate
-        // must re-gate the queue on the M4 floor, exactly like level 4:
-        // the extension site wins while the third extension is unfinished.
-        const { creep, calls } = makeCarryingBuilder(
-            [
-                { id: "ext2", structureType: "extension", progress: 2000, pos: pos(14, 20) },
-                { id: "con2", structureType: "container", progress: 0, pos: pos(18, 25) },
-            ],
-            {
-                level: 5,
-                structures: [
-                    { id: "conB1", structureType: "container" },
-                    { id: "extB1", structureType: "extension" },
-                    { id: "extB2", structureType: "extension" },
-                ],
-            },
-        );
-
-        runBuilder(creep);
-
-        assert.equal(calls.lastBuilt, "ext2", "a built container plus two extensions keep the crew on the third extension at level 5");
-    });
-
-    it("hands the crew to the second container at level 5 once the M4 extension floor is met", () => {
-        // Same room with the third extension finished: the M4 contract is
-        // met, so the remaining container queue may take the crew again -
-        // the scoping only delays C2 to the floor, it does not delete it.
-        const { creep, calls } = makeCarryingBuilder(
-            [
-                { id: "ext2", structureType: "extension", progress: 2000, pos: pos(14, 20) },
-                { id: "con2", structureType: "container", progress: 0, pos: pos(18, 25) },
-            ],
-            {
-                level: 5,
-                structures: [
-                    { id: "conB1", structureType: "container" },
-                    { id: "extB1", structureType: "extension" },
-                    { id: "extB2", structureType: "extension" },
-                    { id: "extB3", structureType: "extension" },
-                ],
-            },
-        );
-
-        runBuilder(creep);
-
-        assert.equal(calls.lastBuilt, "con2", "three built extensions re-arm the container queue at level 5");
+        assert.equal(calls.build, 1, "the builder builds while extension sites exist");
+        assert.equal(calls.lastBuilt, "ext1", "below the M4 extension floor the extension leads even at level 5");
     });
 
     it("hands the crew to the container once the bootstrap minimum is met", () => {
@@ -843,33 +824,20 @@ describe("builder", () => {
         assert.isTrue(hasPriorityBuildSites(room), "a tower site pauses the upgrader");
     });
 
-    it("pauses the upgrader for the first container site at level 5 (upgrader-to-builder)", () => {
-        // M5 (2026-11-10, owner feedback v9.2 idea a): while the first
-        // source container is still a site in a level 5 room, the
-        // upgrader's WORK parts belong to it - runUpgrader swaps it onto
-        // the builder role, so the whole crew (three minimum builders plus
-        // every upgrader) works the 5,000-energy site.
+    it("does not pause the upgrader for a container site at level 5", () => {
+        // 2026-11-10 revert: idea a's upgrader-to-builder swap for the
+        // first container site went away with the container-first
+        // ordering that motivated it (that ordering failed M4 - see the
+        // extension-floor test above). Container sites never pause the
+        // upgrader at any level: the colony's long-term growth is RCL,
+        // and the M5 test measures controller progress per tick.
         const room = makeRoomForPriority(
             [{ id: "con1", structureType: "container", progress: 0, pos: pos(18, 25) }],
             [],
             5,
         );
 
-        assert.isTrue(hasPriorityBuildSites(room), "the first container site at level 5 pauses the upgrader");
-    });
-
-    it("resumes the upgrader once the first container is built at level 5", () => {
-        // The scoping: from the second container on the upgrader's WORK
-        // parts belong to the controller again (the colony's long-term
-        // growth is RCL, and the M5 upgrade window starts long after the
-        // first container is up).
-        const room = makeRoomForPriority(
-            [{ id: "con2", structureType: "container", progress: 0, pos: pos(18, 25) }],
-            [{ id: "conB1", structureType: "container" }],
-            5,
-        );
-
-        assert.isFalse(hasPriorityBuildSites(room), "a built container un-pauses the upgrader at level 5");
+        assert.isFalse(hasPriorityBuildSites(room), "container sites never pause the upgrader");
     });
 
     it("does not pause the upgrader for container sites below level 5", () => {
