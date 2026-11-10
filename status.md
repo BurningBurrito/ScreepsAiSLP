@@ -1,27 +1,27 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state after the owner's reset (2026-11-08, feedback v9.1): main was reset to
-040eef6 (2026-11-04), the last commit where acceptance-m4 passed (9.84 harvested/tick,
-4 extensions, capacity 500, RCL 5; reports/latest.md of 2026-11-04 18:05). The two owner
-chore commits on top (57e2a1d, 8374bbf) only park the M5 tests and change no game code.
-Every M4-attempt change since 11-05 (crew rows, floors, lanes, staggered replacement,
-recovery sizing, builder yield, pathfinding) lives on the branch
-backup/m4-attempts-2026-11-08 and is being taken back one named step at a time - the
-"M4 replay"; M5 is parked by the owner until the replay is done. The 2026-11-08 20:10
-gate failed M4 on the pre-reset code ("at least 3 extensions are finished", 0 of 3):
-that failure belongs to the backup branch, not to main. Replay progress: see "In
-Progress". Replay state 2026-11-09: the replay is COMPLETE. Steps 0-4 are in
-and M4-verified; step 5 (parking, b00c0e1) FAILED M4 (extensionsBuilt 1,
-capacity 350 - needs 3/450) and was reverted per the owner's protocol
-(0ce4712); the M3 gate break from step 2's contested tile was fixed in
-62963bc and M3 passes (sourcesConnected 2 of 2, roadTiles 59); step 6
-(container boost, cad8c5b) FAILED its M4 acceptance in the 2026-11-09 full
-suite (extensionsBuilt 1, capacity 350 - needs 3/450; every other M4
-criterion passing) and was reverted per the owner's protocol (92f465f).
-The tree is the step 4 tree plus the M3 road fix; per feedback v9.1 the
-replay ends at step 6 and M5 is unblocked. Final full-suite re-verification
-on the reverted tree is running (the gate before the push).
+Current state (2026-11-10): the M4 replay is complete and the tree is the
+88fb080 state (gated container boost at RCL 4+ with 3 built extensions;
+M4 green - see Change Log 2026-11-09). M5 (static mining, 5000 ticks,
+starts RCL 5) is the active milestone. Step-0 baseline ran on the
+untouched tree: 4 failing / 2 passing - no source container was ever
+built before tick 5000 (minedShare 0 %), harvested ~6.7-11.1/tick (need
+13), upgraded ~0.22/tick (need 1), spawn idle-while-full far above 30 %;
+avg dropped 0 (passes) and source-site coverage (passes via t0 sites).
+Per feedback v9.2 the work is one change at a time, each verified
+against M5 AND M4 before the next. This run: change 1 (owner idea a -
+first source container right after the towers at L5+, i.e.
+CONTAINER_EARLY_MIN_LEVEL in src/config.ts + the container-first branch
+in src/roles/builder.ts) was already implemented in the previous run
+(5d4b87e) but was never M5/M4-verified and an unexplained staged revert
+of it was found uncommitted - the revert was dropped and the
+implementation restored, so verification (M5 then M4) is this run's
+first action. Changes 2-5 are owner ideas b, d, c in that order plus a
+pool-consuming builder crew (reordered from the feedback list a, b, c, d:
+step-0 numbers show drops already pass while upgraded/tick and
+spawn-idle-full are the hard failures, so b and d come before c - see
+the In Progress plan).
 
 Gate fix 2026-11-09: the full-suite gate on e996131 passed M1 and M2 and
 failed M3 on "a connected road leads from the spawn to every source"
@@ -814,18 +814,41 @@ yet.
        hauler pick policy not observable (no container ever appeared).
   2. [ ] Change 1 (owner's idea a): first source container right after the
      towers at L5+ (spec order tower -> container -> rampart -> extension ->
-     road), gated so M4 (also L5, intruder at 5400) stays green.
-  3. [ ] Change 2 (owner's idea b): miner replacement before death (lead
-     replacement in the spawn manager).
-  4. [ ] Change 3 (owner's idea c): hauler container pickup balance (least
-     energy first) so both source containers are emptied evenly.
-  5. [ ] If upgraded/tick is still < 1 after 1-3: give the upgrader container
-     fuel (spec design note), e.g. a controller-area container it withdraws
-     from instead of competing with miners on source tiles.
+     road), gated so M4 (also L5, intruder at 5400) stays green. Implemented
+     in 5d4b87e (CONTAINER_EARLY_MIN_LEVEL in src/config.ts, container-first
+     branch in src/roles/builder.ts); M1-M3 pass on it (history.csv 11-10);
+     M5 + M4 verification runs this run (2026-11-10). Expected M4 timeline
+     with 3 builders 2W (BUILD_POWER 5 = 30 progress/tick at full duty):
+     queue T1, C1, T2, C2, E1, E2, E3 finishes ~tick 1500, well inside the
+     M4 deadlines (E3 by 3600, ramparts built before 5400).
+  3. [ ] Change 2 (owner's idea b): spend surplus energy on upgraders -
+     the upgrader withdraws from containers (not the spawn/extensions) and
+     the spawn manager adds a surplus upgrader while the pool is full and a
+     container holds more than half its capacity. Target: upgraded/tick
+     0.22 -> >= 1 and a lower spawn-idle-full.
+  4. [ ] Change 3 (owner's idea d): controller-area container - the
+     construction manager places and the builders finish a third container
+     within range 3 of the controller; the hauler delivers there when the
+     pool is above its floor and the upgrader withdraws from it, so the
+     upgrader stops walking 24 tiles per load (the step-0 run's upgrader
+     starved because its fuel source was across the room).
+  5. [ ] Change 4 (pool drain - not an owner idea, forced by step-0's
+     spawn-idle-full failure): raise the L5 builder crew so the pool is
+     consumed, not pinned full (hauler inflow ~20/tick vs spawn outflow
+     ~0.35/tick pins the pool at full with the current 3 builders).
+  6. [ ] Change 5 (owner's idea c): hauler ground pickup - pick up energy
+     dropped on/near source tiles before collecting from the container
+     (safety net for the avg-dropped criterion; passes at 0 in step 0).
   - Each change: unit test, lint + build + unit, M5 acceptance, M4 acceptance
     (regression), then commit with before/after scorecard numbers.
   - Baseline M4 guard: last pass 88fb080 (2026-11-09 18:43) - must re-pass
     after every change.
+  - Order deviation from the feedback list (a, b, c, d) is justified by the
+    step-0 numbers: drops pass at 0, so c is last; b and d are the two
+    criteria that need energy-flow changes (upgraded 0.22 -> 1,
+    idle-full -> <= 30 %). Harvest margin depends on the miner body ladder
+     (5W = 10/tick per source is the spec body; verify the ladder while
+     change 1 verifies).
 - **M5 construction priorities (previous run, complete in 88fb080).**
   The M4 replay ended at the reverted step 6 (unconditioned L4+ container boost
   failed M4: extensionsBuilt 1, capacity 350). That run re-applied the boost
