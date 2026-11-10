@@ -788,9 +788,47 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **M5 construction priorities (current milestone; M4 replay complete, M5 unblocked).**
+- **M5 iteration per owner feedback v9.2 (2026-11-09, one change at a time).**
+  The protected acceptance-m5.test.ts was missing from the working tree (parked
+  2026-11-08, "the test comes back"); it was restored verbatim from the git
+  history (0bffe66, 112 lines, 5000 ticks, 5 criteria - identical to the M5.md
+  spec), so the baseline can run; the launcher re-restores the official copy at
+  the gate. Protocol: step-0 baseline on the untouched tree, then one change
+  per cycle, each verified against M5 AND M4 before the next change; every
+  change gets a "Feedback acknowledged" line with commit + M5/M4 numbers.
+  1. [x] Step 0 baseline: acceptance-m5 on 88fb080 as-is, 5000 ticks, FINISHED
+     2026-11-09, 4 failing / 2 passing, verdict "static mining is not running":
+     - failing: miner+container on a source for 100% of ticks 3000-5000 (0% -
+       no container was ever built: the L4 extension-floor gate opened only at
+       ~4700 when 3 extensions finished, container A projected ~5300);
+       final-window harvested/tick >= 18 (measured ~6.7-11.1); final-window
+       upgraded/tick >= 1 (measured ~0.22: controller 150->350 from tick 4000
+       to 4900, ~0 for most of the run); spawn idle while store full <= 30%.
+     - passing: avg dropped <= 300 (0.00 - no containers, so nothing drops);
+       "all sources have containers (built or placed)" via SITES placed at t0.
+     - Mechanisms: (1) L5 build order puts ramparts + the 3-extension floor
+       ahead of the first source container; (2) the upgrader latches to the
+       pocket source (2 standable tiles) that 5 bootstrap harvesters occupy
+       forever, so it starves and has no container fuel path (spec: upgraders
+       take energy from containers); (3) miner replacement lead and (4)
+       hauler pick policy not observable (no container ever appeared).
+  2. [ ] Change 1 (owner's idea a): first source container right after the
+     towers at L5+ (spec order tower -> container -> rampart -> extension ->
+     road), gated so M4 (also L5, intruder at 5400) stays green.
+  3. [ ] Change 2 (owner's idea b): miner replacement before death (lead
+     replacement in the spawn manager).
+  4. [ ] Change 3 (owner's idea c): hauler container pickup balance (least
+     energy first) so both source containers are emptied evenly.
+  5. [ ] If upgraded/tick is still < 1 after 1-3: give the upgrader container
+     fuel (spec design note), e.g. a controller-area container it withdraws
+     from instead of competing with miners on source tiles.
+  - Each change: unit test, lint + build + unit, M5 acceptance, M4 acceptance
+    (regression), then commit with before/after scorecard numbers.
+  - Baseline M4 guard: last pass 88fb080 (2026-11-09 18:43) - must re-pass
+    after every change.
+- **M5 construction priorities (previous run, complete in 88fb080).**
   The M4 replay ended at the reverted step 6 (unconditioned L4+ container boost
-  failed M4: extensionsBuilt 1, capacity 350). This run re-applies the boost
+  failed M4: extensionsBuilt 1, capacity 350). That run re-applied the boost
   with the M4 safety gate and the L4+ pocket-tile ownership:
   1. [x] Gate constants in src/config.ts: CONTAINER_BOOST_MIN_LEVEL (4) and
      CONTAINER_BOOST_MIN_EXTENSIONS_L4 (3 - exactly the M4 floor of "at least

@@ -285,6 +285,21 @@ export const CONTAINER_BOOST_MIN_LEVEL = 4;
 export const CONTAINER_BOOST_MIN_EXTENSIONS_L4 = 3;
 
 /**
+ * M5 container-priority gate (2026-11-09, owner feedback v9.2 idea a): the
+ * lowest controller level at which the first source container is built
+ * right after the towers - the M5 spec build order (tower, source
+ * container, rampart, extension, road) - instead of waiting for the L4
+ * extension floor above. The M5 acceptance starts at level 5 and counts
+ * the share of ticks (from tick 3000 on) in which a miner stands on a
+ * source container; with the floor gate the first container was still
+ * unbuilt at tick 5000 of the 2026-11-09 baseline run (the floor only
+ * opened when the third extension finished around tick 4700). M4 also
+ * starts at level 5, so the gate cannot distinguish the two worlds by
+ * level; the M4 acceptance re-run is the regression guard instead.
+ */
+export const CONTAINER_EARLY_MIN_LEVEL = 5;
+
+/**
  * Controller sign text (owner request, feedback 2026-11-02): the exact string
  * every room the bot owns carries as its controller sign. The upgrader signs
  * it while already on the upgrade round trip (signController needs range 1),

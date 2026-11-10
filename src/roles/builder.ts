@@ -34,7 +34,10 @@
  *   3. Rampart sites (peace): one on the spawn's tile and one on each
  *      finished tower's tile. Each costs only 300 energy for 10,000 hits -
  *      cheap insurance, and the M4 spec puts them right after the towers.
- *   4. Container sites (M5) - but only while containerFirstForRoom says so.
+ *   4. Container sites (M5) - at level CONTAINER_EARLY_MIN_LEVEL (5) and
+ *      up right after the towers (the M5 spec order: tower, source
+ *      container, rampart, extension, road); below that level the ramparts
+ *      keep this slot and the container waits in its gated slot below.
  *      The first container is what unlocks the stationary miner, so once it
  *      is right to build containers first, the crew stays on them: while a
  *      container is ALREADY BUILT (rule 02b's stage boundary - bootstrap
@@ -119,6 +122,7 @@ import {
     CONTAINER_BOOST_MIN_EXTENSIONS_L4,
     CONTAINER_BOOST_MIN_LEVEL,
     CONTAINER_BOOST_MIN_ROADS,
+    CONTAINER_EARLY_MIN_LEVEL,
 } from "config";
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
 import { moveToToward } from "utils/movement";
@@ -155,13 +159,14 @@ function isBlockedByWaitingCreeps(site: ConstructionSite, builder: Creep): boole
 /**
  * Selects the next construction site for a builder.
  *
- * Priority (M4): in defend or war mode the rampart sites come first;
- * otherwise the tower site on its own, then ramparts, then - while
- * containerFirstForRoom applies - ONE container (the nearest one), then ONE
- * extension (the most advanced, so the whole crew converges on it and
- * actually finishes it), then roads, and containers last of all. Within a
- * priority class the tie-breakers are progress and distance, never a
- * free-for-all.
+ * Priority (M4/M5): in defend or war mode the rampart sites come first;
+ * otherwise the tower site on its own, then - at level
+ * CONTAINER_EARLY_MIN_LEVEL (5) and up - the source containers, then
+ * ramparts, then - while containerFirstForRoom applies - ONE container
+ * (the nearest one), then ONE extension (the most advanced, so the whole
+ * crew converges on it and actually finishes it), then roads, and
+ * containers last of all. Within a priority class the tie-breakers are
+ * progress and distance, never a free-for-all.
  * @param creep The builder that needs a target (used for pathing)
  * @param room The room to search
  * @param excludeIds Site ids to skip (the ERR_INVALID_TARGET retry passes
@@ -218,6 +223,27 @@ function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<strin
         return creep.pos.findClosestByPath<ConstructionSite>(towerSites);
     }
 
+    // Computed once here and shared by the two container branches below:
+    // one find and one gate call (the gate does its own room.find) per
+    // builder per tick, not one per branch.
+    const containerSites = sitesOf(STRUCTURE_CONTAINER);
+    const containerFirst = containerSites.length > 0 && containerFirstForRoom(room);
+    const level = room.controller !== undefined ? room.controller.level : 1;
+
+    // M5 (2026-11-09, owner feedback v9.2 idea a): at
+    // CONTAINER_EARLY_MIN_LEVEL (5) and up the source container leads the
+    // queue right after the towers - the M5 spec build order (tower,
+    // source container, rampart, extension, road). The M5 acceptance
+    // counts the share of ticks (from tick 3000 on) in which a miner
+    // stands on a source container; the 2026-11-09 baseline showed the
+    // L4 extension floor (containerFirstForRoom case 3) left the first
+    // container unbuilt at tick 5000. Below that level the ramparts keep
+    // this slot and the container keeps its gated slot below.
+    if (level >= CONTAINER_EARLY_MIN_LEVEL && containerFirst)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
+    }
+
     // Peace mode: ramparts come right after the towers (the M4 spec order:
     // tower sites, then ramparts, then extensions, then everything else,
     // roads last).
@@ -231,8 +257,7 @@ function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<strin
     // containerFirstForRoom applies (see it for the gate and why the
     // unconditional container-first of 2026-11-01 broke M2). Without the
     // gate, containers fall to the very end of the queue, behind roads.
-    const containerSites = sitesOf(STRUCTURE_CONTAINER);
-    if (containerSites.length > 0 && containerFirstForRoom(room))
+    if (containerFirst)
     {
         return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
     }
@@ -308,6 +333,14 @@ function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<strin
  *      ("at least 3 extensions are finished") is met, so the boost cannot
  *      starve the third extension (the unconditioned L4+ boost failed the
  *      M4 acceptance on 2026-11-09: extensionsBuilt 1, capacity 350).
+ *   4. The room is at controller level CONTAINER_EARLY_MIN_LEVEL (5) or
+ *      above (M5, 2026-11-09): containers lead unconditionally, ahead of
+ *      the ramparts. The M5 acceptance starts at level 5 and needs a miner
+ *      on a source container from tick 3000 on; case 3's floor would leave
+ *      the first container unbuilt at tick 5000 (baseline run of
+ *      2026-11-09). M4 also starts at level 5, so no level gate can tell
+ *      the two worlds apart - the M4 acceptance re-run is the regression
+ *      guard.
  * At controller level 3 the tower-plus-extension density contract
  * (M3) owns the crew instead, and containers wait for case 1.
  * @param room The room to check
@@ -332,6 +365,14 @@ export function containerFirstForRoom(room: Room): boolean
     // Same undefined guard as spawnManager: a room without a visible
     // controller counts as level 1 for this check.
     const level = room.controller !== undefined ? room.controller.level : 1;
+    // M5 (2026-11-09): at CONTAINER_EARLY_MIN_LEVEL (5) and up the source
+    // container leads unconditionally, ahead of the ramparts (case 4) - the
+    // M5 acceptance needs a miner on a source container from tick 3000 on,
+    // which the M4 extension floor (case 3) would delay to ~tick 5300.
+    if (level >= CONTAINER_EARLY_MIN_LEVEL)
+    {
+        return true;
+    }
     if (level > CONTAINER_BOOST_MAX_LEVEL)
     {
         // M5 static-mining stage (case 3): at level 4 and up the first
