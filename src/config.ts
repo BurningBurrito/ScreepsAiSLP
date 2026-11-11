@@ -334,26 +334,30 @@ export const CONTAINER_BOOST_MIN_LEVEL = 4;
  * M5 static-mining ladder: the lowest controller level at which the
  * build queue switches from the bootstrap order (tower, extension,
  * container) to the static-mining ladder in builder.ts
- * (selectContainerFirstSite): first tower, first extension, the source
- * containers, the controller container, the M4 extension floor (three
- * finished extensions), ramparts, the second tower, the remaining
- * extensions, roads. Level 5 only: the M4 and M5 acceptance worlds are
- * level 5, and M2 (level 1-2) and M3 (level 3-4) measure the bootstrap
- * order, so the ladder must not touch them.
+ * (selectContainerFirstSite): first tower, the M4 extension floor (three
+ * finished extensions), the source containers, the controller container,
+ * ramparts, the second tower, the remaining extensions, roads. The floor
+ * is rung 2 and gates the containers: the un-gated order of 2026-11-10
+ * spent the container pair before the third extension and failed M4 at
+ * tick 6,000 (extensionsBuilt 1, capacity 350 of 450). Level 5 only: the
+ * M4 and M5 acceptance worlds are level 5, and M2 (level 1-2) and M3
+ * (level 3-4) measure the bootstrap order, so the ladder must not touch
+ * them.
  */
 export const CONTAINER_EARLY_MIN_LEVEL = 5;
 
 /**
- * M5 container-priority gate (static-mining case): the number of FINISHED
- * extensions a level 4+ room must have before the first source container
- * may take the whole builder crew (containerFirstForRoom). Three is
- * exactly the M4 acceptance floor ("at least 3 extensions are finished"):
- * the crew switches to the container only after M4's contract is
- * already met, so the boost cannot starve the third extension. The
- * unconditioned L4+ boost (right after the first tower) failed the M4
- * acceptance on 2026-11-09: extensionsBuilt 1, energyCapacity 350 versus
- * the required 3 and 450 - the crew camped the 5,000-energy container
- * site and the extensions never caught up.
+ * M4 extension floor (static-mining case): the number of FINISHED
+ * extensions a level 4+ room must have before a container may take the
+ * whole builder crew - the bootstrap boost (containerFirstForRoom) and,
+ * from level CONTAINER_EARLY_MIN_LEVEL up, rungs 3-4 of the static-mining
+ * ladder (selectContainerFirstSite). Three is exactly the M4 acceptance
+ * floor ("at least 3 extensions are finished"): the crew switches to a
+ * container only after M4's contract is already met, so the containers
+ * cannot starve the third extension. The un-gated container-first of
+ * 2026-11-09/10 failed M4 for exactly this: the crew camped the 5,000-
+ * energy container sites (extensionsBuilt 1, energyCapacity 350 versus
+ * the required 3 and 450) and the extensions never caught up.
  */
 export const CONTAINER_BOOST_MIN_EXTENSIONS_L4 = 3;
 

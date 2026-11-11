@@ -1,6 +1,25 @@
 # ScreepsAiSLP Status
 
 ## Current State
+Current state (2026-11-11, run 5): FEEDBACK v9.3 fixes in progress.
+Fix 1 is committed (b36207d): src/utils/energy.ts adds getEnergy(creep,
+role) - drops within BUILDER_DROP_PICKUP_RANGE, upgrader-only controller
+container, fullest source container >= MIN_CONTAINER_WITHDRAW_ENERGY (new
+config, 100), builder-only pool above BUILDER_WITHDRAW_FRACTION (with the
+upgraderBelowMinimum hold-back), and a "wait" outcome when a container
+holds energy but below the threshold (idling beats a partial-load source
+trip). runBuilder and runUpgrader route their empty-store step through it;
+the self-harvest paths stay as the last resort. Owner unit-test specs all
+implemented: builder + 1000-energy source container withdraws from it,
+builder + 50-energy container idles (no harvest, no move), upgrader +
+source container withdraws, upgrader + 50-energy container idles. 167 unit
+passing, lint + build clean. Fix 2 is applied (not yet committed):
+hasPriorityBuildSites in src/roles/builder.ts no longer pauses the
+upgrader for container sites (rungs 3-4 removed); tower (rung 1) and first
+extension (rung 2) still pause it. 166 unit passing with both fixes.
+acceptance-m4 (the gate blocker, extensionsBuilt 1 of 3 at de5c985) is
+RUNNING on the tree with both fixes; acceptance-m5 follows if M4 passes.
+
 Current state (2026-11-11): M3 gate failure fixed. The gate (2026-11-10
 21:59) failed M3 on maxTowerEnergy 0 (needs 500): the tower was last in the
 harvester delivery cascade and only saw pool OVERFLOW, but the builder
@@ -145,6 +164,37 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-11 (FEEDBACK v9.3: shared getEnergy + upgrader pause)
+- **Fix 1 (commit b36207d): shared getEnergy.** New src/utils/energy.ts
+  with getEnergy(creep, role): (1) drop within BUILDER_DROP_PICKUP_RANGE,
+  (2) upgrader only: controller container, (3) fullest source container
+  >= MIN_CONTAINER_WITHDRAW_ENERGY (new config constant, 100), (4) builder
+  only: spawn/extensions above BUILDER_WITHDRAW_FRACTION of capacity, held
+  back while upgraderBelowMinimum, (5) "harvest" only when no container
+  has energy, else "wait" (idle this tick). runBuilder and runUpgrader
+  call it for their empty-store step; the pre-existing self-harvest paths
+  remain as the final fallback. Owner test specs covered in
+  test/unit/builder.test.ts (withdraw from a 1000-energy source container;
+  idle on a 50-energy one - no harvest, no move) and
+  test/unit/upgrader.test.ts (same two for the upgrader). 167 unit
+  passing with Fix 1 alone, lint + build clean.
+- **Fix 2 (pending commit): hasPriorityBuildSites loses rungs 3-4.**
+  Container sites (source or controller) no longer pause the upgrader;
+  only the first tower site and the first extension site do. This is the
+  M5 regression the owner diagnosed (cause 2): while any container site
+  existed, the upgrader ran the builder role all run (upgradePerTick 0 on
+  the 2026-11-09 M5 run). The builder's own ladder (selectBuildSite) still
+  builds containers first - only the upgrader's pause changed. test/unit/
+  builder.test.ts: the two "pauses for a container site" tests replaced by
+  one "does not pause the upgrader for container sites at level 5" (tower
+  + extension built, source + controller container sites -> false).
+  166 unit passing with both fixes, lint + build clean.
+- **Verification pending:** acceptance-m4 (gate blocker; de5c985 ended
+  extensionsBuilt 1 of 3, energyCapacity 350 of 450) running on the tree
+  with both fixes; acceptance-m5 (owner's M5 regression: tower 15,429 of
+  20,000, extension 0 of 27,000) next. Numbers to be copied into this
+  entry when the runs finish.
+
 ### 2026-11-11 (M3 gate fix: tower-first harvester delivery)
 - **M3 maxTowerEnergy 0 -> 500, acceptance passing.** The 2026-11-10 21:59
   gate failed M3 on "the tower was filled with at least 500 energy at some
@@ -933,6 +983,34 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **FEEDBACK v9.3 fixes (2026-11-11).** Two surgical fixes, each in its own
+  commit (owner: no M4/M5 redesign, no M3/M4/M5 rewrite).
+  1. `getEnergy(creep, role)` in src/utils/energy.ts: (1) drop within
+     BUILDER_DROP_PICKUP_RANGE, (2) upgrader only: controller container,
+     (3) fullest source container >= MIN_CONTAINER_WITHDRAW_ENERGY (new
+     config, 100), (4) builder only: spawn/extensions above
+     BUILDER_WITHDRAW_FRACTION (upgraderBelowMinimum hold-back), (5) harvest
+     only if no container has energy, else idle ("wait"). runBuilder and
+     runUpgrader call it; their self-harvest logic stays. Owner unit-test
+     specs (a) 50-energy container -> no harvest, (b) 150 -> withdraw,
+     (c) upgrader partial store + 10-energy controller container ->
+     withdraw. NOTE: owner's step 1 says "range 3 (as it currently is)" but
+     the builder's current range is BUILDER_DROP_PICKUP_RANGE = 10 (set in
+     688bf10, which the owner praised); keeping 10 for both roles.
+     Then lint/build/unit, agent-test acceptance-m5 THEN acceptance-m4,
+     commit with scorecard numbers before -> after.
+  2. hasPriorityBuildSites: remove rungs 3-4 (container at RCL <= 2, road
+     at RCL <= 2); keep rungs 1-2 (tower site; extensions under minimum).
+     Owner unit-test spec: M5 world, tower built, RCL 5, one container +
+     one road site -> false (no builder, no upgrader pauses). Then same
+     verification, own commit.
+  3. Housekeeping commit: git rm test/integration/probe-m5-builder.test.ts
+     (one-off probe back in the gate folder); correct the wrong M5 numbers
+     in status.md's Change Log (the 4,463/4,086/0.31/59.23% block was
+     measured 2026-11-09 pre-fix, not the 2026-11-10 fix run - owner
+     caught it; fix-run numbers: build 3,678, ctrl 4,618, build 5.77,
+     idle 47.32%); the stale "M5 fix" roadmap item was already removed in
+     8f6c631; add the "Feedback acknowledged" v9.3 entry.
 - **M3 tower-energy fix (2026-11-11, DONE - pending full suite).** The M3
   acceptance failed on maxTowerEnergy 0 (needs >= 500). Root cause: the
   harvester delivery cascade was spawn -> extensions -> tower, so the tower
@@ -1532,6 +1610,17 @@ yet.
 - Energy delivery issue: previous scorecard showed 72.7 energy delivered/tick vs ~3 harvested (energy going in circles) - this is now fixed by hauler changes
 
 ## Feedback acknowledged
+- Acknowledged 2026-11-11 (v9.3): FEEDBACK v9.3 - the M5 regression has
+  two causes: (1) builders/upgraders self-harvest when the pool is thin
+  and a source container holds energy -> getEnergy(creep, role) shared
+  utility, withdraw from source containers with >= 100 energy, idle
+  instead of a partial-load source trip below 100; (2) hasPriorityBuild
+  Sites pauses the upgrader for container sites -> remove rungs 3-4 (keep
+  tower + first extension). Fix 1 done in b36207d (167 unit passing);
+  Fix 2 applied in this run (166 unit passing, pending commit); M4 and M5
+  acceptance verification in progress this run (the M4 gate failure at
+  de5c985 - extensionsBuilt 1 of 3 - is checked against the fixed tree
+  before anything is pushed).
 - Acknowledged 2026-11-08 (v9.1): RESET - owner moved the M4 attempts to
   backup/m4-attempts-2026-11-08, reset main to 040eef6, parked M5 - doing the
   replay step by step; one line per replay step is added below as each step

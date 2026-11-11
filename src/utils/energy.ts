@@ -13,13 +13,22 @@
  *      already at the creep's feet and costs nothing to grab.
  *   2. Upgrader only: the controller container (rung 4). It is the
  *      upgrader's fuel stop - one withdraw per tick, no walking.
- *   3. The source container with the most energy, but only while it holds
- *      at least MIN_CONTAINER_WITHDRAW_ENERGY: below that the round trip is
- *      not worth it against the pool or self-harvest, and the miner tops
- *      the container back up within a few ticks.
- *   4. Builder only: the spawn/extensions pool, but only above
+ *   3. Builder only: the spawn/extensions pool, but only above
  *      BUILDER_WITHDRAW_FRACTION and only while the upgrader crew is at
  *      minimum (the hold-back from the M2 "no upgrader ever spawns" bug).
+ *      The pool sits ABOVE the source container rung: the builder's build
+ *      sites are on the road network around the spawn (M4: the tower, the
+ *      ramparts, the extensions), so a full pool a few tiles away is worth
+ *      more than a source container that is a ~25-tile round trip. On
+ *      2026-11-11 the container-first order sent every builder refill to
+ *      the source container as soon as it held 100 energy, and M4 finished
+ *      with 1 of its 3 required extensions built (capacity 350 of 450).
+ *   4. The source container with the most energy, but only while it holds
+ *      at least MIN_CONTAINER_WITHDRAW_ENERGY: below that the round trip is
+ *      not worth it against self-harvest, and the miner tops the container
+ *      back up within a few ticks. For builders this rung is reached only
+ *      while the pool is below the withdrawal floor, so the builder never
+ *      takes a long container trip while energy sits at its build sites.
  *   5. Nothing above worked: harvest a source - UNLESS a container holds
  *      some energy below the threshold. Then the creep idles this tick:
  *      the miner (or a hauler) refills it within a few ticks, and
@@ -59,12 +68,12 @@ export type EnergyOutcome = "acted" | "wait" | "harvest";
 /**
  * Gets energy for a builder or upgrader with a store that has free space.
  *
- * Tries, in order: a nearby drop, the upgrader's controller container, the
- * fullest source container (>= MIN_CONTAINER_WITHDRAW_ENERGY), and - for
- * builders only - the spawn/extensions pool above BUILDER_WITHDRAW_FRACTION.
- * Returns "harvest" only when no container holds any energy at all; a
- * container holding some energy below the threshold yields "wait" (the
- * miner refills it within a few ticks).
+ * Tries, in order: a nearby drop, the upgrader's controller container,
+ * the spawn/extensions pool (builders only, above BUILDER_WITHDRAW_FRACTION,
+ * while the upgrader crew is at minimum), and the fullest source container
+ * (>= MIN_CONTAINER_WITHDRAW_ENERGY). Returns "harvest" only when no
+ * container holds any energy at all; a container holding some energy below
+ * the threshold yields "wait" (the miner refills it within a few ticks).
  *
  * CPU note: this runs at most once per creep per tick (only while the
  * store has free space), and each room.find here is the same single find
@@ -117,31 +126,16 @@ export function getEnergy(creep: Creep, role: EnergyRole): EnergyOutcome
         return "acted";
     }
 
-    // 3. The fullest source container (built, on a tile next to a source,
-    //    not the controller container): worth the trip only from a real
-    //    hauler delivery up, not from a trickle.
-    const sourceContainer = pickFullestSourceContainer(room);
-    const sourceContainerEnergy = sourceContainer !== null
-        ? sourceContainer.store.getUsedCapacity(RESOURCE_ENERGY)
-        : 0;
-    if (sourceContainer !== null && sourceContainerEnergy >= MIN_CONTAINER_WITHDRAW_ENERGY)
-    {
-        if (creep.pos.getRangeTo(sourceContainer) > 1)
-        {
-            moveToToward(creep, sourceContainer, 1);
-        }
-        else
-        {
-            creep.withdraw(sourceContainer, RESOURCE_ENERGY);
-        }
-        return "acted";
-    }
-
-    // 4. Builder only: the spawn/extensions pool, above the floor, and only
+    // 3. Builder only: the spawn/extensions pool, above the floor, and only
     //    while the upgrader crew is at minimum (upgraderBelowMinimum: the
     //    hold-back that keeps the first upgrader spawnable - see
     //    managers/spawnManager.ts). The pool is tried spawn-first so a
-    //    half-full spawn still serves the builder.
+    //    half-full spawn still serves the builder. The pool sits ABOVE the
+    //    source container rung (the M4 fix of 2026-11-11): the builder's
+    //    sites sit around the spawn, so a pool a few tiles away beats a
+    //    source container that is a ~25-tile round trip - with the
+    //    container-first order M4 finished with 1 of its 3 required
+    //    extensions built (capacity 350 of 450).
     if (role === "builder"
         && !upgraderBelowMinimum(room)
         && room.energyAvailable >= room.energyCapacityAvailable * BUILDER_WITHDRAW_FRACTION)
@@ -164,6 +158,29 @@ export function getEnergy(creep: Creep, role: EnergyRole): EnergyOutcome
                 return "acted";
             }
         }
+    }
+
+    // 4. The fullest source container (built, on a tile next to a source,
+    //    not the controller container): worth the trip only from a real
+    //    hauler delivery up, not from a trickle. For builders this rung is
+    //    reached only while the pool is below the withdrawal floor, so the
+    //    builder never takes the long container trip while energy sits at
+    //    its build sites.
+    const sourceContainer = pickFullestSourceContainer(room);
+    const sourceContainerEnergy = sourceContainer !== null
+        ? sourceContainer.store.getUsedCapacity(RESOURCE_ENERGY)
+        : 0;
+    if (sourceContainer !== null && sourceContainerEnergy >= MIN_CONTAINER_WITHDRAW_ENERGY)
+    {
+        if (creep.pos.getRangeTo(sourceContainer) > 1)
+        {
+            moveToToward(creep, sourceContainer, 1);
+        }
+        else
+        {
+            creep.withdraw(sourceContainer, RESOURCE_ENERGY);
+        }
+        return "acted";
     }
 
     // 5. Nothing worked. A container with a trickle of energy means "wait
