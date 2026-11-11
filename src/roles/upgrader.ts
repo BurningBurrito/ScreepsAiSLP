@@ -51,9 +51,10 @@
  * tick of the long return walk and re-create the oscillation. See pickSource.
  */
 
-import { CONTROLLER_CONTAINER_RANGE, CONTROLLER_SIGN_TEXT, PARTIAL_DELIVERY_FRACTION } from "config";
+import { CONTROLLER_SIGN_TEXT, PARTIAL_DELIVERY_FRACTION } from "config";
 import { hasPriorityBuildSites, runBuilder } from "roles/builder";
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
+import { getEnergy } from "utils/energy";
 import { moveToToward } from "utils/movement";
 
 /**
@@ -62,10 +63,11 @@ import { moveToToward } from "utils/movement";
  * Order of checks:
  *   0. While a tower or extension site exists, build instead (see the file
  *      header): the WORK energy goes into the construction, not RCL.
- *   0.5. Controller container (M5, owner feedback 2026-11-09 idea d): while
- *      the container near the controller holds energy, withdraw from it and
- *      upgrade from its tile - the source cycle is skipped entirely (see the
- *      file header).
+ *   0.5. While the store has free space: getEnergy (utils/energy.ts, owner
+ *      feedback 2026-11-10 cause 1) feeds it from a nearby drop, the
+ *      controller container (the fuel stop, M5 / 2026-11-09 idea d) or the
+ *      fullest source container; the source cycle runs only when no
+ *      container holds energy.
  *   1. Pick the harvest target (source nearest the controller, from the
  *      active sources; the nearest of all when both are dry - it refills on
  *      the 300-tick cycle).
@@ -95,34 +97,18 @@ export function runUpgrader(creep: Creep): void
     const capacity = creep.store.getCapacity(RESOURCE_ENERGY);
     const controller = room.controller;
 
-    // M5 (owner feedback 2026-11-09, idea d): the controller container is
-    // the upgrader's fuel stop while it holds energy. The upgrader stands
-    // ON the container's tile (within CONTROLLER_CONTAINER_RANGE of the
-    // controller, so the upgrade works from there), withdraws while the
-    // store has space and upgrades while it doesn't - one action per tick,
-    // zero walking once on the tile. With an empty container it falls
-    // through to the source cycle below; the haulers refill the container
-    // last of all (hauler.ts), so the source path stays the fallback.
-    const ctrlContainer = findControllerContainer(room);
-    if (ctrlContainer !== null)
+    // Energy source (owner feedback 2026-11-10, cause 1; see utils/energy.ts
+    // for the full order and its history): a nearby drop, then the
+    // controller container (the upgrader's fuel stop - it stands ON the
+    // tile, within CONTROLLER_CONTAINER_RANGE of the controller, so the
+    // upgrade works from there), then the fullest source container above
+    // MIN_CONTAINER_WITHDRAW_ENERGY. Only "harvest" falls through to the
+    // source cycle below, and only when no container holds energy at all:
+    // with a trickle in a container the miner tops it back up within a few
+    // ticks, so the cycle idles out this tick instead of walking.
+    if (energy < capacity && getEnergy(creep, "upgrader") !== "harvest")
     {
-        const containerEnergy = ctrlContainer.store.getUsedCapacity(RESOURCE_ENERGY);
-        if (energy < capacity && containerEnergy > 0)
-        {
-            if (creep.pos.getRangeTo(ctrlContainer) > 0)
-            {
-                moveToToward(creep, ctrlContainer, 0);
-                return;
-            }
-            creep.withdraw(ctrlContainer, RESOURCE_ENERGY);
-            return;
-        }
-        if (energy > 0)
-        {
-            upgradeFromHere(creep, controller);
-            return;
-        }
-        // Empty store and empty container: fall through to the source cycle.
+        return;
     }
 
     // Harvest target: the source nearest the controller (the upgrader repeats
@@ -231,32 +217,4 @@ function upgradeFromHere(creep: Creep, controller: StructureController | undefin
     // OK, ERR_NOT_ENOUGH_RESOURCES (store below one upgrade tick's cost -
     // the caller re-routes on the next tick) or ERR_INVALID_TARGET:
     // nothing else to do this tick.
-}
-
-/**
- * The built container that serves as the upgrader's fuel stop: a container
- * within CONTROLLER_CONTAINER_RANGE of the controller - the same range the
- * construction manager's site search (idea d) and builder.ts's ladder check
- * use, so "the" controller container is unambiguous. One find per tick; the
- * result cannot go stale inside the tick.
- * @param room The room the upgrader is in
- * @returns The container, or null when none is built
- */
-function findControllerContainer(room: Room): StructureContainer | null
-{
-    const controller = room.controller;
-    if (controller === undefined || controller === null)
-    {
-        return null;
-    }
-    const candidates = room.find(FIND_STRUCTURES, {
-        // Type predicate: narrows to the containers near the controller.
-        // FIND_STRUCTURES (not FIND_MY_STRUCTURES): the type definitions do
-        // not list containers among the owned structures, and this mirrors
-        // pickControllerContainer in hauler.ts.
-        filter: (structure): structure is StructureContainer =>
-            structure.structureType === STRUCTURE_CONTAINER &&
-            structure.pos.getRangeTo(controller.pos) <= CONTROLLER_CONTAINER_RANGE,
-    });
-    return candidates.length > 0 ? candidates[0] : null;
 }

@@ -133,8 +133,6 @@
  */
 
 import {
-    BUILDER_DROP_PICKUP_RANGE,
-    BUILDER_WITHDRAW_FRACTION,
     CONTAINER_BOOST_MAX_LEVEL,
     CONTAINER_BOOST_MIN_EXTENSIONS,
     CONTAINER_BOOST_MIN_EXTENSIONS_L4,
@@ -144,8 +142,8 @@ import {
     CONTROLLER_CONTAINER_RANGE,
 } from "config";
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
+import { getEnergy } from "utils/energy";
 import { moveToToward } from "utils/movement";
-import { upgraderBelowMinimum } from "managers/spawnManager";
 
 /**
  * Whether another one of our creeps stands on a construction site's tile.
@@ -756,87 +754,22 @@ export function runBuilder(creep: Creep): void
     }
 
     // --- Phase 2: refill the store ---
-
-    // Quick win: dropped energy on the ground, only when we have space and
-    // the nearest pile is close enough to be worth a stop (see
-    // BUILDER_DROP_PICKUP_RANGE). findClosestByRange returns the SINGLE
-    // nearest drop, so gating it on distance is a correct filter: if even the
-    // closest pile is beyond the range, every other pile is farther still and
-    // none is worth the trip. Without the gate the M5 probe of 2026-11-10
-    // measured empty builders following a 50-energy pile a harvester dumped
-    // at the far source (~29 tiles from the tower site) all the way over and
-    // back, hauling 50 energy across the map while the spawn next to the
-    // build site sat full - construction crawled at 0.86 build/tick.
-    if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0)
-    {
-        const dropped = creep.pos.findClosestByRange(FIND_DROPPED_RESOURCES);
-        if (dropped !== null && dropped.resourceType === RESOURCE_ENERGY && dropped.amount > 0
-            && creep.pos.getRangeTo(dropped) <= BUILDER_DROP_PICKUP_RANGE)
-        {
-            if (creep.pickup(dropped) === ERR_NOT_IN_RANGE)
-            {
-                moveToToward(creep, dropped, 1);
-            }
-            return;
-        }
-    }
-
-    // Withdraw from structures once the room holds at least
-    // BUILDER_WITHDRAW_FRACTION of its capacity. The store is kept cycling by
-    // surplus spawning, so it is rarely *completely* full; the old full-room
-    // gate starved the builders into the far-source self-harvest loop
-    // (construction 3.11 -> 0.19/tick). The floor still leaves enough energy
-    // for the spawn to queue a minimum-crew respawn between delivery ticks
-    // (owner rule #3, relaxed - see config.ts for the numbers).
     //
-    // Each structure is checked with getUsedCapacity, not getFreeCapacity:
-    // a full spawn (or extension) is the one that holds energy to give, and
-    // the free-capacity check skipped exactly those. In the level 5 test
-    // world the spawn is full from the start, so the builders skipped it
-    // every tick and self-harvested from the far source for the whole run -
-    // construction crawled along (measured ~1-3 progress/tick for a
-    // seven-creep crew) and the room sat full with the spawn idle (M5
-    // baseline of 2026-11-10). The used-capacity check is what makes the
-    // builders drain the full pool into the sites.
-    //
-    // The upgrader hold-back wins over the floor: while the upgrader minimum
-    // is unmet, the room's energy is left alone so the store can reach the
-    // upgrader's body cost (see the file header). The builder refuels from a
-    // source itself instead, which never blocks the spawn.
-    const holdingForUpgrader = upgraderBelowMinimum(room);
-    if (!holdingForUpgrader && room.energyAvailable >= room.energyCapacityAvailable * BUILDER_WITHDRAW_FRACTION)
+    // The energy source is now the shared getEnergy helper (owner feedback
+    // 2026-11-10, cause 1; see utils/energy.ts for the full order and the
+    // history of each rung): a nearby drop, then the fullest source
+    // container above MIN_CONTAINER_WITHDRAW_ENERGY, then - for builders -
+    // the spawn/extensions pool above BUILDER_WITHDRAW_FRACTION (with the
+    // upgrader hold-back). Only "harvest" falls through to the
+    // self-harvest phase below. That is the point of the helper: the old
+    // order withdrew only when the room was at or above the floor and
+    // walked to a source every other tick - even when a source container
+    // held a trickle the miner would have topped up in a few ticks - and
+    // that is what starved construction (0.86 build/tick on the M5 probe
+    // of 2026-11-10, 0.19 build/tick before the floor itself).
+    if (getEnergy(creep, "builder") !== "harvest")
     {
-        const spawns = room.find(FIND_MY_SPAWNS);
-        for (const spawn of spawns)
-        {
-            if (spawn.store.getUsedCapacity(RESOURCE_ENERGY) > 0)
-            {
-                if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-                {
-                    moveToToward(creep, spawn, 1);
-                }
-                return;
-            }
-        }
-
-        const extensions = room.find(FIND_MY_STRUCTURES, {
-            filter: (structure): structure is StructureExtension => structure.structureType === STRUCTURE_EXTENSION,
-        });
-        for (const extension of extensions)
-        {
-            if (extension.store.getUsedCapacity(RESOURCE_ENERGY) > 0)
-            {
-                if (creep.withdraw(extension, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE)
-                {
-                    moveToToward(creep, extension, 1);
-                }
-                return;
-            }
-        }
-
-        // The room is at or above the floor but no structure holds energy:
-        // nothing to withdraw, fall through and harvest (sites and the
-        // controller still absorb energy, so harvesting is never wasted).
+        return;
     }
 
     // Harvest from a source and stay there until the store is full.

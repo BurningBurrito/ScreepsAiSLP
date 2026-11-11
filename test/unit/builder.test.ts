@@ -64,7 +64,7 @@ type CallCounts = {
 function makeBuilder(
     terrain: (x: number, y: number) => number,
     memory: Record<string, any>,
-    options: { neighbours?: any[]; sites?: any[]; sources?: any[] } = {},
+    options: { neighbours?: any[]; sites?: any[]; sources?: any[]; structures?: any[] } = {},
 ):
     { creep: any; calls: CallCounts; sourceA: any; sourceB: any }
 {
@@ -98,7 +98,7 @@ function makeBuilder(
             findClosestByPath: () => null,  // only reached while carrying
         },
         room: {
-            find: (type: number) => {
+            find: (type: number, opts?: any) => {
                 if (type === FIND_SOURCES_ACTIVE || type === FIND_SOURCES) {
                     return worldSources;
                 }
@@ -110,6 +110,12 @@ function makeBuilder(
                 }
                 if (type === FIND_MY_STRUCTURES) {
                     return [];
+                }
+                if (type === FIND_STRUCTURES) {
+                    const structures = options.structures ?? [];
+                    return opts !== undefined && opts.filter !== undefined
+                        ? structures.filter(opts.filter)
+                        : structures;
                 }
                 if (type === FIND_CONSTRUCTION_SITES) {
                     return sites; // default: no construction sites
@@ -352,6 +358,57 @@ describe("builder", () => {
         assert.equal(withdrew, 1, "the builder withdraws from the full spawn above the floor");
         assert.equal(withdrawnFrom, spawn, "the full spawn is the withdrawal target");
         assert.equal(calls.harvest ?? 0, 0, "the builder does not self-harvest when it can withdraw");
+    });
+
+    it("withdraws from a source container with 100+ energy instead of the pool or a source", () => {
+        // Owner feedback 2026-11-10 fix 1, test (a): an empty builder facing
+        // a source container holding 1000 energy must withdraw from the
+        // container (the miner's drop point) instead of walking to the pool
+        // or a source.
+        const container = {
+            id: "con-src",
+            structureType: STRUCTURE_CONTAINER,
+            pos: pos(15, 18), // next to the pocket source A (14,18)
+            store: {
+                [RESOURCE_ENERGY]: 1000,
+                getUsedCapacity: () => 1000,
+                getFreeCapacity: () => 1000,
+            },
+        };
+        const { creep, calls } = makeBuilder(() => 0, { working: false }, { structures: [container] });
+        creep.pos = {...container.pos, findClosestByRange: () => null}; // standing on the container
+        let withdrew = 0;
+        let withdrawnFrom: any = null;
+        creep.withdraw = (target: any) => { withdrew += 1; withdrawnFrom = target; return OK; };
+
+        runBuilder(creep);
+
+        assert.equal(withdrew, 1, "the empty builder withdraws from the source container");
+        assert.equal(withdrawnFrom.id, "con-src", "the container is the withdrawal target");
+        assert.equal(calls.harvest ?? 0, 0, "no self-harvest trip while the container holds energy");
+    });
+
+    it("waits out a trickle in a source container instead of self-harvesting", () => {
+        // Owner feedback 2026-11-10 fix 1: below MIN_CONTAINER_WITHDRAW_ENERGY
+        // the miner (or a hauler) tops the container back up within a few
+        // ticks, so idling this tick beats a round trip to a source for a
+        // partial load - the regression that starved construction.
+        const container = {
+            id: "con-src",
+            structureType: STRUCTURE_CONTAINER,
+            pos: pos(15, 18), // next to the pocket source A (14,18)
+            store: {
+                [RESOURCE_ENERGY]: 50,
+                getUsedCapacity: () => 50,
+                getFreeCapacity: () => 1950,
+            },
+        };
+        const { creep, calls } = makeBuilder(() => 0, { working: false }, { structures: [container] });
+
+        runBuilder(creep);
+
+        assert.equal(calls.harvest ?? 0, 0, "no source trip for a partial load");
+        assert.equal(calls.moveTo ?? 0, 0, "no walk: the builder waits for the refill");
     });
 
     it("holds back its withdrawal while the upgrader minimum is unmet", () => {

@@ -40,6 +40,9 @@ function pos(x: number, y: number): any
             const p = target.pos !== undefined ? target.pos : target;
             return Math.max(Math.abs(p.x - x), Math.abs(p.y - y));
         },
+        // No dropped resources on the floor in these tests (getEnergy's
+        // first step probes with findClosestByRange).
+        findClosestByRange: () => null,
     };
 }
 
@@ -540,6 +543,86 @@ describe("upgrader", () => {
             assert.equal(calls.harvest, 1, "an out-of-range container is not the delivery point");
             assert.equal(calls.lastHarvested, "sA", "the upgrader stays on its source cycle");
             assert.equal(calls.withdraw, undefined, "no withdraw from it");
+        });
+    });
+
+    describe("source container cycle (M5, owner feedback 2026-11-10 fix 1)", () => {
+        /**
+         * A source container mock: next to the pocket source A (14,18) and
+         * far from the controller (25,25), so it is a SOURCE container, not
+         * the controller's fuel stop.
+         * @param energy The energy currently in the container.
+         * @returns The container mock.
+         */
+        function makeSourceContainer(energy: number): any
+        {
+            return {
+                id: "con-src",
+                structureType: STRUCTURE_CONTAINER,
+                pos: pos(15, 18),
+                store: {
+                    [RESOURCE_ENERGY]: energy,
+                    getUsedCapacity: () => energy,
+                    getFreeCapacity: () => 2000 - energy,
+                },
+            };
+        }
+
+        /**
+         * Patches the room's find so FIND_STRUCTURES (the lookup the
+         * container branches use, filter honoured) returns the container;
+         * every other type keeps the original dispatch (same patch as the
+         * controller-container cycle above).
+         * @param creep The mock creep to patch.
+         * @param container The container to report (or null for none).
+         */
+        function withContainer(creep: any, container: any): void
+        {
+            const originalFind = creep.room.find;
+            creep.room.find = (type: number, opts?: any): any[] =>
+            {
+                if (type === FIND_STRUCTURES)
+                {
+                    const candidates = container !== null ? [container] : [];
+                    return opts !== undefined && typeof opts.filter === "function"
+                        ? candidates.filter(opts.filter)
+                        : candidates;
+                }
+                return originalFind(type);
+            };
+        }
+
+        it("withdraws from a source container when no controller container exists", () => {
+            // Owner feedback 2026-11-10 fix 1, test (b): an empty upgrader
+            // with no controller container and a source container holding
+            // 1000 energy must withdraw from the container instead of
+            // walking to a source.
+            const { creep, calls } = makeUpgrader({});
+            const container = makeSourceContainer(1000);
+            withContainer(creep, container);
+            creep.pos = container.pos; // standing on the container's tile
+
+            runUpgrader(creep);
+
+            assert.equal(calls.withdraw, 1, "the empty upgrader withdraws from the source container");
+            assert.equal(calls.lastWithdrawn, container.id, "the source container is the withdrawal target");
+            assert.equal(calls.harvest, undefined, "no self-harvest trip while the container holds energy");
+            assert.equal(calls.upgrade, undefined, "no upgrade while the store is still empty");
+        });
+
+        it("waits out a trickle in a source container instead of self-harvesting", () => {
+            // Below MIN_CONTAINER_WITHDRAW_ENERGY the miner tops the
+            // container back up within a few ticks; idling this tick beats
+            // a round trip to a source for a partial load.
+            const { creep, calls } = makeUpgrader({});
+            withContainer(creep, makeSourceContainer(50));
+
+            runUpgrader(creep);
+
+            assert.equal(calls.harvest, undefined, "no source trip for a partial load");
+            assert.equal(calls.withdraw, undefined, "below the threshold the container is skipped");
+            assert.equal(calls.upgrade, undefined, "nothing carried to spend");
+            assert.equal(calls.moveTo, undefined, "no walk: the upgrader waits for the refill");
         });
     });
 });

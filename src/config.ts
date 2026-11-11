@@ -136,6 +136,17 @@ export const BUILDER_WITHDRAW_FRACTION = 0.5;
 export const BUILDER_DROP_PICKUP_RANGE = 10;
 
 /**
+ * Minimum energy a source container must hold before a builder or upgrader
+ * withdraws from it (owner feedback 2026-11-10, cause 1). Below this the
+ * round trip to the source side is not worth it against the fallbacks
+ * (pool, self-harvest) - and the miner tops the container back up within a
+ * few ticks, so waiting costs almost nothing. A hauler delivery carries at
+ * least one full creep store (50+), so 100 means "at least one hauler has
+ * delivered since the container was last drained by this creep".
+ */
+export const MIN_CONTAINER_WITHDRAW_ENERGY = 100;
+
+/**
  * Maximum consecutive failed delivery ticks before a harvester drops its
  * energy. ERR_NO_PATH drops immediately (unreachable target); this is only a
  * safety net for a creep that is stuck for a long time. A heavy body moves
