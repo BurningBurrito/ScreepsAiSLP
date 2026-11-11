@@ -1,6 +1,22 @@
 # ScreepsAiSLP Status
 
 ## Current State
+Current state (2026-11-11): M5 static-mining milestone - builder build-pace fix.
+Root cause of the slow M5 build: an empty builder used findClosestByRange on ALL
+dropped energy with no range limit, so a single far pile (a harvester dumping a
+full load at the far source, ~29 tiles out) was more attractive than the spawn
+2-3 tiles away or a nearby pile; the builder did a cross-map round trip for
+energy the walk cost more than, build pace sat at ~0.86/tick, and the first
+source container was projected at ~5300 (past the 5000-tick test, so static
+mining never started). Fix: BUILDER_DROP_PICKUP_RANGE (10 tiles) in
+src/config.ts, applied in runBuilder's drop-pickup phase (src/roles/builder.ts)
+- a builder only grabs a pile within 10 tiles, which covers the
+spawn/tower/near-source cluster and excludes the far source. Probe (700 ticks,
+M5 world): buildPerTick 0.86 -> 5.22, tower progress 258 -> 1479,
+spawn idle-while-full 0.079 -> 0.011. M5 acceptance is RUNNING on the fixed
+tree (163 unit passing, lint + build clean); the earlier gate failure
+(constructionManager unit test) was already fixed in d1b130c.
+
 Current state (2026-11-10, run 4 in progress): the M5 "early container"
 build priority (owner idea a: 5d4b87e original, 7dc4775 scoped) is
 REVERTED to the 88fb080 priority logic. containerFirstForRoom is back to
@@ -880,12 +896,21 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **M5 gate fix (2026-11-10, run 4):** the unit-test failure is fixed
-  (wrong expectations in the C_ctrl source-container test, see Change Log;
-  163 unit passing). The v9.2 iteration resumes now - next: M5 acceptance
-  baseline on the CURRENT tree (post idea-a revert: ideas b/c/d + builder
-  pool-drain fix in, no container-first priority), then M4 regression,
-  then the single change most likely to flip the failing criteria.
+- **M5 builder build-pace fix (2026-11-11).** The M5 gate unit-test failure
+  (constructionManager C_ctrl source-container test) was ALREADY fixed in
+  d1b130c (163 unit passing) - confirmed this run, so that gate is clear.
+  The open M5 work is the builder build pace: an empty builder chased a
+  single far energy drop (findClosestByRange, no range limit) across the map
+  instead of the spawn 2-3 tiles away, so the first source container never
+  finished in the 5000-tick test. Fix: BUILDER_DROP_PICKUP_RANGE (10 tiles)
+  in src/config.ts, applied in runBuilder's drop-pickup phase (src/roles/
+  builder.ts). Probe (700 ticks, M5 world): buildPerTick 0.86 -> 5.22, tower
+  258 -> 1479, spawn idle-while-full 0.079 -> 0.011. Committed 688bf10.
+  NEXT: M5 acceptance RUNNING on the fixed tree (acceptance-m5.test.ts,
+  5000 ticks); if it passes, run the full suite for M1-M4 regressions, then
+  update README + blog. If it still fails on minedShare/containers, the next
+  lever is the L5 build order (source container behind the 3-extension
+  floor).
 - **M5 iteration per owner feedback v9.2 (2026-11-09, one change at a time).**
   The protected acceptance-m5.test.ts was missing from the working tree (parked
   2026-11-08, "the test comes back"); it was restored verbatim from the git
