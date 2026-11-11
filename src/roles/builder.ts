@@ -12,6 +12,14 @@
  *   completely full and the full-room gate starved the builders into the
  *   far-source self-harvest loop - see config.ts for the numbers.)
  *
+ *   Dropped energy: before either of those, an empty builder grabs a pile on
+ *   the ground - but only one within BUILDER_DROP_PICKUP_RANGE of itself. A
+ *   distant pile (a harvester dumping a full load at a far source while the
+ *   spawn was full) is a cross-map round trip that costs more than the
+ *   energy is worth; the spawn next to the build site is always the better
+ *   haul. The range gate is what stops the M5 "chasing distant drops" loop
+ *   (see config.ts and the runBuilder phase-2 comment).
+ *
  *   Upgrader hold-back: while fewer upgraders are alive than the minimum
  *   (upgraderBelowMinimum in managers/spawnManager), the builder does not
  *   withdraw at any store level - the room's energy belongs to the next
@@ -125,6 +133,7 @@
  */
 
 import {
+    BUILDER_DROP_PICKUP_RANGE,
     BUILDER_WITHDRAW_FRACTION,
     CONTAINER_BOOST_MAX_LEVEL,
     CONTAINER_BOOST_MIN_EXTENSIONS,
@@ -748,11 +757,21 @@ export function runBuilder(creep: Creep): void
 
     // --- Phase 2: refill the store ---
 
-    // Quick win: dropped energy on the ground, only when we have space.
+    // Quick win: dropped energy on the ground, only when we have space and
+    // the nearest pile is close enough to be worth a stop (see
+    // BUILDER_DROP_PICKUP_RANGE). findClosestByRange returns the SINGLE
+    // nearest drop, so gating it on distance is a correct filter: if even the
+    // closest pile is beyond the range, every other pile is farther still and
+    // none is worth the trip. Without the gate the M5 probe of 2026-11-10
+    // measured empty builders following a 50-energy pile a harvester dumped
+    // at the far source (~29 tiles from the tower site) all the way over and
+    // back, hauling 50 energy across the map while the spawn next to the
+    // build site sat full - construction crawled at 0.86 build/tick.
     if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0)
     {
         const dropped = creep.pos.findClosestByRange(FIND_DROPPED_RESOURCES);
-        if (dropped !== null && dropped.resourceType === RESOURCE_ENERGY && dropped.amount > 0)
+        if (dropped !== null && dropped.resourceType === RESOURCE_ENERGY && dropped.amount > 0
+            && creep.pos.getRangeTo(dropped) <= BUILDER_DROP_PICKUP_RANGE)
         {
             if (creep.pickup(dropped) === ERR_NOT_IN_RANGE)
             {

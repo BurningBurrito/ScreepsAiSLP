@@ -115,6 +115,27 @@ export const CONTAINER_HAULER_SPARE = 1;
 export const BUILDER_WITHDRAW_FRACTION = 0.5;
 
 /**
+ * Maximum distance (in tiles, measured from the builder's own position) at
+ * which a dropped energy pile is worth a stop for a builder.
+ *
+ * A drop beyond this range is a cross-map haul: the M5 probe of 2026-11-10
+ * showed empty builders following a 50-energy pile a harvester had dumped at
+ * the far source (~29 tiles from the tower site) all the way over, and back,
+ * instead of taking a full load from the spawn next to the build site. One
+ * such round trip costs ~50 tiles of walking for 50 energy - the builder
+ * spends its whole life in transit and the tower crawls along at
+ * 0.86 build/tick while every other site sits at zero progress.
+ *
+ * Drops WITHIN this range are still grabbed before any structure: a pile a
+ * few tiles away is closer than walking back to the spawn, and it is the
+ * only energy source at all while the pool is below BUILDER_WITHDRAW_FRACTION.
+ * 10 tiles covers the whole spawn/tower cluster (the near source, the spawn
+ * and the tower all sit within ~5 tiles of each other) and excludes the far
+ * source, so a builder parked at the build site never sees the far pile.
+ */
+export const BUILDER_DROP_PICKUP_RANGE = 10;
+
+/**
  * Maximum consecutive failed delivery ticks before a harvester drops its
  * energy. ERR_NO_PATH drops immediately (unreachable target); this is only a
  * safety net for a creep that is stuck for a long time. A heavy body moves
