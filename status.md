@@ -1,6 +1,17 @@
 # ScreepsAiSLP Status
 
 ## Current State
+Current state (2026-11-11): M3 gate failure fixed. The gate (2026-11-10
+21:59) failed M3 on maxTowerEnergy 0 (needs 500): the tower was last in the
+harvester delivery cascade and only saw pool OVERFLOW, but the builder
+50%-capacity withdrawal floor (5be99ae) means the pool never fills to
+overflow. The 500 reserve is a fixed buffer, so src/roles/harvester.ts now
+fills the tower FIRST (bounded: only while below TOWER_ENERGY_RESERVE),
+then spawns, then extensions, then drop. acceptance-m3 on the fix: 1
+passing (18m), EXIT 0, maxTowerEnergy 500, extensionsBuilt 4, capacity 500,
+roads 59, sources 2/2, creeps 3. Full suite (M1-M5 regressions) is the
+remaining gate step.
+
 Current state (2026-11-11): M5 static-mining milestone - builder build-pace fix.
 Root cause of the slow M5 build: an empty builder used findClosestByRange on ALL
 dropped energy with no range limit, so a single far pile (a harvester dumping a
@@ -134,6 +145,32 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-11 (M3 gate fix: tower-first harvester delivery)
+- **M3 maxTowerEnergy 0 -> 500, acceptance passing.** The 2026-11-10 21:59
+  gate failed M3 on "the tower was filled with at least 500 energy at some
+  point" (0 of 500); every other M3 criterion passed (towersBuilt 1,
+  extensionsBuilt 4, energyCapacity 500, roadTiles 59, sourcesConnected 2 of
+  2, creeps 3). Root cause: the harvester delivery cascade was spawn ->
+  extensions -> tower, so the tower only saw energy that overflowed a FULL
+  pool - but since 5be99ae the builders withdraw from the 50%-capacity floor
+  (BUILDER_WITHDRAW_FRACTION in src/config.ts), the pool oscillates around
+  half capacity and never overflows, so the tower sat at 0 for all 4000
+  ticks. The 500 (TOWER_ENERGY_RESERVE) is a fixed defensive buffer, not an
+  overflow sink, so it belongs FIRST in the cascade: the delivery phase in
+  src/roles/harvester.ts now tries the tower first (only while below the
+  reserve - a bounded fill that stops on its own, so the economy is not
+  starved), then the spawns, then the extensions, then drop. acceptance-m3
+  on the fix: 1 passing (18m), EXIT 0, maxTowerEnergy 500, towersBuilt 1,
+  extensionsBuilt 4, energyCapacity 500, roadTiles 59, sourcesConnected 2 of
+  2, controllerConnected true, strayRoads 0, roadShare 0, farthestFromSpawn
+  6, creeps 3 (peak 11). Scorecard vs the last full M3 pass (754f7d4):
+  harvested/tick 9.03 -> 5.46 (crew decay from the builder floor,
+  pre-existing - the gate run ended with 3 creeps too), build/tick 2.15 ->
+  5.02, spawn idle-while-full 25 % -> 0 %, CPU/tick 2.23 -> 1.88, RCL
+  progress 388 -> 400. 163 unit passing, lint + build clean. Removed the
+  probe-m3-tmp.test.ts diagnostic (investigation complete). NEXT: full
+  suite (agent-test all) for M1/M2/M4/M5 regressions - M4 also asserts
+  maxTowerEnergy >= 500, which the new first-priority fill satisfies.
 ### 2026-11-10 (run 4: M5 gate unit-test failure fixed - wrong test expectations)
 - LAST_GATE 2026-11-10 (failed at 55bb96d): lint ok, unit step exit 1 -
   "test/unit/constructionManager.test.ts: still places the two source
@@ -896,6 +933,21 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **M3 tower-energy fix (2026-11-11, DONE - pending full suite).** The M3
+  acceptance failed on maxTowerEnergy 0 (needs >= 500). Root cause: the
+  harvester delivery cascade was spawn -> extensions -> tower, so the tower
+  only saw energy when the whole pool sat full - and the builder floor
+  (BUILDER_WITHDRAW_FRACTION 0.5, since 5be99ae) pins the pool at ~half
+  capacity, so the tower never filled. TOWER_ENERGY_RESERVE (500) is a fixed
+  buffer per config.ts, not an overflow target. Fix: the delivery phase in
+  src/roles/harvester.ts now tries the tower FIRST (only while below the
+  reserve - a bounded fill that stops on its own), then the spawns, then
+  the extensions, then drop. acceptance-m3 on the fix: 1 passing (18m),
+  EXIT 0, maxTowerEnergy 0 -> 500; all other criteria unchanged (4
+  extensions, capacity 500, 59 roads, 2/2 sources, 3 creeps). Probe
+  probe-m3-tmp.test.ts removed. NEXT: agent-test start all (M1-M5
+  regressions; M4 also asserts maxTowerEnergy >= 500); then update the
+  M5 acceptance re-verification that was queued behind this.
 - **M5 builder build-pace fix (2026-11-11).** The M5 gate unit-test failure
   (constructionManager C_ctrl source-container test) was ALREADY fixed in
   d1b130c (163 unit passing) - confirmed this run, so that gate is clear.

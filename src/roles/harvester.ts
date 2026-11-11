@@ -9,12 +9,17 @@
  *     harvester flips to the closest active source (position-based, no
  *     pathfinding) so the room keeps its income; when both are dry it waits
  *     at the assigned source, which refills on the 300-tick cycle.
- *  2. Delivery phase (store full, or a partial load at a dry source): fill
- *     the spawn first (creeps must stay alive), then the extensions, then
- *     a tower only while it is below its attack reserve
- *     (TOWER_ENERGY_RESERVE - the 500 energy / 50 shots the tower manager
- *     keeps for defence, see towerManager.ts); whatever nothing can take is
- *     dropped on the ground so a builder can pick it up.
+ *  2. Delivery phase (store full, or a partial load at a dry source): top
+ *     up a tower while it is below its attack reserve
+ *     (TOWER_ENERGY_RESERVE - the fixed 500 energy / 50 shot buffer the
+ *     tower manager keeps for defence, see towerManager.ts), then the
+ *     spawn (creeps must stay alive), then the extensions; whatever
+ *     nothing can take is dropped on the ground so a builder can pick it
+ *     up. The tower comes first because it is a bounded buffer: it stops
+ *     taking energy the moment it reaches the reserve, so it can never
+ *     starve the pool - while buried last, it only filled when the pool
+ *     sat completely full, which the builder's 0.5 pool floor now
+ *     prevents.
  *
  * Every move goes through utils/moveToToward, which drops the creep's cached
  * path (memory._move) when it keeps replaying a blocked one. The role does
@@ -103,25 +108,42 @@ export function runHarvester(creep: Creep): void
         return;
     }
 
-    // If full, transfer energy: spawns first (creeps must stay alive), then
-    // the extensions, then a tower below its attack reserve, then drop.
+    // If full, transfer energy. Priority order:
+    //  1. A tower below its attack reserve (TOWER_ENERGY_RESERVE). The
+    //     reserve is a FIXED buffer: a one-time top-up to 500 energy (50
+    //     shots, see towerManager.ts) after which the tower is skipped for
+    //     the rest of the run (or until defence drains it). Filling it
+    //     first is safe because it stops on its own at the reserve. Burying
+    //     it behind the spawn and extensions as pure overflow meant it only
+    //     ever saw energy when the whole pool sat full - and the builders
+    //     now drain the pool to the 0.5 floor, so the tower never filled at
+    //     all (M3 maxTowerEnergy 0).
+    //  2. The spawns (creeps must stay alive).
+    //  3. The extensions.
+    //  4. Drop what nothing can take so a builder can pick it up.
 
-    // Try to transfer to spawns first
-    const spawns = creep.room.find(FIND_MY_SPAWNS);
-    let deliveredToSpawn = false;
-    
-    // Track delivery attempts to prevent frozen harvester
+    // Track delivery attempts to prevent a frozen harvester
     const deliveryAttempts = creep.memory.deliveryAttempts || 0;
-    
-    for (const spawn of spawns)
+
+    // 1. Tower: top it up to the attack reserve while below it.
+    let deliveredToTower = false;
+    const towers = creep.room.find(FIND_MY_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_TOWER,
+    });
+    for (const tower of towers)
     {
-        const freeCapacity = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
+        const towerEnergy = (tower as StructureTower).store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
+        if (towerEnergy >= TOWER_ENERGY_RESERVE)
+        {
+            continue; // Reserve full: this tower's energy is its own now
+        }
+        const freeCapacity = (tower as StructureTower).store.getFreeCapacity(RESOURCE_ENERGY);
         if (freeCapacity !== null && freeCapacity > 0)
         {
-            const transferResult = creep.transfer(spawn, RESOURCE_ENERGY);
+            const transferResult = creep.transfer(tower, RESOURCE_ENERGY);
             if (transferResult === ERR_NOT_IN_RANGE)
             {
-                const moveResult = moveToToward(creep, spawn, 1);
+                const moveResult = moveToToward(creep, tower, 1);
                 // Only ERR_NO_PATH means "cannot reach"; ERR_TIRED/ERR_BUSY/other means try again next tick
                 if (moveResult === ERR_NO_PATH)
                 {
@@ -130,9 +152,7 @@ export function runHarvester(creep: Creep): void
                     creep.memory.deliveryAttempts = 0;
                     return;
                 }
-                // Increment delivery attempts for tracking
                 creep.memory.deliveryAttempts = deliveryAttempts + 1;
-                // If we've been trying for too long, drop energy and reset
                 if (deliveryAttempts >= MAX_DELIVERY_ATTEMPTS)
                 {
                     creep.drop(RESOURCE_ENERGY);
@@ -140,52 +160,39 @@ export function runHarvester(creep: Creep): void
                     creep.memory.deliveryAttempts = 0;
                     return;
                 }
-                // If moveTo returned anything else (OK, ERR_TIRED, ERR_BUSY, or undefined),
-                // try again next tick - don't drop energy or continue to next target
                 return;
             }
             else if (transferResult === OK)
             {
-                deliveredToSpawn = true;
+                deliveredToTower = true;
                 creep.memory.deliveryAttempts = 0; // Reset on success
                 if (creep.store[RESOURCE_ENERGY] === 0)
                 {
                     creep.memory.working = false; // store empty: gather again
                 }
             }
-            // If ERR_FULL, the spawn is full but we're in range - this shouldn't happen if freeCapacity > 0
-            // But handle it just in case
-            break; // Only try one spawn
+            break; // Only try one tower
         }
     }
-    
-    // Reset delivery attempts if we successfully delivered
-    if (deliveredToSpawn)
+    if (deliveredToTower)
     {
         creep.memory.deliveryAttempts = 0;
     }
-    
-    // M4 delivery order: spawn, then extensions, then a tower that has
-    // dropped below its attack reserve, and drop what nothing can take.
-    // The tower's reserve (TOWER_ENERGY_RESERVE = 500 energy, 50 shots) is
-    // the buffer the tower manager burns on defence; energy above the
-    // reserve belongs to the economy, and a tower only dips below it while
-    // it is actually fighting.
-    if (!deliveredToSpawn && creep.store[RESOURCE_ENERGY] > 0)
+
+    // 2. Spawns: creeps must stay alive.
+    if (!deliveredToTower && creep.store[RESOURCE_ENERGY] > 0)
     {
-        const extensions = room.find(FIND_MY_STRUCTURES, {
-            filter: (structure): structure is StructureExtension => structure.structureType === STRUCTURE_EXTENSION,
-        });
-        let deliveredToExtension = false;
-        for (const extension of extensions)
+        const spawns = creep.room.find(FIND_MY_SPAWNS);
+        let deliveredToSpawn = false;
+        for (const spawn of spawns)
         {
-            const freeCapacity = extension.store.getFreeCapacity(RESOURCE_ENERGY);
+            const freeCapacity = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
             if (freeCapacity !== null && freeCapacity > 0)
             {
-                const transferResult = creep.transfer(extension, RESOURCE_ENERGY);
+                const transferResult = creep.transfer(spawn, RESOURCE_ENERGY);
                 if (transferResult === ERR_NOT_IN_RANGE)
                 {
-                    const moveResult = moveToToward(creep, extension, 1);
+                    const moveResult = moveToToward(creep, spawn, 1);
                     // Only ERR_NO_PATH means "cannot reach"; ERR_TIRED/ERR_BUSY/other means try again next tick
                     if (moveResult === ERR_NO_PATH)
                     {
@@ -194,9 +201,7 @@ export function runHarvester(creep: Creep): void
                         creep.memory.deliveryAttempts = 0;
                         return;
                     }
-                    // Increment delivery attempts for tracking
                     creep.memory.deliveryAttempts = deliveryAttempts + 1;
-                    // If we've been trying for too long, drop energy and reset
                     if (deliveryAttempts >= MAX_DELIVERY_ATTEMPTS)
                     {
                         creep.drop(RESOURCE_ENERGY);
@@ -204,45 +209,41 @@ export function runHarvester(creep: Creep): void
                         creep.memory.deliveryAttempts = 0;
                         return;
                     }
-                    // If moveTo returned anything else, try again next tick
                     return;
                 }
                 else if (transferResult === OK)
                 {
-                    deliveredToExtension = true;
+                    deliveredToSpawn = true;
                     creep.memory.deliveryAttempts = 0; // Reset on success
                     if (creep.store[RESOURCE_ENERGY] === 0)
                     {
                         creep.memory.working = false; // store empty: gather again
                     }
                 }
-                break; // Only try one extension
+                break; // Only try one spawn
             }
         }
-
-        // A tower takes energy only while it is below the attack reserve:
-        // topping it above the reserve would steal energy from the
-        // extensions the room actually grows with.
-        if (!deliveredToExtension && creep.store[RESOURCE_ENERGY] > 0)
+        if (deliveredToSpawn)
         {
-            const towers = creep.room.find(FIND_MY_STRUCTURES, {
-                filter: (structure) => structure.structureType === STRUCTURE_TOWER,
+            creep.memory.deliveryAttempts = 0;
+        }
+
+        // 3. Extensions: the room grows with these.
+        if (!deliveredToSpawn && creep.store[RESOURCE_ENERGY] > 0)
+        {
+            const extensions = room.find(FIND_MY_STRUCTURES, {
+                filter: (structure): structure is StructureExtension => structure.structureType === STRUCTURE_EXTENSION,
             });
-            let deliveredToTower = false;
-            for (const tower of towers)
+            let deliveredToExtension = false;
+            for (const extension of extensions)
             {
-                const towerEnergy = (tower as StructureTower).store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
-                if (towerEnergy >= TOWER_ENERGY_RESERVE)
-                {
-                    continue; // Reserve full: this tower's energy is its own now
-                }
-                const freeCapacity = (tower as StructureTower).store.getFreeCapacity(RESOURCE_ENERGY);
+                const freeCapacity = extension.store.getFreeCapacity(RESOURCE_ENERGY);
                 if (freeCapacity !== null && freeCapacity > 0)
                 {
-                    const transferResult = creep.transfer(tower, RESOURCE_ENERGY);
+                    const transferResult = creep.transfer(extension, RESOURCE_ENERGY);
                     if (transferResult === ERR_NOT_IN_RANGE)
                     {
-                        const moveResult = moveToToward(creep, tower, 1);
+                        const moveResult = moveToToward(creep, extension, 1);
                         // Only ERR_NO_PATH means "cannot reach"; ERR_TIRED/ERR_BUSY/other means try again next tick
                         if (moveResult === ERR_NO_PATH)
                         {
@@ -251,9 +252,7 @@ export function runHarvester(creep: Creep): void
                             creep.memory.deliveryAttempts = 0;
                             return;
                         }
-                        // Increment delivery attempts for tracking
                         creep.memory.deliveryAttempts = deliveryAttempts + 1;
-                        // If we've been trying for too long, drop energy and reset
                         if (deliveryAttempts >= MAX_DELIVERY_ATTEMPTS)
                         {
                             creep.drop(RESOURCE_ENERGY);
@@ -261,25 +260,25 @@ export function runHarvester(creep: Creep): void
                             creep.memory.deliveryAttempts = 0;
                             return;
                         }
-                        // If moveTo returned anything else, try again next tick
                         return;
                     }
                     else if (transferResult === OK)
                     {
-                        deliveredToTower = true;
+                        deliveredToExtension = true;
                         creep.memory.deliveryAttempts = 0; // Reset on success
                         if (creep.store[RESOURCE_ENERGY] === 0)
                         {
                             creep.memory.working = false; // store empty: gather again
                         }
                     }
-                    break; // Only try one tower
+                    break; // Only try one extension
                 }
             }
 
-            // Nothing - extensions full and every tower at its reserve -
-            // could take the load: drop it so a builder can pick it up.
-            if (!deliveredToTower)
+            // 4. Nothing - no extension had free capacity and the tower
+            //    (tried first) is at its reserve - could take the load:
+            //    drop it so a builder can pick it up.
+            if (!deliveredToExtension)
             {
                 creep.drop(RESOURCE_ENERGY);
                 creep.memory.working = false;
@@ -290,7 +289,7 @@ export function runHarvester(creep: Creep): void
     }
     else
     {
-        // Reset delivery attempts if we're not in working mode
+        // Reset delivery attempts if we didn't attempt the economy path
         creep.memory.deliveryAttempts = 0;
     }
 }
