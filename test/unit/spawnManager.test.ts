@@ -321,6 +321,38 @@ describe("spawnManager", () => {
     assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
   });
 
+  it("builder below minimum with a partly full store waits for the capacity-sized body", () => {
+    // Same shape as the builder test above, but the store holds 200 of 300.
+    // The builder is an energy CONSUMER, not a producer: the living income
+    // crew refills the store for it, so it keeps capacity sizing and waits
+    // for the 300-energy 2-WORK body instead of shrinking (sizingBudgetFor).
+    // The M3 regression of 2026-11-11 clamped this role too: the builder
+    // templates have no 250 body, so a 200-energy 1-WORK builder spawned a
+    // hundred energy early, self-harvested at the source and starved the
+    // harvester crew - construction ran at half the baseline rate.
+    addCreeps({
+      "harvester-0": {role: "harvester"},
+      "harvester-1": {role: "harvester"},
+      "harvester-2": {role: "harvester"},
+      "upgrader-3": {role: "upgrader"},
+    });
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 200,
+      sites: 4,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // No minimum is short except the builder (and it is a consumer role),
+    // and its capacity-sized body cannot be paid from 200: nothing spawns.
+    assert.equal(calls.length, 0);
+  });
+
   it("spawns a hauler once a container exists and haulers are below minimum", () => {
     // M5: the container'd source is now served by a stationary miner, so the
     // miner minimum is met here (miner-3) and the spawn falls through to the
@@ -851,9 +883,16 @@ describe("spawnManager", () => {
   });
 
   it("does not spawn a surplus creep while the store is not full", () => {
+    // Both container-less sources are covered (the RCL 1 minimum is one
+    // harvester per source), so no replacement is owed - this is a pure
+    // surplus scenario. (The earlier setup left source-2 uncovered, which
+    // owed a replacement harvester; now that replacements are sized from the
+    // available energy it spawns even with a partly full store, so the source
+    // must be covered to isolate the surplus step - M3 fix, 2026-11-11.)
     addCreeps({
       "harvester-0": {role: "harvester", sourceId: "source-1"},
-      "upgrader-1": {role: "upgrader"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "upgrader-2": {role: "upgrader"},
     });
     const {room, calls} = makeRoom({
       capacity: 300,

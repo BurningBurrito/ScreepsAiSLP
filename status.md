@@ -1,6 +1,44 @@
 # ScreepsAiSLP Status
 
 ## Current State
+Current state (2026-11-11, run 7): M3 has TWO competing failures and the
+fix is now role-scoped. (1) b1b9be1 (the 08:05 gate) failed M3 on the death
+spiral: creeps 2 at t=4000 (needs >= 3), while construction was fine
+(extensionsBuilt 4 + 6 sites). (2) The full min(capacity, available) clamp
+from this morning's run-6 working tree broke construction instead: the
+builder/upgrader templates have no 250 body, so a store of 200-299 bought a
+200-energy 1-WORK builder/upgrader about a hundred energy early; those early
+consumers self-harvest at the source (20 energy/tick of source regen is the
+binding constraint) and starved the five-harvester crew - harvest fell to
+~2.4/tick in the last 1000 ticks (vs ~8-9 at the gate), the store plateaued
+149-269 and never reached the 300 full-store threshold, so the surplus wave
+(third builder, upgrader) arrived ~1000 ticks late, and extensionsBuilt was
+1 at t=4000 (gate: 4 + 6 sites; creeps 4, H2 B1 U1, peak 6). Refined fix:
+sizingBudgetFor (src/managers/spawnManager.ts) now clamps to
+min(capacity, available) ONLY for income roles (harvester, miner, hauler) -
+the crew that refills the store, whose replacement must not wait for a body
+the bootstrap economy may never afford; builder/upgrader/defender keep
+capacity sizing, restoring the gate's construction behavior exactly. 168
+unit passing (167 + new test pinning the consumer wait), lint + build
+clean. acceptance-m3 re-run RUNNING (started 11:50).
+
+Current state (2026-11-11, run 6): M3 gate failure (creeps 2, needs >= 3)
+fixed in the working tree. The 08:05 gate on b1b9be1 passed M1/M2 and
+failed M3 on "the colony still has creeps": creeps 2 at t=4000 while
+every other M3 criterion passed (level 3, 1 tower at maxTowerEnergy 500,
+extensions 4 built + 6 sites, capacity 500, roadShare 0%, road tiles 59,
+sources 2/2, controller connected, farthest 6). Root cause: sizingBudgetFor
+in src/managers/spawnManager.ts sized replacement bodies from
+energyCapacityAvailable and refused to start while the store was below it;
+during the RCL 3 bootstrap the store oscillated 169-372 of 500 and never
+reached it, so every creep death shrank the crew that refills the store -
+a death spiral (the 07:48 de5c985 run already ended 3 of a peak 11, and
+the v9.3 fixes in b36207d/b1b9be1 pushed it to 2). Fix: sizingBudgetFor
+now returns min(capacity, energyAvailable), which subsumes the old
+income-dead / hauler-dead exceptions (store empty -> equal; store full ->
+capacity, so surplus spawns are unchanged). 167 unit passing, lint +
+build clean. acceptance-m3 re-run RUNNING; M2 regression run follows.
+
 Current state (2026-11-11, run 5): FEEDBACK v9.3 fixes in progress.
 Fix 1 is committed (b36207d): src/utils/energy.ts adds getEnergy(creep,
 role) - drops within BUILDER_DROP_PICKUP_RANGE, upgrader-only controller
@@ -164,6 +202,86 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-11 (M3 construction regression: clamp restricted to income roles)
+- **The run-6 full clamp fixed the death spiral but starved construction.**
+  With sizingBudgetFor returning min(capacity, available) for EVERY role,
+  the builder below minimum at RCL 1 (store 200-299 of 300 capacity)
+  spawned the 200-energy [W,C,M] body - the builder template has no 250
+  row - roughly a hundred energy before the capacity-sized 300-energy
+  [W,W,C,M] would have. The upgrader did the same (its pre-container table
+  is 750/500/350/300/200). The early 1-WORK consumers self-harvest at the
+  source when their store is empty (the 20 energy/tick of source
+  regeneration is the binding constraint of a container-less room), so the
+  five-harvester crew (10 WORK) no longer got a fair share: the acceptance
+  scorecard fell to ~2.4 harvested/tick in the last 1000 ticks (the 08:05
+  gate run harvested ~8-9/tick late in the window), the store plateaued
+  149-269 and never reached the 300 full-store threshold, the surplus wave
+  (third builder, upgrader) arrived ~1000 ticks late (U1 at t~1600 vs
+  t~600), and construction ran at about half the gate's rate:
+  extensionsBuilt 1 at t=4000 vs 4 + 6 sites at the gate. Creeps were 4 at
+  t=4000 (H2 B1 U1, peak 6) - the death spiral was indeed fixed.
+- **Root cause: the clamp was applied to consumer roles.** Builder and
+  upgrader are energy consumers, not producers: the living income crew
+  refills the store for them, so a capacity-sized body always comes. Only
+  income roles (harvester, miner, hauler) are the crew that refills the
+  store, and only they need the "start with the largest body the store can
+  pay for" budget (playbook 02b: income clamped, consumers full-size).
+- **Fix (src/managers/spawnManager.ts): sizingBudgetFor now clamps only
+  income roles** - min(energyCapacityAvailable, energyAvailable) for
+  harvester/miner/hauler, energyCapacityAvailable for builder/upgrader/
+  defender. The role parameter is used again (no more underscore prefix).
+  This restores the 08:05 gate's construction behavior exactly (consumer
+  sizing is bit-identical to b1b9be1) while keeping the death-spiral fix
+  for income. File header, sizingBudgetFor and trySpawnRole docstrings
+  updated with both regressions and the numbers.
+- **New unit test (test/unit/spawnManager.test.ts):** "builder below
+  minimum with a partly full store waits for the capacity-sized body" -
+  store 200 of 300, builder below minimum, income met: nothing spawns
+  (the 300-energy body does not fit, and the consumer role does not
+  shrink). Pins the M3 second regression against a future full clamp.
+- **Tests:** 168 unit passing (167 + 1 new), lint + build clean.
+  acceptance-m3 RUNNING (started 11:50); result line copied in when it
+  finishes, then the acceptance-m2 regression run.
+
+### 2026-11-11 (M3 death-spiral fix: replacements sized from min(capacity, available))
+- **The 08:05 gate on b1b9be1 failed M3 on "the colony still has creeps"
+  (creeps 2 at t=4000, needs >= 3); M1 and M2 passed.** M3 snapshot: level
+  3, towersBuilt 1, maxTowerEnergy 500, extensionsBuilt 4 + 6 sites,
+  energyCapacity 500, roadShare 0%, road tiles 59 (0 on wall, 0 stray),
+  sources 2/2, controller connected, farthest 6 - every criterion except
+  the creep count passed. The colony was on the death spiral all day: the
+  07:48 de5c985 run already ended 3 of a peak 11, and the v9.3 changes in
+  b36207d (getEnergy) and b1b9be1 (upgrader-pause rungs) pushed it to 2.
+- **Root cause: the spawn budget waited for a full store.**
+  sizingBudgetFor (src/managers/spawnManager.ts) returned
+  energyCapacityAvailable for every role except the narrow income-dead /
+  hauler-dead cases, and checkAndSpawn refused to start a replacement
+  while energyAvailable was below that budget. During the RCL 3 bootstrap
+  the harvester income balances the upgraders, builders and open
+  construction sites, so the store oscillated 169-372 of the 500 capacity
+  and never reached it: no replacement could ever start, each death shrank
+  the crew that refills the store, income fell, the store ran shorter.
+- **Fix (this commit): sizingBudgetFor returns
+  min(energyCapacityAvailable, energyAvailable).** A needed replacement
+  starts immediately with the largest body the store can pay for this
+  tick, so the crew holds at its minimums and the store refills. When the
+  store is full the budget equals the capacity, and surplus spawns - the
+  only ones that require a full store - keep the full-size body, so the
+  clamp is a no-op there. The old income-dead / hauler-dead exceptions
+  (owner feedback 2026-11-02) are subsumed: with an empty store the two
+  values are equal, and both were the same "the crew cannot refill the
+  store without this creep" case. Docstring updated with the rationale;
+  the role parameter is kept (underscore-prefixed) for signature
+  stability.
+- **Unit test correction (test/unit/spawnManager.test.ts).** "does not
+  spawn a surplus creep while the store is not full" left source-2
+  uncovered, so the RCL 1 minimum (one harvester per source) owed a
+  replacement harvester and the test exercised the replacement path, not
+  the surplus path; it now covers both sources so the surplus step is
+  isolated. 167 unit passing, lint + build clean.
+- **Tests:** acceptance-m3 RUNNING (started 11:04, 4000 ticks); result
+  line copied in when it finishes, then the M2 regression run.
+
 ### 2026-11-11 (FEEDBACK v9.3: shared getEnergy + upgrader pause)
 - **Fix 1 (commit b36207d): shared getEnergy.** New src/utils/energy.ts
   with getEnergy(creep, role): (1) drop within BUILDER_DROP_PICKUP_RANGE,
@@ -983,6 +1101,31 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **M3 construction-regression fix (2026-11-11, this run).** Two
+  competing M3 failures: b1b9be1 (08:05 gate) died a death spiral
+  (creeps 2 at t=4000) with construction fine (4 + 6 sites); the run-6
+  full clamp kept the colony alive (creeps 4, H2 B1 U1, peak 6) but ran
+  construction at half the gate's rate (extensionsBuilt 1 at t=4000)
+  because early 1-WORK builders/upgraders stole source energy from the
+  harvester crew. Plan:
+  1. [x] sizingBudgetFor clamps min(capacity, available) for income roles
+     only (harvester/miner/hauler); builder/upgrader/defender keep
+     capacity sizing (src/managers/spawnManager.ts).
+  2. [x] New unit test: "builder below minimum with a partly full store
+     waits for the capacity-sized body". 168 unit passing, lint + build
+     clean.
+  3. [ ] acceptance-m3 (4000 ticks) - RUNNING, started 11:50.
+  4. [ ] acceptance-m2 (3000 ticks) regression run (same tree).
+  5. [ ] Commit with scorecard numbers before -> after.
+  Baseline 2026-11-11 (08:05 gate, M3 snapshot at t=4000): creeps 2 (peak
+  11 in the 07:48 de5c985 run, which ended 3), roadShare 0%, road tiles
+  59 / 0 on wall / 0 disconnected, reach sources 2 of 2 + controller,
+  extensions and towers farther than 8 tiles 0, sites on wall terrain 0,
+  capacity 500, maxTowerEnergy 500, extensionsBuilt 4 + 6 sites.
+  Baseline 2026-11-11 (run-6 full clamp, M3 at t=4000): creeps 4 (H2 B1
+  U1, peak 6), extensionsBuilt 1, store plateau 149-269, harvested ~2.4/
+  tick in the last 1000 ticks.
+
 - **FEEDBACK v9.3 fixes (2026-11-11).** Two surgical fixes, each in its own
   commit (owner: no M4/M5 redesign, no M3/M4/M5 rewrite).
   1. `getEnergy(creep, role)` in src/utils/energy.ts: (1) drop within
