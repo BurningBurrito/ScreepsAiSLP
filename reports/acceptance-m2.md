@@ -1,26 +1,26 @@
-# Scorecard: acceptance-m2 · 2026-11-11 02:41 · 3001 ticks · commit bc47292
+# Scorecard: acceptance-m2 · 2026-11-11 07:31 · 3001 ticks · commit de5c985
 
-| Metric (last 1000 ticks unless noted) | This run | Previous run (2026-11-10 16:49, 754f7d4) | Change |
+| Metric (last 1000 ticks unless noted) | This run | Previous run (2026-11-11 02:41, bc47292) | Change |
 | --- | --- | --- | --- |
-| Energy harvested / tick | 5.79 | 6.21 | -0.42 |
-| Energy wasted at source regeneration (sum) | 10,316 | 11,628 | -1,312 |
+| Energy harvested / tick | 5.79 | 5.79 | 0 |
+| Energy wasted at source regeneration (sum) | 10,316 | 10,316 | 0 |
 | Controller progress / tick | 0.2 | 0.2 | 0 |
-| Construction progress / tick | 4.2 | 4.37 | -0.17 |
-| Energy delivered to spawn and extensions / tick | 5.04 | 5.41 | -0.37 |
-| Spawn idle while energy is full | 0 % | 1 % | 0 pts |
-| Spawn busy | 7 % | 8 % | -1 pts |
-| Creep ticks idle (no action, no move for 5+ ticks) | 24 % | 31 % | -8 pts |
-| CPU / tick (average, max) | 2.02, 20.95 | 2.02, 20.77 | 0 |
-| RCL / progress at end (whole run) | 2 / 700 | 2 / 400 | +300 |
-| Ticks to RCL 2 / RCL 3 (whole run) | 712 / - | 846 / - | -134 |
-| Energy harvested (whole run) | 12,996 | 16,132 | -3,136 |
+| Construction progress / tick | 4.2 | 4.2 | 0 |
+| Energy delivered to spawn and extensions / tick | 5.04 | 5.04 | 0 |
+| Spawn idle while energy is full | 0 % | 0 % | 0 pts |
+| Spawn busy | 7 % | 7 % | 0 pts |
+| Creep ticks idle (no action, no move for 5+ ticks) | 24 % | 24 % | 0 pts |
+| CPU / tick (average, max) | 2.01, 22.66 | 2.02, 20.95 | -0.01 |
+| RCL / progress at end (whole run) | 2 / 700 | 2 / 700 | 0 |
+| Ticks to RCL 2 / RCL 3 (whole run) | 712 / - | 712 / - | 0 |
+| Energy harvested (whole run) | 12,996 | 12,996 | 0 |
 | Build energy spent on roads (share of all build energy) | 0 % | 0 % | 0 pts |
 | Road tiles: total / on wall / disconnected from the spawn network (end) | 59 / 0 / 0 | 59 / 0 / 0 | 0 |
 | Roads reach (end): sources, controller | 2 of 2, yes | 2 of 2, yes |  |
 | Extensions and towers farther than 8 tiles from the spawn (end) | 0 | 0 | 0 |
 | Construction sites on wall terrain (end) | 0 | 0 | 0 |
 | Extension sites next to a source or the controller (end) | 0 | 0 | 0 |
-| Creeps at end (peak) | 10 (10) | 11 (12) | -1 |
+| Creeps at end (peak) | 10 (10) | 10 (10) | 0 |
 
 Creeps at end by role: builder 4, harvester 3, hauler 1, upgrader 2.
 Structures at end: container 1, extension 1, road 3, spawn 1. Construction sites: 60 (extension 4, road 56). Build energy in the window by target: completed 13, container 4112, extension 77.
