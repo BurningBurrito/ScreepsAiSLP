@@ -35,9 +35,14 @@ connected, farthest 6, 0 console errors. Scorecard (last 1000 ticks,
 vs de5c985 baseline): harvested 7.78/tick (5.46), delivered to
 spawn/extensions 6.35/tick (4.65), construction 4.52/tick (5.02),
 controller 0.13/tick (0.15), CPU 1.94 avg / 21.44 max (1.83 / 21.53),
-creep ticks idle 30% (19%), spawn busy 10% (3%). NEXT: acceptance-m2
-regression run (started 16:35); the full agent-test all suite is
-deferred to the next run (this run's 4-hour budget ends ~17:18).
+creep ticks idle 30% (19%), spawn busy 10% (3%). M2 regression PASSED on
+the same tree (ec7a3f6): 1 passing (13m), EXIT 0, 3001 ticks - level 2,
+extensionsBuilt 2 + 3 sites (>= 5), roadsBuilt 5 + 54 sites, capacity 400
+(> 300), creeps 6 (>= 3); harvested 5.44/tick (previous M2 run 1404382:
+3.46), construction 5.59/tick (2.99), delivered to spawn/extensions
+4.96/tick (2.55), ticks to RCL 2: 812 (816), roads 59 / 0 on wall / 0
+disconnected, sources 2 of 2 + controller reached, 0 console errors. The
+full agent-test all suite started after the M2 pass (finish ritual).
 Current state (2026-11-11, run 7): M3 has TWO competing failures and the
 fix is now role-scoped. (1) b1b9be1 (the 08:05 gate) failed M3 on the death
 spiral: creeps 2 at t=4000 (needs >= 3), while construction was fine
@@ -239,6 +244,28 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-11 (M2 regression on the M3 death-spiral fix: PASSED)
+- acceptance-m2 on the fix tree (ec7a3f6): 1 passing (13m), EXIT 0, 3001
+  ticks. Snapshot: level 2, extensionsBuilt 2 + extensionSites 3 (needs
+  built + sites >= 5 and built >= 1), roadsBuilt 5 + roadSites 54 (needs
+  >= 5 and >= 1), energyCapacity 400 (needs > 300), creeps 6 (needs >= 3)
+  - every criterion met. Scorecard (last 1000 ticks, vs the previous M2
+  run 1404382): harvested 5.44/tick (3.46), delivered to spawn/extensions
+  4.96/tick (2.55), construction 5.59/tick (2.99), controller progress
+  0.15/tick (0.44), CPU 1.93 avg / 21.16 max (1.94 / 20.84), ticks to
+  RCL 2: 812 (816), road tiles 59 / 0 on wall / 0 disconnected, sources 2
+  of 2 + controller reached, creeps at end 6 (peak 9; previous 8, peak 9),
+  0 console errors.
+- Watch item: controller progress/tick fell vs the previous run (0.15 vs
+  0.44; RCL 2/310 at end vs 2/554). The upgrader had multi-hundred-tick
+  idle stretches while the crew was thin (a harvester died around t=2400
+  and the store did not reach the 400 full-replacement cost before the run
+  ended, so the replacement had not started). The M2 criteria do not
+  assert controller progress and ticks-to-RCL-2 improved, but upgrade pace
+  in thin-crew phases is a watch item for the full suite (M3/M4/M5 all
+  depend on it).
+- The full agent-test all suite (finish ritual) started after the M2
+  pass; its result line is appended here when it finishes.
 ### 2026-11-11 (M3 death-spiral fix: income hold-back in the builder's pool rung)
 - Root-caused the M3 failure to the v9.3 builder pool rung (b36207d), not to
   body sizing: while the income crew is below its minimum, the builder's pool
@@ -1199,10 +1226,14 @@ yet.
      extensionsBuilt 5 (baseline 4), capacity 550, maxTowerEnergy 500,
      creeps 7 (peak 10), harvested 7.78/tick (baseline 5.46), 0 console
      errors.
-  6. [ ] acceptance-m2 (3000 ticks) regression run (same tree) - started
-     16:35.
-  7. [ ] Commit with scorecard numbers before -> after.
-  7. [ ] Commit with scorecard numbers before -> after.
+  6. [x] acceptance-m2 (3000 ticks) regression run (same tree) - PASSED:
+     1 passing (13m), EXIT 0; level 2, extensionsBuilt 2 + 3 sites,
+     roadsBuilt 5 + 54 sites, capacity 400, creeps 6 (peak 9); harvested
+     5.44/tick (previous M2 run 1404382: 3.46), construction 5.59/tick
+     (2.99), ticks to RCL 2: 812 (816), 0 console errors.
+  7. [x] Commit with scorecard numbers before -> after (code: ec7a3f6).
+  8. [ ] agent-test all (finish ritual) - started after the M2 pass; the
+     result line goes into today's Change Log entry, then final commit.
   Baseline 2026-11-11 (07:48, de5c985, M3 PASS): creeps 3 (peak 11),
   maxTowerEnergy 500, extensionsBuilt 4 + 6 sites, capacity 500,
   roadShare 0%, road tiles 59 / 0 on wall / 0 disconnected, sources 2 of
