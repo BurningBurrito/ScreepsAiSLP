@@ -1,6 +1,43 @@
 # ScreepsAiSLP Status
 
 ## Current State
+Current state (2026-11-11, run 8): the M3 death spiral is fixed with an
+income hold-back instead of shrunken bodies. This run confirmed the
+failure is two-layered: (1) b1b9be1 (full-capacity sizing + the v9.3
+getEnergy pool rung) died to 2 creeps at t=4000 because the builder's
+pool withdrawals kept the store below the cost of a full-size income
+replacement; (2) the income-only min(capacity, available) clamp of
+1404382 stopped the 1-WORK ratchet but M3 still ended with 2 extensions
+at t=4000, the crew back in the 2-creep state. A sizing revert alone
+cannot work: the drain engine is the pool rung, not the sizing. Final
+fix: sizingBudgetFor in src/managers/spawnManager.ts is back to the
+de5c985 behavior (every role sized from the room's CAPACITY, the only
+exception a wiped income or hauler crew, whose store nothing else can
+refill, sized from the stored energy - so a replacement is never smaller
+than the crew it replaces), and the pool rung of getEnergy in
+src/utils/energy.ts now requires the new incomeBelowMinimum(room)
+(src/managers/spawnManager.ts) in addition to upgraderBelowMinimum:
+while the income crew is below its per-source minimum the builder may
+not withdraw from the spawn/extensions pool - it refuels by
+self-harvesting or from the source-container rung (not gated) - so the
+store climbs to capacity and the full-size income replacement starts.
+174 unit passing (168 + 2 sizing regression + 3 incomeBelowMinimum + 1
+builder hold-back; the 2 existing builder pool tests now carry an
+at-minimum income crew), lint + build clean, smoke 1 passing (500
+ticks, harvested 4.44/tick vs 3.86 in the previous smoke run 8553897,
+6 creeps at end H2 B2 U2, 0 console errors).
+M3 acceptance PASSED on the fix: 1 passing (18m), EXIT 0. Snapshot at
+t=4000: extensionsBuilt 5 (de5c985 baseline 4; the failed 1404382 run
+ended at 2), extension sites 5, energyCapacity 550 (500),
+maxTowerEnergy 500 (500), creeps 7 (peak 10; baseline 3, peak 11),
+roads 59 / 0 on wall / 0 disconnected, sources 2 of 2, controller
+connected, farthest 6, 0 console errors. Scorecard (last 1000 ticks,
+vs de5c985 baseline): harvested 7.78/tick (5.46), delivered to
+spawn/extensions 6.35/tick (4.65), construction 4.52/tick (5.02),
+controller 0.13/tick (0.15), CPU 1.94 avg / 21.44 max (1.83 / 21.53),
+creep ticks idle 30% (19%), spawn busy 10% (3%). NEXT: acceptance-m2
+regression run (started 16:35); the full agent-test all suite is
+deferred to the next run (this run's 4-hour budget ends ~17:18).
 Current state (2026-11-11, run 7): M3 has TWO competing failures and the
 fix is now role-scoped. (1) b1b9be1 (the 08:05 gate) failed M3 on the death
 spiral: creeps 2 at t=4000 (needs >= 3), while construction was fine
@@ -202,6 +239,44 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-11 (M3 death-spiral fix: income hold-back in the builder's pool rung)
+- Root-caused the M3 failure to the v9.3 builder pool rung (b36207d), not to
+  body sizing: while the income crew is below its minimum, the builder's pool
+  withdrawals keep the store below the cost of a full-size income replacement,
+  so every creep death delays its replacement and the crew ratchets down
+  (b1b9be1: 2 creeps at t=4000 while construction was fine at 4 + 6 sites).
+  The income-only sizing clamp of 1404382 removed the 1-WORK ratchet but not
+  the drain: M3 still ended with 2 extensions built at t=4000.
+- Fix, two parts: (1) sizingBudgetFor (src/managers/spawnManager.ts) restored
+  to the de5c985 behavior - every role sized from the room's capacity, only a
+  wiped income or hauler crew sized from the stored energy; (2) new
+  incomeBelowMinimum(room) (src/managers/spawnManager.ts, mirrors
+  upgraderBelowMinimum) and the pool rung of getEnergy (src/utils/energy.ts)
+  now requires it - while the income crew is below its minimum the builder
+  may not withdraw from the pool (it self-harvests or uses the
+  source-container rung, both of which leave the pool alone), so the store
+  climbs to capacity and the full-size income replacement starts.
+- Tests: +2 sizing regression (harvester below minimum with a partly full
+  store waits for the capacity-sized body; with a full store starts it), +3
+  incomeBelowMinimum, +1 builder pool hold-back (income short -> no pool
+  withdrawal, self-harvests instead); the 2 existing builder pool tests now
+  carry an at-minimum income crew (upgrader + two harvesters). 174 unit
+  passing, lint + build clean.
+- Smoke 1 passing (500 ticks, commit 7c65fe0): harvested 4.44/tick (previous
+  smoke run 8553897, 2026-11-10: 3.86), delivered to spawn 3.22/tick (2.90),
+  construction 1.91/tick (2.01), RCL 1/59 (50), creeps at end 6 (H2 B2 U2),
+  0 console errors.
+- acceptance-m3 PASSED on the fix: 1 passing (18m), EXIT 0, 4001 ticks.
+  Snapshot: extensionsBuilt 5 (baseline de5c985: 4; failed 1404382 run:
+  2), extension sites 5, capacity 550 (500), maxTowerEnergy 500 (500),
+  creeps 7 (peak 10; baseline 3, peak 11), roads 59/0/0, sources 2 of 2,
+  controller connected, farthest 6, 0 console errors. Scorecard (last
+  1000 ticks vs de5c985): harvested 7.78/tick (5.46), delivered
+  6.35/tick (4.65), construction 4.52/tick (5.02), controller 0.13
+  (0.15), CPU 1.94 avg (1.83), creep idle 30% (19%).
+- acceptance-m2 (3000 ticks) regression run started 16:35. The full
+  agent-test all suite is deferred to the next run: this run's 4-hour
+  budget ends ~17:18 and all takes ~60 min.
 ### 2026-11-11 (M3 construction regression: clamp restricted to income roles)
 - **The run-6 full clamp fixed the death spiral but starved construction.**
   With sizingBudgetFor returning min(capacity, available) for EVERY role,
@@ -1101,30 +1176,41 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **M3 construction-regression fix (2026-11-11, this run).** Two
-  competing M3 failures: b1b9be1 (08:05 gate) died a death spiral
-  (creeps 2 at t=4000) with construction fine (4 + 6 sites); the run-6
-  full clamp kept the colony alive (creeps 4, H2 B1 U1, peak 6) but ran
-  construction at half the gate's rate (extensionsBuilt 1 at t=4000)
-  because early 1-WORK builders/upgraders stole source energy from the
-  harvester crew. Plan:
-  1. [x] sizingBudgetFor clamps min(capacity, available) for income roles
-     only (harvester/miner/hauler); builder/upgrader/defender keep
-     capacity sizing (src/managers/spawnManager.ts).
-  2. [x] New unit test: "builder below minimum with a partly full store
-     waits for the capacity-sized body". 168 unit passing, lint + build
-     clean.
-  3. [ ] acceptance-m3 (4000 ticks) - RUNNING, started 11:50.
-  4. [ ] acceptance-m2 (3000 ticks) regression run (same tree).
-  5. [ ] Commit with scorecard numbers before -> after.
-  Baseline 2026-11-11 (08:05 gate, M3 snapshot at t=4000): creeps 2 (peak
-  11 in the 07:48 de5c985 run, which ended 3), roadShare 0%, road tiles
-  59 / 0 on wall / 0 disconnected, reach sources 2 of 2 + controller,
-  extensions and towers farther than 8 tiles 0, sites on wall terrain 0,
-  capacity 500, maxTowerEnergy 500, extensionsBuilt 4 + 6 sites.
-  Baseline 2026-11-11 (run-6 full clamp, M3 at t=4000): creeps 4 (H2 B1
-  U1, peak 6), extensionsBuilt 1, store plateau 149-269, harvested ~2.4/
-  tick in the last 1000 ticks.
+- **M3 death-spiral fix (2026-11-11, this run).** The M3 failure is
+  two-layered: the b1b9be1 death spiral (2 creeps at t=4000) is driven by
+  the v9.3 builder pool rung draining the store below full-size income
+  replacement cost, and the 1404382 income-only clamp (2 extensions at
+  t=4000, crew back at 2 creeps) fixed the body ratchet but not the drain.
+  Plan:
+  1. [x] sizingBudgetFor restored to the de5c985 behavior: every role
+     sized from the room's capacity, only a wiped income/hauler crew sized
+     from the stored energy (src/managers/spawnManager.ts).
+  2. [x] incomeBelowMinimum(room) (src/managers/spawnManager.ts) + the
+     pool rung of getEnergy (src/utils/energy.ts) requires it, so the
+     builder cannot drain the pool while the income crew is below its
+     minimum.
+  3. [x] Unit tests: 174 passing (168 + 2 sizing regression + 3
+     incomeBelowMinimum + 1 builder hold-back; 2 existing builder pool
+     tests updated to an at-minimum income crew). Lint + build clean.
+  4. [x] Smoke: 1 passing (500 ticks; harvested 4.44/tick vs 3.86 in the
+     previous smoke run 8553897; 6 creeps at end H2 B2 U2; 0 console
+     errors).
+  5. [x] acceptance-m3 (4000 ticks) - PASSED: 1 passing (18m), EXIT 0;
+     extensionsBuilt 5 (baseline 4), capacity 550, maxTowerEnergy 500,
+     creeps 7 (peak 10), harvested 7.78/tick (baseline 5.46), 0 console
+     errors.
+  6. [ ] acceptance-m2 (3000 ticks) regression run (same tree) - started
+     16:35.
+  7. [ ] Commit with scorecard numbers before -> after.
+  7. [ ] Commit with scorecard numbers before -> after.
+  Baseline 2026-11-11 (07:48, de5c985, M3 PASS): creeps 3 (peak 11),
+  maxTowerEnergy 500, extensionsBuilt 4 + 6 sites, capacity 500,
+  roadShare 0%, road tiles 59 / 0 on wall / 0 disconnected, sources 2 of
+  2, controller connected, farthest 6.
+  Baseline 2026-11-11 (b1b9be1, M3 FAIL): creeps 2 at t=4000 (death
+  spiral); construction otherwise fine (extensionsBuilt 4 + 6 sites).
+  Baseline 2026-11-11 (1404382 income-only clamp, M3 FAIL): 2 extensions
+  built at t=4000, crew back in the 2-creep state.
 
 - **FEEDBACK v9.3 fixes (2026-11-11).** Two surgical fixes, each in its own
   commit (owner: no M4/M5 redesign, no M3/M4/M5 rewrite).

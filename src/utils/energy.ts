@@ -14,8 +14,13 @@
  *   2. Upgrader only: the controller container (rung 4). It is the
  *      upgrader's fuel stop - one withdraw per tick, no walking.
  *   3. Builder only: the spawn/extensions pool, but only above
- *      BUILDER_WITHDRAW_FRACTION and only while the upgrader crew is at
- *      minimum (the hold-back from the M2 "no upgrader ever spawns" bug).
+ *      BUILDER_WITHDRAW_FRACTION and only while the upgrader AND the income
+ *      crews are at minimum. Both are hold-backs that keep a capacity-sized
+ *      replacement spawnable: the upgrader's (the M2 "no upgrader ever
+ *      spawns" bug) and the income crew's (the M3 death spiral of
+ *      2026-11-11: a dead harvester's 300-energy replacement waited for a
+ *      store the builders kept draining below that cost, the crew
+ *      ratcheted down, and the run ended with 2 creeps at tick 4000).
  *      The pool sits ABOVE the source container rung: the builder's build
  *      sites are on the road network around the spawn (M4: the tower, the
  *      ramparts, the extensions), so a full pool a few tiles away is worth
@@ -46,8 +51,8 @@ import {
     CONTROLLER_CONTAINER_RANGE,
     MIN_CONTAINER_WITHDRAW_ENERGY,
 } from "config";
+import { incomeBelowMinimum, upgraderBelowMinimum } from "managers/spawnManager";
 import { moveToToward } from "utils/movement";
-import { upgraderBelowMinimum } from "managers/spawnManager";
 
 /**
  * The roles this helper serves. Only these two ever call it: every other
@@ -70,7 +75,8 @@ export type EnergyOutcome = "acted" | "wait" | "harvest";
  *
  * Tries, in order: a nearby drop, the upgrader's controller container,
  * the spawn/extensions pool (builders only, above BUILDER_WITHDRAW_FRACTION,
- * while the upgrader crew is at minimum), and the fullest source container
+ * while the upgrader and the income crews are at minimum), and the fullest
+ * source container
  * (>= MIN_CONTAINER_WITHDRAW_ENERGY). Returns "harvest" only when no
  * container holds any energy at all; a container holding some energy below
  * the threshold yields "wait" (the miner refills it within a few ticks).
@@ -127,17 +133,25 @@ export function getEnergy(creep: Creep, role: EnergyRole): EnergyOutcome
     }
 
     // 3. Builder only: the spawn/extensions pool, above the floor, and only
-    //    while the upgrader crew is at minimum (upgraderBelowMinimum: the
-    //    hold-back that keeps the first upgrader spawnable - see
-    //    managers/spawnManager.ts). The pool is tried spawn-first so a
-    //    half-full spawn still serves the builder. The pool sits ABOVE the
-    //    source container rung (the M4 fix of 2026-11-11): the builder's
-    //    sites sit around the spawn, so a pool a few tiles away beats a
-    //    source container that is a ~25-tile round trip - with the
-    //    container-first order M4 finished with 1 of its 3 required
-    //    extensions built (capacity 350 of 450).
+    //    while the upgrader AND the income crews are at minimum. Both are
+    //    hold-backs that keep a capacity-sized replacement spawnable (see
+    //    managers/spawnManager.ts): the upgrader's from the M2 "no
+    //    upgrader ever spawns" bug, the income crew's from the M3 death
+    //    spiral of 2026-11-11 - a dead harvester's 300-energy replacement
+    //    waited for a store the builders kept draining below that cost,
+    //    the crew ratcheted down, and the run ended with 2 creeps at tick
+    //    4000. While either hold-back is on the builder refuels from a
+    //    source instead (the fallback below), so the store climbs to
+    //    capacity and the full-size replacement starts. The pool is tried
+    //    spawn-first so a half-full spawn still serves the builder. The
+    //    pool sits ABOVE the source container rung (the M4 fix of
+    //    2026-11-11): the builder's sites sit around the spawn, so a pool
+    //    a few tiles away beats a source container that is a ~25-tile
+    //    round trip - with the container-first order M4 finished with 1 of
+    //    its 3 required extensions built (capacity 350 of 450).
     if (role === "builder"
         && !upgraderBelowMinimum(room)
+        && !incomeBelowMinimum(room)
         && room.energyAvailable >= room.energyCapacityAvailable * BUILDER_WITHDRAW_FRACTION)
     {
         const pool: (StructureSpawn | StructureExtension)[] = [

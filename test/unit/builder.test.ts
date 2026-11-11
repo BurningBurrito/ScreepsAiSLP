@@ -316,11 +316,12 @@ describe("builder", () => {
         // only applies while the upgrader is missing, so an upgrader is
         // alive here.
         const { creep, calls } = makeBuilder(() => 0, { working: false });
-        // @ts-ignore : give the room an upgrader so the hold-back does not
-        // apply. Replace the creeps object on the CLONE (lodash's clone is
-        // shallow: mutating creeps in place would leak into the shared mock
-        // and pollute the next test).
-        global.Game.creeps = { u1: { memory: { role: "upgrader" } } };
+        // @ts-ignore : give the room an upgrader and two harvesters so
+        // neither hold-back applies (upgrader minimum 1, income minimum 2:
+        // two sources, no container). Replace the creeps object on the
+        // CLONE (lodash's clone is shallow: mutating creeps in place would
+        // leak into the shared mock and pollute the next test).
+        global.Game.creeps = { u1: { memory: { role: "upgrader" } }, h1: { memory: { role: "harvester" } }, h2: { memory: { role: "harvester" } } };
         creep.room.energyAvailable = 200; // above the 150 floor
         const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
         spawn.store.getFreeCapacity = () => 50; // the spawn can accept energy
@@ -343,8 +344,9 @@ describe("builder", () => {
         // 0, no container before tick 5000). A full spawn holds all the
         // energy and must be the first place a builder withdraws.
         const { creep, calls } = makeBuilder(() => 0, { working: false });
-        // @ts-ignore : an upgrader is alive, so the hold-back does not apply
-        global.Game.creeps = { u1: { memory: { role: "upgrader" } } };
+        // @ts-ignore : an upgrader and two harvesters are alive, so neither
+        // hold-back applies (upgrader minimum 1, income minimum 2)
+        global.Game.creeps = { u1: { memory: { role: "upgrader" } }, h1: { memory: { role: "harvester" } }, h2: { memory: { role: "harvester" } } };
         creep.room.energyAvailable = 300; // room full, above the 150 floor
         const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
         spawn.store.getFreeCapacity = () => 0; // spawn full: nothing to accept
@@ -358,6 +360,32 @@ describe("builder", () => {
         assert.equal(withdrew, 1, "the builder withdraws from the full spawn above the floor");
         assert.equal(withdrawnFrom, spawn, "the full spawn is the withdrawal target");
         assert.equal(calls.harvest ?? 0, 0, "the builder does not self-harvest when it can withdraw");
+    });
+
+    it("holds back the pool withdrawal while the income crew is below minimum", () => {
+        // The M3 death-spiral fix (2026-11-11): income replacements are
+        // sized from the room's CAPACITY, and the builder's own drain keeps
+        // the store below that body cost. While the income crew is below
+        // its minimum the builder must NOT take from the pool - it refuels
+        // from a source instead - so the store climbs to capacity and the
+        // full-size replacement starts. Here one of the two required
+        // harvesters is dead, the pool sits above the floor, and the
+        // builder must self-harvest rather than withdraw.
+        const { creep, calls } = makeBuilder(() => 0, { working: false });
+        // @ts-ignore : upgrader at minimum (its hold-back off) but only
+        // ONE of the two required harvesters alive (income hold-back on).
+        global.Game.creeps = { u1: { memory: { role: "upgrader" } }, h1: { memory: { role: "harvester" } } };
+        creep.room.energyAvailable = 200; // above the 150 floor
+        const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
+        spawn.store.getFreeCapacity = () => 50; // the spawn can accept energy
+        spawn.store.getUsedCapacity = () => 250; // and it holds energy to give
+        let withdrew = 0;
+        creep.withdraw = () => { withdrew += 1; return OK; };
+
+        runBuilder(creep);
+
+        assert.equal(withdrew, 0, "the builder does not drain the pool while income is short");
+        assert.equal(calls.harvest, 1, "the builder self-harvests instead");
     });
 
     it("withdraws from a source container with 100+ energy instead of the pool or a source", () => {

@@ -2,21 +2,23 @@
  * Spawn manager - decides when to spawn creeps and with which bodies.
  *
  * Body sizing (owner rule #5):
- *   Builder, upgrader and defender are sized from
- *   room.energyCapacityAvailable - the long-term maximum the room will
- *   support - never from the temporarily low room.energyAvailable. We pick
- *   the largest template that fits the capacity and only tell the spawn to
- *   spawn when the room can pay for the body, so a creep is never shrunken
- *   because the store happens to be low this tick. Income roles (harvester,
- *   miner, hauler) are the exception: they are sized from the smaller of
- *   capacity and stored energy, because they ARE the crew that refills the
- *   store - a replacement that waits for a full-size body the bootstrap
- *   economy may never afford would starve the colony to zero (M3 death
- *   spiral, 2026-11-11; the earlier narrow form of this was the
- *   income-dead / hauler-dead exception, owner feedback 2026-11-02).
- *   Sizing the CONSUMER roles from the store instead broke M3 construction
- *   (early 1-WORK builders and upgraders stealing source energy from the
- *   harvesters) - see sizingBudgetFor for the numbers.
+ *   Every role is sized from room.energyCapacityAvailable - the long-term
+ *   maximum the room will support - never from the temporarily low
+ *   room.energyAvailable. We pick the largest template that fits the capacity
+ *   and only tell the spawn to spawn when the room can pay for the body, so
+ *   a creep is never shrunken because the store happens to be low this tick.
+ *   The exceptions are a WIPED income crew (no harvester AND no miner alive:
+ *   the first income is sized from energyAvailable, or the store is never
+ *   refilled and the colony cannot recover) and a wiped hauler crew in a
+ *   container room (same one-tick logic, owner feedback 2026-11-02).
+ *   The one tick of waiting is deliberate: while income is ALIVE but below
+ *   its minimum, sizing from the partially filled store ratchets the income
+ *   body down (a 1-WORK harvester) and never replaces it at full size, which
+ *   cost M3 its 1-WORK ratchet in 2026-11-11 (commit 1404382). What protects
+ *   that waiting tick now is the income hold-back in utils/energy: the pool
+ *   rung refuses to serve builders while the income crew is below its
+ *   minimum, so the store climbs to capacity and the full-size replacement
+ *   starts instead of the shrunken one.
  *
  * Income protection (owner feedback 2026-11-02):
  *   1. Cold boot: no harvester AND no miner alive means nothing can harvest,
@@ -434,6 +436,32 @@ export function upgraderBelowMinimum(room: Room): boolean
 }
 
 /**
+ * True while fewer income creeps (miner, harvester, hauler) are alive than
+ * this room's minimum.
+ *
+ * The builder reads this to hold back its pool withdrawals (see the pool
+ * rung in utils/energy.ts): the income replacements are sized from the
+ * room's CAPACITY (owner rule #5), and the builder's own drain keeps the
+ * store below that body cost, so without the hold-back a dead harvester's
+ * full-size replacement never starts and the crew ratchets down one
+ * shrunken body at a time (the M3 death spiral of 2026-11-11: 2 creeps at
+ * tick 4000 while the store never reached the 300-energy body). While the
+ * hold-back is on, the builder refuels from a source instead, the store
+ * climbs to capacity, and the full-size replacement starts. Same minimums
+ * the spawn manager enqueues against, so the hold-back ends exactly when
+ * the crew is back.
+ * @param room The room to check
+ * @returns True while the income crew is below its minimum
+ */
+export function incomeBelowMinimum(room: Room): boolean
+{
+    const minimums = minCreepsPerRole(room);
+    const income =
+        getCreepCount("miner") + getCreepCount("harvester") + getCreepCount("hauler");
+    return income < minimums.miner + minimums.harvester + minimums.hauler;
+}
+
+/**
  * Assigns a source to a new harvester.
  *
  * Balance by remaining capacity, not by count: a source in a wall pocket
@@ -600,65 +628,64 @@ function assignMinerSource(room: Room): string | undefined
 /**
  * The energy budget a new creep's body is sized against for the given role.
  *
- * Income roles (harvester, miner, hauler) are sized from the SMALLER of the
- * room's energy capacity and the energy stored right now; every other role
- * (builder, upgrader, defender) is sized from the capacity.
+ * The default is the room's energy CAPACITY - the long-term size of the crew,
+ * never the temporarily low stored energy. The only exception is a WIPED
+ * income crew: with no harvester AND no miner alive (or no hauler alive in a
+ * container room) nothing can refill the store, so the first replacement of
+ * that crew is sized from the energy stored RIGHT NOW (owner feedback
+ * 2026-11-02, the wipe scenario: sized against the capacity, the largest
+ * body would wait for energy that nothing can ever deliver).
  *
- * Why the income clamp: during the RCL 1-3 bootstrap, harvest income roughly
- * balances what the upgraders, builders and open construction spend, so the
- * store sits below capacity for long stretches. Sizing a replacement from
- * capacity alone then meant it could never start while the store was short:
- * every death shrank the crew, income fell, the store ran shorter still, and
- * the colony starved to zero. M3 regression of 2026-11-11: eleven creeps
- * decayed to two by tick 4000 while the store oscillated 169-372 of a 500
- * capacity and never reached it. Clamping the income budget to what is
- * stored makes a replacement start with the largest body the store can pay
- * for this tick, so the income crew holds at its minimums and the store can
- * be refilled. This generalizes the former income-dead / hauler-dead
- * exceptions (owner feedback 2026-11-02): those were the same "crew is short
- * and the store cannot refill without it" situation, and
- * min(capacity, available) covers them exactly (when the store is empty the
- * two are equal, and a full store keeps the capacity-sized body).
- *
- * Why builder and upgrader keep the capacity: they are energy CONSUMERS, not
- * producers - the living income crew refills the store for them, so a
- * full-size body always comes. Sizing them from the store broke M3 a second
- * time (2026-11-11): the builder/upgrader templates have no 250 body, so a
- * store of 200-299 bought a 200-energy 1-WORK creep roughly one hundred
- * energy earlier than the 300-energy 2-WORK one. Those early 1-WORK
- * consumers self-harvest at the source - the 20 energy per tick of source
- * regeneration is the binding constraint - and starved the five-harvester
- * crew: harvest fell from ~8 to ~2.4 per tick, the store plateaued below
- * 300, and the surplus wave (third builder, upgrader) arrived ~1,000 ticks
- * late. Construction ran at about half the baseline rate: 1 extension
- * finished at tick 4000 instead of 4 by ~tick 2500.
+ * Why income that is merely BELOW ITS MINIMUM is not an exception: sizing a
+ * replacement from the partially filled store ratchets the body down. On a
+ * store of 200-299 (capacity 300) the income templates have no 250 body, so
+ * the "largest that fits" is the 200-energy 1-WORK harvester; when it dies
+ * the store holds less than when the 2-WORK one did, and the next
+ * replacement is 1-WORK again forever. M3 regression of 2026-11-11 (commit
+ * 1404382, which sized every income role from the stored energy): the income
+ * crew ratcheted to 1-WORK bodies, harvest fell to ~3.5/tick in the M2
+ * world, and M3 finished with 2 extensions at tick 4000 (4 in the
+ * pre-regression de5c985 run). The one tick of waiting for a full-size
+ * replacement is safe because the income hold-back in utils/energy refuses
+ * to serve builders from the pool while the income crew is below its
+ * minimum - the store climbs to capacity and the 2-WORK replacement starts
+ * instead of the 1-WORK one. (The old income-dead / hauler-dead exceptions
+ * above are exactly the same "crew is short and the store cannot refill
+ * without it" logic for the fully dead case.)
  *
  * Surplus spawns are unaffected: checkAndSpawn only runs them while every
- * minimum is met AND the store is full (energyAvailable ==
- * energyCapacityAvailable), where the clamp is a no-op and the body is the
- * largest the capacity allows.
+ * minimum is met AND the store is full, where available == capacity.
  *
  * @param room The room to spawn in
- * @param role The role being spawned
+ * @param role The role being spawned (only the wiped-crew exceptions use the stored energy)
  * @param energyAvailable room.energyAvailable at the start of this tick
  * @returns The energy budget to size the body against
  */
 function sizingBudgetFor(room: Room, role: Role, energyAvailable: number): number
 {
-    const isIncomeRole = role === "harvester" || role === "miner" || role === "hauler";
-    return isIncomeRole
-        ? Math.min(room.energyCapacityAvailable, energyAvailable)
-        : room.energyCapacityAvailable;
+    const incomeDead = getCreepCount("harvester") === 0 && getCreepCount("miner") === 0;
+    const haulerDead = getCreepCount("hauler") === 0 &&
+        room.find(FIND_STRUCTURES, {
+            filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
+        }).length > 0;
+
+    const sizeFromAvailable =
+        (incomeDead && (role === "harvester" || role === "miner")) ||
+        (role === "hauler" && haulerDead);
+
+    return sizeFromAvailable ? energyAvailable : room.energyCapacityAvailable;
 }
 
 /**
  * Attempts to start one spawn of the given role on a known-free spawn.
  *
  * The body is the largest template the sizing budget allows (owner rule #5,
- * see sizingBudgetFor): the room's capacity for consumer roles, or the
- * smaller of capacity and stored energy for income roles, whose replacement
- * must not wait for a body the bootstrap economy may never afford. The
- * spawn only starts when the room can actually pay for the picked body.
+ * see sizingBudgetFor): the room's capacity for every role - the only
+ * stored-energy exception is a wiped income or hauler crew, whose store
+ * nothing else can refill. The spawn only starts when the room can actually
+ * pay for the picked body; while the store is short it waits (the income
+ * hold-back in utils/energy keeps the store climbing, so the wait is short)
+ * instead of starting a shrunken body.
  * @param room The room to spawn in
  * @param spawn The free spawn to use
  * @param role The role to spawn

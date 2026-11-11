@@ -3,7 +3,7 @@
 // with a room object built per test below.
 
 import {assert} from "chai";
-import {checkAndSpawn} from "../../src/managers/spawnManager";
+import {checkAndSpawn, incomeBelowMinimum} from "../../src/managers/spawnManager";
 import {Game, Memory} from "./mock";
 import "../../src/types/memory";
 
@@ -326,10 +326,9 @@ describe("spawnManager", () => {
     // The builder is an energy CONSUMER, not a producer: the living income
     // crew refills the store for it, so it keeps capacity sizing and waits
     // for the 300-energy 2-WORK body instead of shrinking (sizingBudgetFor).
-    // The M3 regression of 2026-11-11 clamped this role too: the builder
-    // templates have no 250 body, so a 200-energy 1-WORK builder spawned a
-    // hundred energy early, self-harvested at the source and starved the
-    // harvester crew - construction ran at half the baseline rate.
+    // A shrunken 1-WORK builder would self-harvest at the source and steal
+    // the 20 energy per tick of source regeneration from the harvester crew
+    // - the same mechanism that broke M3's extension build on 2026-11-11.
     addCreeps({
       "harvester-0": {role: "harvester"},
       "harvester-1": {role: "harvester"},
@@ -351,6 +350,68 @@ describe("spawnManager", () => {
     // No minimum is short except the builder (and it is a consumer role),
     // and its capacity-sized body cannot be paid from 200: nothing spawns.
     assert.equal(calls.length, 0);
+  });
+
+  it("harvester below minimum with a partly full store waits for the capacity-sized body", () => {
+    // Regression test for commit 1404382 (2026-11-11), which sized every
+    // income role from the stored energy: on a store of 200 of 300 the
+    // replacement was the 200-energy 1-WORK body, and each death left less
+    // stored energy, so the crew ratcheted down body for body. M3's run
+    // ended with 2 finished extensions (400 capacity) instead of 3 (450).
+    // Capacity sizing makes the replacement wait the one tick for the
+    // 300-energy 2-WORK body; the living harvester keeps refilling the
+    // store in the meantime.
+    // One of the two container-less sources is covered, so the harvester
+    // minimum (one per source) is short and the income floor is active.
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+    });
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 1;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 200,
+      sites: 0,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // The income floor hands the spawn to the harvester, but its
+    // capacity-sized body costs 300 and the store holds 200: nothing
+    // spawns this tick (under the 1404382 clamp a 1-WORK body would have
+    // started here and ratcheted the crew down).
+    assert.equal(calls.length, 0);
+  });
+
+  it("harvester below minimum with a full store starts the capacity-sized replacement", () => {
+    // Same room as the test above with the store full: the wait ends
+    // exactly when the store can pay for the 2-WORK body, and the
+    // replacement is the full size, never the shrunken one.
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+    });
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 1;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 0,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "harvester-1");
+    assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
+    assert.equal(calls[0].memory.role, "harvester");
   });
 
   it("spawns a hauler once a container exists and haulers are below minimum", () => {
@@ -885,10 +946,10 @@ describe("spawnManager", () => {
   it("does not spawn a surplus creep while the store is not full", () => {
     // Both container-less sources are covered (the RCL 1 minimum is one
     // harvester per source), so no replacement is owed - this is a pure
-    // surplus scenario. (The earlier setup left source-2 uncovered, which
-    // owed a replacement harvester; now that replacements are sized from the
-    // available energy it spawns even with a partly full store, so the source
-    // must be covered to isolate the surplus step - M3 fix, 2026-11-11.)
+    // surplus scenario. (The sources must be covered to isolate the surplus
+    // step: with an uncovered source the income floor would owe a
+    // replacement harvester, whose capacity-sized 2-WORK body cannot be paid
+    // from the partly full store - it waits for the store to reach capacity.)
     addCreeps({
       "harvester-0": {role: "harvester", sourceId: "source-1"},
       "harvester-1": {role: "harvester", sourceId: "source-2"},
@@ -1184,6 +1245,44 @@ describe("spawnManager", () => {
         CARRY, CARRY, CARRY, CARRY, CARRY,
         MOVE, MOVE, MOVE, MOVE,
       ]);
+    });
+  });
+
+  describe("incomeBelowMinimum (the builder's pool hold-back, M3 fix)", () => {
+    // The mock room has two sources and no container, so at any controller
+    // level the income minimum is two harvesters (the per-source split wins
+    // over the level-1 row).
+    it("is true while one of the two harvesters is dead", () => {
+      addCreeps({"harvester-0": {role: "harvester"}});
+      const {room} = makeRoom({controllerLevel: 1});
+
+      assert.isTrue(incomeBelowMinimum(room));
+    });
+
+    it("is false once both harvesters are alive", () => {
+      addCreeps({
+        "harvester-0": {role: "harvester"},
+        "harvester-1": {role: "harvester"},
+      });
+      const {room} = makeRoom({controllerLevel: 1});
+
+      assert.isFalse(incomeBelowMinimum(room));
+    });
+
+    it("counts miners and haulers toward the minimum as well", () => {
+      // One source with a built container: the minimum is one miner plus
+      // one hauler (no harvester on the mined source).
+      addCreeps({
+        "miner-0": {role: "miner", sourceId: "source-1"},
+        "hauler-0": {role: "hauler"},
+      });
+      const {room} = makeRoom({
+        controllerLevel: 1,
+        containers: 1,
+        sources: [{id: "source-1"}],
+      });
+
+      assert.isFalse(incomeBelowMinimum(room));
     });
   });
 });
