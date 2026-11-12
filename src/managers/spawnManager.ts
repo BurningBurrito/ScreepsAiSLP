@@ -41,10 +41,11 @@
  * from the next tick onward (the spawn is busy for three ticks per body part
  * anyway).
  *
- * Surplus spawning (owner feedback 2026-10-30):
- *   The minimums keep the colony alive, not busy. While every minimum is met
- *   AND the store is full (energyAvailable >= energyCapacityAvailable),
- *   checkAndSpawn spends the idle energy on one extra creep, in this order:
+ * Surplus spawning (owner feedback 2026-10-30, ratio 2026-11-12):
+ *   The minimums keep the colony alive, not busy. While every minimum is
+ *   met AND the store has climbed to SURPLUS_SPAWN_ENERGY_RATIO of the
+ *   room's capacity (90 % - a pressure valve, see config.ts), checkAndSpawn
+ *   spends the idle energy on one extra creep, in this order:
  *     1. Harvester - the source no living harvester is assigned to (one per
  *        source, never more). The source is passed to the spawn explicitly:
  *        assignSource's score would re-pick the covered source on a tie.
@@ -59,7 +60,7 @@
  *   is what lands RCL 2 inside the 500-tick smoke window.
  */
 
-import { CONTAINER_BOOST_MIN_LEVEL, CONTAINER_HAULER_SPARE, CONTROLLER_CONTAINER_RANGE, ENERGY_INCOME_FLOOR, MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_UPGRADER_MAX, UNCOVERED_SOURCE_HARVESTERS_L4 } from "config";
+import { CONTAINER_BOOST_MIN_LEVEL, CONTAINER_HAULER_SPARE, CONTROLLER_CONTAINER_RANGE, ENERGY_INCOME_FLOOR, MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_SPAWN_ENERGY_RATIO, SURPLUS_UPGRADER_MAX, UNCOVERED_SOURCE_HARVESTERS_L4 } from "config";
 import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
 
 /** Roles checked each tick, highest priority first (owner rule #5). The miner
@@ -117,6 +118,13 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
     ],
     harvester: [
         [WORK, WORK, WORK, CARRY, CARRY, MOVE, MOVE], // 500
+        // M5 (2026-11-12): the second CARRY halves the delivery round
+        // trips - a 3-WORK harvester fills 100 energy in ~17 ticks instead
+        // of 50 in ~8, and the extra 50 of spawn cost is paid back inside
+        // one trip. The M5 window needs ~13 harvested per tick and the
+        // 1-CARRY body caps each harvester near 1 per tick on the source
+        // round trip.
+        [WORK, WORK, WORK, CARRY, CARRY, MOVE], // 450
         [WORK, WORK, WORK, CARRY, MOVE], // 400
         [WORK, WORK, CARRY, MOVE], // 300
         [WORK, CARRY, MOVE], // 200
@@ -871,10 +879,14 @@ export function checkAndSpawn(room: Room): void
     }
 
     // The loop started nothing. If every role is at its minimum (the loop
-    // never needed to spawn) and the store is full, spend the idle energy on
-    // a surplus creep instead of idling (owner feedback 2026-10-30).
+    // never needed to spawn) and the store has climbed to the surplus ratio
+    // (90 % of capacity - the pressure valve, see config.ts), spend the
+    // idle energy on a surplus creep instead of idling (owner feedback
+    // 2026-10-30). Opening the valve before the store is 100 % full keeps
+    // the peak below capacity, so "spawn idle while full" and the dropped
+    // piles at a full spawn both shrink (M5, 2026-11-12).
     const minimumsMet = SPAWN_ORDER.every((role) => getCreepCount(role) >= minimums[role]);
-    if (minimumsMet && energyAvailable >= room.energyCapacityAvailable)
+    if (minimumsMet && energyAvailable >= room.energyCapacityAvailable * SURPLUS_SPAWN_ENERGY_RATIO)
     {
         spawnSurplus(room, spawn, energyAvailable, attempted);
     }
@@ -882,8 +894,9 @@ export function checkAndSpawn(room: Room): void
 
 /**
  * Starts one surplus spawn (see the file header). Called only while every
- * role is at its minimum and the store is full: walks SURPLUS_ORDER and
- * starts the first role whose cap and preconditions hold.
+ * role is at its minimum and the store has reached the surplus ratio:
+ * walks SURPLUS_ORDER and starts the first role whose cap and
+ * preconditions hold.
  * @param room The room to spawn in
  * @param spawn The free spawn to use
  * @param energyAvailable room.energyAvailable at the start of this tick

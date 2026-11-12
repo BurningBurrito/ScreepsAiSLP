@@ -56,7 +56,25 @@ export const ENERGY_INCOME_FLOOR = 2;
  * 100 % for that reason). The upgrader is the room's fixed 2-per-tick energy
  * sink and keeps the store cycling; the builder only while sites exist.
  */
-export const SURPLUS_UPGRADER_MAX = 2;
+export const SURPLUS_UPGRADER_MAX = 3;
+
+/**
+ * Fraction of the room's energy capacity at or above which surplus spawns
+ * (surplus upgraders / builders) are allowed - a "pressure valve" that opens
+ * before the store is completely full (M5, 2026-11-12).
+ *
+ * At a 100 % gate the store oscillates: harvesters and haulers refill it, it
+ * peaks at capacity, ONE surplus upgrader drains it, and it never crosses the
+ * gate again - so the valve fired once (if at all) and the store sat at
+ * 100 % with the spawn idle (the M5 scorecard of 2026-11-12: "spawn idle
+ * while energy is full" 58.6 %, avg dropped energy 303). Opening the valve at
+ * 90 % means the surplus upgraders start cycling while the store is still
+ * climbing, the peak never reaches 100 %, and the dropped-energy piles the
+ * harvesters make at a full spawn shrink. The surplus bodies cost at most
+ * 350 (an upgrader) against a capacity of at least 300, so the 10 % band
+ * plus the income refill always covers the pulse.
+ */
+export const SURPLUS_SPAWN_ENERGY_RATIO = 0.9;
 
 /**
  * Total builders (including the minimum three) the spawn may keep while
@@ -137,14 +155,24 @@ export const BUILDER_DROP_PICKUP_RANGE = 10;
 
 /**
  * Minimum energy a source container must hold before a builder or upgrader
- * withdraws from it (owner feedback 2026-11-10, cause 1). Below this the
- * round trip to the source side is not worth it against the fallbacks
- * (pool, self-harvest) - and the miner tops the container back up within a
- * few ticks, so waiting costs almost nothing. A hauler delivery carries at
- * least one full creep store (50+), so 100 means "at least one hauler has
- * delivered since the container was last drained by this creep".
+ * withdraws from it.
+ *
+ * The 100 value (owner feedback 2026-11-10, cause 1) served the hauler
+ * delivery semantics: a hauler delivery carries at least one full creep
+ * store (50+), so 100 meant "at least one hauler has delivered since the
+ * container was last drained by this creep". It also gated the BUILDERS,
+ * and that cost the M5 window (2026-11-12): a miner tops a source container
+ * up in bursts of ~100 every ~17 ticks, so with five builders draining it
+ * the container sat below 100 most of the time, the builders "waited" at
+ * their site or fell back to the pool floor / far-source self-harvest, and
+ * the second source container built at ~1 energy per tick.
+ *
+ * 50 = one full creep store: a partial load is still worth the round trip
+ * when the container is CLOSE (a builder works the second source container
+ * a few tiles from the first one), and below 50 the container is empty
+ * enough that the miner's next dump is one harvest cycle away.
  */
-export const MIN_CONTAINER_WITHDRAW_ENERGY = 100;
+export const MIN_CONTAINER_WITHDRAW_ENERGY = 50;
 
 /**
  * Maximum consecutive failed delivery ticks before a harvester drops its
