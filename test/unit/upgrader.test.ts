@@ -625,5 +625,84 @@ describe("upgrader", () => {
             assert.equal(calls.moveTo, undefined, "no walk: the upgrader waits for the refill");
         });
     });
+
+    describe("work latch (owner feedback v9.4, URGENT 1)", () => {
+        /**
+         * Reports a single source container through FIND_STRUCTURES with the
+         * filter honoured (same patch as the describes above).
+         * @param creep The mock creep to patch.
+         * @param container The container to report.
+         */
+        function withSourceContainer(creep: any, container: any): void
+        {
+            const originalFind = creep.room.find;
+            creep.room.find = (type: number, opts?: any): any[] =>
+            {
+                if (type === FIND_STRUCTURES)
+                {
+                    return opts !== undefined && typeof opts.filter === "function"
+                        ? [container].filter(opts.filter)
+                        : [container];
+                }
+                return originalFind(type);
+            };
+        }
+
+        function makeFullSourceContainer(): any
+        {
+            return {
+                id: "con-src",
+                structureType: STRUCTURE_CONTAINER,
+                pos: pos(15, 18), // next to the pocket source A, far from the controller
+                store: {
+                    [RESOURCE_ENERGY]: 1000,
+                    getUsedCapacity: () => 1000,
+                    getFreeCapacity: () => 1000,
+                },
+            };
+        }
+
+        it("burns a half-full store instead of walking back for a top-up", () => {
+            // Owner feedback v9.4, URGENT 1 (a): 30 of 50 energy, working,
+            // at the controller, a full source container in the room. The
+            // v9.3 code asked getEnergy before the latch, so the upgrader
+            // left the controller for a container top-up after every single
+            // upgrade tick - walk, withdraw, walk back, upgrade one tick,
+            // repeat (M5 upgradePerTick 0.05 with full containers). Now the
+            // store burns down to zero: the one action per tick is the
+            // upgrade, not the walk.
+            const { creep, calls } = makeUpgrader({ working: true });
+            creep.store[RESOURCE_ENERGY] = 30;
+            withSourceContainer(creep, makeFullSourceContainer());
+
+            runUpgrader(creep);
+
+            assert.equal(calls.upgrade, 1, "the half-full store keeps upgrading at the controller");
+            assert.equal(calls.withdraw, undefined, "no container top-up mid-cycle");
+            assert.equal(calls.harvest, undefined, "no source trip mid-cycle");
+            assert.equal(calls.moveTo, undefined, "no walk: the upgrader stays at the controller");
+            assert.equal(creep.memory.working, true, "the work cycle stays open while energy remains");
+        });
+
+        it("closes the work cycle on an empty store and tops up from the container", () => {
+            // Owner feedback v9.4, URGENT 1 (b): an upgrade just emptied the
+            // store. The latch closes (working = false) and the fetch phase
+            // runs: standing on a full source container, the upgrader
+            // withdraws instead of keeping a stale "working" latch (the v9.3
+            // code left working = true through the whole fetch phase).
+            const { creep, calls } = makeUpgrader({ working: true });
+            creep.store[RESOURCE_ENERGY] = 0;
+            const container = makeFullSourceContainer();
+            withSourceContainer(creep, container);
+            creep.pos = container.pos; // standing on the container's tile
+
+            runUpgrader(creep);
+
+            assert.equal(creep.memory.working, false, "an empty store closes the work cycle");
+            assert.equal(calls.withdraw, 1, "the fetch phase tops up from the container");
+            assert.equal(calls.lastWithdrawn, "con-src", "the source container is the withdrawal target");
+            assert.equal(calls.upgrade, undefined, "nothing to burn this tick");
+        });
+    });
 });
 

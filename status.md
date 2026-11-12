@@ -1203,6 +1203,27 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **M5 v9.4 fixes (2026-11-11, this run).** Owner feedback v9.4: two
+  independent bugs, each one commit (lint + build + unit, then M5, then M4;
+  commit only if M4 still passes).
+  1. [x] Cleanup: probe-m5-builder.test.ts moved to probe-tmp/ (commit
+     d0ec3a0).
+  2. [ ] URGENT 1: upgrader latch (src/roles/upgrader.ts) - close the work
+     cycle only on an EMPTY store (working false at 0, true at capacity),
+     getEnergy only in the fetch phase. 2 new unit tests (half-full store
+     keeps upgrading; empty store closes the latch and tops up). M5
+     before: upgradePerTick 0.05 (gate run); M4 must stay >= 3.0.
+  3. [ ] URGENT 2: getEnergy rung order (src/utils/energy.ts) - source
+     container (>= 100) BEFORE the builder pool rung; spawn/extensions only
+     when no container holds 100+. 1 new unit test (full room + container
+     with 1000 -> withdraw from container). Watch M4 extension count.
+  4. [ ] minedShare 0.585 -> >= 0.6 only if 2 and 3 did not close it:
+     first source container right after the first tower (3-extension floor
+     kept for the second container, second tower, ramparts); console line
+     from the construction manager when a container completes.
+  Baseline 2026-11-11 (M5 gate run, pre-fix): harvested 4.56/tick,
+  upgradePerTick 0.05 (need 1), builtByTick3000 0, containerByTick3000
+  0, minedShare 0.585 (need 0.6), 0 console errors.
 - **M3 death-spiral fix (2026-11-11, this run).** The M3 failure is
   two-layered: the b1b9be1 death spiral (2 creeps at t=4000) is driven by
   the v9.3 builder pool rung draining the store below full-size income
