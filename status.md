@@ -1,9 +1,22 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state (2026-11-12, this run): the M5 gate failures (harvest
+Current state (2026-11-12, run 93): the failed gate - unit test failures in
+test/unit/spawnManager.test.ts and test/unit/upgrader.test.ts, left stale by
+this morning's config changes (commit 877cba7: SURPLUS_UPGRADER_MAX 2 -> 3,
+MIN_CONTAINER_WITHDRAW_ENERGY 100 -> 50, BUILDER_MIN_SITES 1 -> 2) - is
+fixed: the surplus-builder test now runs against the 3-upgrader cap (expects
+builder-6), a new surplus-upgrader test documents the cap (upgrader-4 with 2
+upgraders and 3 builders), the all-caps test now uses 3 upgraders and
+counter 10, and the upgrader trickle test uses 49 energy (below the new 50
+threshold). 184 unit passing, lint 0 errors, build clean (commit b09a7e4).
+Next: the M5 acceptance test on this tree (baseline reports/latest.md,
+probe-m5-creeps: harvested 9.36/tick vs 13 needed, upgrade 0.43/tick vs 1,
+spawn idle-while-full 59 % vs 30 % max, RCL 5/550 at 5,500 ticks), then the
+M4 regression.
+Previous state (2026-11-12, pool rung run): the M5 gate failures (harvest
 11.68/tick vs 13 needed, upgrade 0.5/tick vs 1, spawn idle-while-full 76 %
-vs 30 % max - probe-m5-timeline run of 2026-11-12, commit 004fc8e) are fixed
+vs 30 % max - probe-m5-timeline run of 2026-11-12, commit 004fc8e) were fixed
 with an upgrader pool rung. getEnergy in src/utils/energy.ts gained rung 3:
 upgrader only, from CONTAINER_BOOST_MIN_LEVEL (RCL 4) on, ABOVE the source
 container rung, guarded by the same poolReady hold-backs as the builder rung
@@ -263,6 +276,21 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-12 (run 93: the failed gate - stale unit tests)
+- LAST_GATE.md: the unit step failed (178 passing, 6 failing) after this
+  morning's config changes (877cba7): SURPLUS_UPGRADER_MAX 2 -> 3 made the
+  surplus-builder and all-caps tests obsolete (a 2-upgrader room now spawns a
+  surplus upgrader before another builder, so "builder-6" became
+  "upgrader-4"), and MIN_CONTAINER_WITHDRAW_ENERGY 100 -> 50 put the
+  upgrader trickle test's 50-energy container AT the threshold (the upgrader
+  walked to it instead of waiting). Fixed the tests, not the code:
+  test/unit/spawnManager.test.ts (surplus-builder test: 3 upgraders ->
+  builder-6; new surplus-upgrader test: 2 upgraders + 3 builders ->
+  upgrader-4; all-caps test: 3 upgraders, counter 10 -> 0 spawns) and
+  test/unit/upgrader.test.ts (trickle test: 50 -> 49 energy, one under the
+  new 50 threshold). 184 unit passing, lint 0 errors, build clean. M5
+  acceptance next (baseline probe-m5-creeps in reports/latest.md: harvested
+  9.36/tick vs 13, upgrade 0.43/tick vs 1, spawn idle-while-full 59 % vs 30 %).
 ### 2026-11-12 (M5 gate fix: the upgrader pool rung)
 - Gate (probe-m5-timeline, 5001 ticks, commit 004fc8e): harvested
   11.68/tick (need 13), upgrade 0.5/tick (need 1), spawn idle-while-full
@@ -1289,7 +1317,26 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **M5 upgrader pool rung (2026-11-12, this run).** Fix the M5 gate
+- **Run 93 (2026-11-12): failed gate, then the M5 decision.** The gate's
+  unit step failed (178 passing, 6 failing) - the 877cba7 config changes
+  (SURPLUS_UPGRADER_MAX 2 -> 3, MIN_CONTAINER_WITHDRAW_ENERGY 100 -> 50,
+  BUILDER_MIN_SITES 1 -> 2) left 3 unit tests stale.
+  1. [x] Gate fix: update the stale unit tests (commit b09a7e4). 184 unit
+     passing, lint 0 errors, build clean.
+  2. [ ] M5 acceptance on the current tree. Baseline 2026-11-12
+     (probe-m5-creeps, reports/latest.md, tree 54985c0 - everything below
+     the 877cba7 valve changes): harvested 9.36/tick (need 13), upgrade
+     0.43/tick (need 1), spawn idle-while-full 59 % (need 30 %), creep idle
+     22 %, CPU 2.29, RCL 5/550 at 5,500 ticks, 0 console errors.
+  3. [ ] If M5 fails: fix one cause at a time (measure before touching the
+     same code twice; a worse number is a problem, not something to try
+     around). If M5 passes: the M4 regression (the upgrader pool rung and
+     the valve changes alter the RCL 4+ economy; M4 ends at RCL 5/550 and
+     is the M1-M5 canary), then Part D (agent-test all, docs).
+  4. [ ] status.md "Feedback acknowledged": the v9.4 items (URGENT 1,
+     URGENT 2, minedShare, cleanup) - the M5/M4 numbers in those lines
+     land with the acceptance results.
+- **M5 upgrader pool rung (2026-11-12, superseded by run 93).** Fix the M5 gate
   (harvest 11.68 vs 13, upgrade 0.5 vs 1, spawn idle-while-full 76 % vs
   30 %): the upgrader spends the spawn/extensions pool from RCL 4 on.
   1. [x] Rung 3 in getEnergy (src/utils/energy.ts) + shared
@@ -2006,6 +2053,32 @@ yet.
 - Energy delivery issue: previous scorecard showed 72.7 energy delivered/tick vs ~3 harvested (energy going in circles) - this is now fixed by hauler changes
 
 ## Feedback acknowledged
+- Acknowledged 2026-11-12 (v9.4) - URGENT 1 (upgrader latch): done in
+  73d682c - the work latch now gates the fetch phase (working with energy > 0
+  -> upgrade at the controller without asking getEnergy; energy 0 -> working
+  = false), so a half-full store no longer leaves the controller for a
+  one-energy top-up. Unit tests (a)/(b) in the "work latch (owner feedback
+  v9.4, URGENT 1)" describe of test/unit/upgrader.test.ts ("burns a half-full
+  store instead of walking back for a top-up" and "closes the work cycle on
+  an empty store and tops up from the container"). M5 numbers: upgrade
+  0.05 -> 0.55/tick (URGENT 1 run), 0.43/tick (probe-m5-creeps,
+  reports/latest.md - still below the 1.0 criterion, not reverted); harvest
+  9.36/tick, spawn idle-while-full 59 %. This run's M5 acceptance on the
+  current tree gives the final numbers.
+- Acknowledged 2026-11-12 (v9.4) - URGENT 2 (builder order): done in the
+  getEnergy rework (src/utils/energy.ts): the source-container rung (>=
+  MIN_CONTAINER_WITHDRAW_ENERGY) now sits ABOVE the builder pool rung for
+  builders (rung 4 before rung 5), so a builder that can refill at the
+  container no longer competes with the income crew for the pool. Unit test
+  in test/unit/builder.test.ts ("the source container beats the full pool":
+  empty builder, full room, container with 1000 -> withdraws from the
+  container, not the spawn). M5 before (18:31 gate per the v9.4 note):
+  harvested 9.05/tick (need 13), upgrade 0.43/tick (need 1), spawn idle
+  59 %, RCL 5/550. M5 after + M4 result: pending this run.
+- Acknowledged 2026-11-12 (v9.4) - minedShare > 0.6 (only if still failing
+  after URGENT 1 and 2): pending this run's M5 acceptance.
+- Acknowledged 2026-11-12 (v9.4) - cleanup probe-m5-builder: done in d0ec3a0
+  (removed from test/integration/, the folder the gate scans).
 - Acknowledged 2026-11-11 (v9.3): FEEDBACK v9.3 - the M5 regression has
   two causes: (1) builders/upgraders self-harvest when the pool is thin
   and a source container holds energy -> getEnergy(creep, role) shared
