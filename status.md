@@ -1,6 +1,25 @@
 # ScreepsAiSLP Status
 
 ## Current State
+Current state (2026-11-12, this run): the M5 gate failures (harvest
+11.68/tick vs 13 needed, upgrade 0.5/tick vs 1, spawn idle-while-full 76 %
+vs 30 % max - probe-m5-timeline run of 2026-11-12, commit 004fc8e) are fixed
+with an upgrader pool rung. getEnergy in src/utils/energy.ts gained rung 3:
+upgrader only, from CONTAINER_BOOST_MIN_LEVEL (RCL 4) on, ABOVE the source
+container rung, guarded by the same poolReady hold-backs as the builder rung
+(!upgraderBelowMinimum && !incomeBelowMinimum && the 50 % floor) - so the
+upgrader now spends the spawn/extensions pool (a few-tile round trip next to
+the controller) instead of competing with the builders at the source
+container 20+ tiles away, and the pool stops sitting full while the upgrader
+starves. withdrawFromPool(creep, room) is shared by the upgrader and builder
+rungs. Below RCL 4 the M1-M3 economy is byte-for-byte unchanged (upgrader
+refuels from the controller container, then the source container, then
+self-harvest). 183 unit passing (180 + 3 pool rung: the pool beats a full
+source container at RCL 5; the container rung is untouched below the gate at
+RCL 3; the pool is skipped below the 50 % floor even at RCL 5), lint + build
+clean, dist rebuilt. M5 acceptance test running (started 06:28:58; live at
+tick 3400: 9 creeps, harvested 5.28/tick, upgraded 0, energy 13/400, spawn
+busy, RCL 5/100).
 Current state (2026-11-11, run 8): the M3 death spiral is fixed with an
 income hold-back instead of shrunken bodies. This run confirmed the
 failure is two-layered: (1) b1b9be1 (full-capacity sizing + the v9.3
@@ -244,6 +263,36 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-12 (M5 gate fix: the upgrader pool rung)
+- Gate (probe-m5-timeline, 5001 ticks, commit 004fc8e): harvested
+  11.68/tick (need 13), upgrade 0.5/tick (need 1), spawn idle-while-full
+  76 % (need 30 %), wasted at source regen 8,076, creep idle 40.1 %, CPU
+  2.56, RCL 5/600, 0 console errors. Root cause: the upgrader's only fuel
+  stop short of self-harvest was the source container rung of getEnergy
+  (src/utils/energy.ts), so it fought the builders for that container's
+  trickle while the spawn/extensions pool sat full - the spawn idle-while-
+  full criterion - and the second source container finished only around
+  tick 5,400, keeping the second miner out of the window (harvest
+  throughput), while the upgrader's long round trips held upgrade rate at
+  0.5.
+- Fix: rung 3 of getEnergy, upgrader only, from CONTAINER_BOOST_MIN_LEVEL
+  (4) on, ABOVE the source container and sharing the builder rung's
+  poolReady gate (upgrader and income crews at minimum, pool above
+  BUILDER_WITHDRAW_FRACTION of capacity). New withdrawFromPool(creep, room)
+  (spawn first, then extensions) is used by both the upgrader and the
+  builder rung. The runUpgrader doc in src/roles/upgrader.ts drops the old
+  "an upgrader never withdraws from the spawn or an extension" rule: the
+  hold-backs are exactly what made that starvation impossible to begin
+  with, and from RCL 4 on the pool is the upgrader's cheapest fuel. Below
+  RCL 4 the upgrader keeps the old rung order, so the M1-M3 economy is
+  unchanged.
+- test/unit/upgrader.test.ts: 3 new tests in a "pool rung" describe - the
+  pool beats a full source container at RCL 5 (fails against the old rung
+  order: the container wins), the container rung is untouched at RCL 3
+  (level gate), the pool is skipped below the 50 % floor even at RCL 5.
+  183 unit passing (180 + 3), lint + build clean, dist/main.js rebuilt.
+- PENDING: M5 acceptance (started 06:28:58, 5000 ticks) and the M4
+  regression on this tree.
 ### 2026-11-11 (M5 minedShare fix: first source container right after the first tower)
 - Owner feedback v9.4 "Then: minedShare": after URGENT 1 (upgradePerTick
   0.05 -> 0.55) and URGENT 2 (builders refuel from the source container
@@ -1240,6 +1289,27 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **M5 upgrader pool rung (2026-11-12, this run).** Fix the M5 gate
+  (harvest 11.68 vs 13, upgrade 0.5 vs 1, spawn idle-while-full 76 % vs
+  30 %): the upgrader spends the spawn/extensions pool from RCL 4 on.
+  1. [x] Rung 3 in getEnergy (src/utils/energy.ts) + shared
+     withdrawFromPool; doc update in src/roles/upgrader.ts.
+  2. [x] 3 unit tests (pool beats container at RCL 5; level gate at RCL 3;
+     50 % floor hold at RCL 5). 183 passing, lint + build clean, dist
+     rebuilt.
+  3. [ ] M5 acceptance (started 06:28:58) - check as it progresses; if it
+     passes, the M4 regression on this tree (the pool rung changes where
+     the upgrader refuels from RCL 4 on; M4 ends at RCL 5/550, so M4 is the
+     canary for the M1-M5 economy).
+  4. [ ] M1-M3 smoke: the rung is level-gated, M1-M3 run below RCL 4 -
+     the M3 acceptance only if 3 passes (the level gate should make it a
+     no-op there).
+  5. [ ] Commit with the scorecard before -> after, then status.md/
+     README/blog per the run procedure.
+  Baseline 2026-11-12 (probe-m5-timeline, commit 004fc8e): harvested
+  11.68/tick (need 13), upgrade 0.5/tick (need 1), spawn idle-while-full
+  76 % (need 30 %), wasted at regen 8,076, creep idle 40.1 %, CPU 2.56,
+  RCL 5/600, creeps 12, 0 console errors.
 - **M5 v9.4 fixes (2026-11-11, this run).** Owner feedback v9.4: two
   independent bugs, each one commit (lint + build + unit, then M5, then M4;
   commit only if M4 still passes).

@@ -10,16 +10,18 @@
  * the tower is being built; the moment the tower is finished it resumes
  * upgrading.
  *
- * Two phases, driven by the memory.working latch, which only the store flips
- * (an upgrader never withdraws from the spawn or an extension - doing so
- * would steal the energy the harvesters just delivered and starve creep
- * respawns):
- *   1. Fetch phase (working = false, store empty): refill from a container -
- *      a nearby drop, the controller container, the fullest source container
- *      (getEnergy, utils/energy.ts). The source harvest cycle runs only when
- *      no container holds energy, and fills the store in one go - the old
- *      one-tick-at-a-time code had a [WORK, CARRY, MOVE] upgrader harvest one
- *      tick, upgrade two, and spend most of its life walking.
+ * Two phases, driven by the memory.working latch, which only the store flips:
+ *   1. Fetch phase (working = false, store empty): refill via getEnergy
+ *      (utils/energy.ts) - a nearby drop, the controller container, the
+ *      spawn/extensions pool (from RCL 4 on: the upgrader works next to the
+ *      controller, so the pool is its cheapest fuel and the rung is what
+ *      spends the pool instead of letting it sit full; the hold-backs keep
+ *      a full-size replacement spawnable, so respawn starvation - the
+ *      reason the upgrader used to skip the pool entirely - cannot happen),
+ *      and the fullest source container. The source harvest cycle runs only
+ *      when no container holds energy, and fills the store in one go - the
+ *      old one-tick-at-a-time code had a [WORK, CARRY, MOVE] upgrader
+ *      harvest one tick, upgrade two, and spend most of its life walking.
  *   2. Upgrade phase (working = true): burn the store at the controller
  *      (stays within range 3). The latch closes only when the store is EMPTY:
  *      the v9.3 code asked getEnergy before the latch, so an upgrader that
@@ -139,7 +141,9 @@ export function runUpgrader(creep: Creep): void
     // feeds the store from a nearby drop, the controller container (the
     // upgrader's fuel stop - it stands ON the tile, within
     // CONTROLLER_CONTAINER_RANGE of the controller, so the upgrade works
-    // from there), then the fullest source container above
+    // from there), the spawn/extensions pool (from RCL 4 on - the shortest
+    // round trip, and what spends the pool so the spawn stops sitting
+    // idle while full), then the fullest source container above
     // MIN_CONTAINER_WITHDRAW_ENERGY. Only "harvest" falls through to the
     // source cycle below, and only when no container holds energy at all:
     // with a trickle in a container the miner tops it back up within a few

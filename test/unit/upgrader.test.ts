@@ -626,6 +626,189 @@ describe("upgrader", () => {
         });
     });
 
+    describe("pool rung (2026-11-12 M5 gate: the upgrader spends the spawn pool)", () => {
+        /**
+         * A spawn mock that holds energy in its store (the pool part the
+         * new upgrader rung withdraws from).
+         * @param energy The energy currently in the spawn.
+         * @returns The spawn mock.
+         */
+        function makeSpawn(energy: number): any
+        {
+            return {
+                id: "spawn1",
+                pos: pos(13, 20),
+                store: {
+                    [RESOURCE_ENERGY]: energy,
+                    getUsedCapacity: () => energy,
+                    getFreeCapacity: () => 300 - energy,
+                },
+            };
+        }
+
+        /**
+         * Patches the mock room for the pool-rung tests: the controller gets
+         * a level (the rung is gated on CONTAINER_BOOST_MIN_LEVEL), the room
+         * gets an energyAvailable / energyCapacityAvailable pair (the pool
+         * floor check reads both), and FIND_MY_SPAWNS returns the spawn.
+         * @param creep The mock creep to patch.
+         * @param spawn The spawn to report (or null for an empty pool).
+         * @param level The controller level (3: below the gate, 5: armed).
+         * @param energyAvailable The room's stored energy (the floor check).
+         */
+        function withPool(creep: any, spawn: any, level: number, energyAvailable: number): void
+        {
+            creep.room.controller.level = level;
+            creep.room.energyAvailable = energyAvailable;
+            creep.room.energyCapacityAvailable = 300;
+            const originalFind = creep.room.find;
+            creep.room.find = (type: number, opts?: any): any[] =>
+            {
+                if (type === FIND_MY_SPAWNS)
+                {
+                    return spawn !== null ? [spawn] : [];
+                }
+                return originalFind(type, opts);
+            };
+        }
+
+        /**
+         * A source container mock: next to the pocket source A (14,18) and
+         * far from the controller (25,25), so it is a SOURCE container the
+         * old rung (4) would withdraw from. Same geometry as the cycle
+         * tests above.
+         * @param energy The energy currently in the container.
+         * @returns The container mock.
+         */
+        function makeSourceContainer(energy: number): any
+        {
+            return {
+                id: "con-src",
+                structureType: STRUCTURE_CONTAINER,
+                pos: pos(15, 18),
+                store: {
+                    [RESOURCE_ENERGY]: energy,
+                    getUsedCapacity: () => energy,
+                    getFreeCapacity: () => 2000 - energy,
+                },
+            };
+        }
+
+        /**
+         * Patches the room's find so FIND_STRUCTURES (the lookup the
+         * container branches use, filter honoured) returns the container;
+         * every other type keeps the original dispatch (same patch as the
+         * controller-container cycle above).
+         * @param creep The mock creep to patch.
+         * @param container The container to report (or null for none).
+         */
+        function withContainer(creep: any, container: any): void
+        {
+            const originalFind = creep.room.find;
+            creep.room.find = (type: number, opts?: any): any[] =>
+            {
+                if (type === FIND_STRUCTURES)
+                {
+                    const candidates = container !== null ? [container] : [];
+                    return opts !== undefined && typeof opts.filter === "function"
+                        ? candidates.filter(opts.filter)
+                        : candidates;
+                }
+                return originalFind(type, opts);
+            };
+        }
+
+        it("withdraws from the pool ABOVE the source container at RCL 4+", () => {
+            // The 2026-11-12 M5 gate: with a full pool and a source
+            // container holding 1000, an old-tree upgrader took the
+            // container rung (20+ tiles away) and the pool sat at 450/450
+            // until the income crew's deliveries dropped on the floor. The
+            // new rung (3) is above the container: the upgrader stands next
+            // to the controller, so the pool is its cheapest fuel. Both
+            // hold-backs must be off - with the one source container the
+            // level-5 minimums are upgrader 1, miner 1, harvester 2
+            // (UNCOVERED_SOURCE_HARVESTERS_L4), hauler 2 (per-container
+            // plus CONTAINER_HAULER_SPARE) - and the pool above the 50%
+            // floor. Without the rung this test fails: the container wins.
+            const { creep, calls } = makeUpgrader({});
+            const container = makeSourceContainer(1000);
+            withContainer(creep, container);
+            withPool(creep, makeSpawn(300), 5, 300);
+            // One upgrader and five income creeps are alive,
+            // so neither hold-back applies.
+            global.Game.creeps = {
+                u1: {memory: {role: "upgrader", working: false}},
+                m1: {memory: {role: "miner", working: false}},
+                h1: {memory: {role: "harvester", working: false}},
+                h2: {memory: {role: "harvester", working: false}},
+                l1: {memory: {role: "hauler", working: false}},
+                l2: {memory: {role: "hauler", working: false}},
+            } as any;
+
+            runUpgrader(creep);
+
+            assert.equal(calls.withdraw, 1, "the empty upgrader withdraws somewhere");
+            assert.equal(calls.lastWithdrawn, "spawn1", "the pool beats the full source container");
+            assert.equal(calls.harvest, undefined, "no self-harvest trip while the pool holds energy");
+            assert.equal(calls.upgrade, undefined, "no upgrade while the store is still empty");
+        });
+
+        it("ignores the pool below CONTAINER_BOOST_MIN_LEVEL (M1-M3 economy unchanged)", () => {
+            // The rung is level-gated: at RCL 3 the upgrader keeps the old
+            // behavior (container rung, then self-harvest). Same room as
+            // above, level 3, crew at the level-3 minimums (upgrader 1,
+            // income 3: one miner, one harvester, one hauler - the
+            // uncovered source counts ONE harvester below level 4).
+            const { creep, calls } = makeUpgrader({});
+            const container = makeSourceContainer(1000);
+            withContainer(creep, container);
+            withPool(creep, makeSpawn(300), 3, 300);
+            creep.pos = container.pos; // standing on the container's tile
+            // One upgrader and three income creeps are alive.
+            global.Game.creeps = {
+                u1: {memory: {role: "upgrader", working: false}},
+                m1: {memory: {role: "miner", working: false}},
+                h1: {memory: {role: "harvester", working: false}},
+                l1: {memory: {role: "hauler", working: false}},
+            } as any;
+
+            runUpgrader(creep);
+
+            assert.equal(calls.withdraw, 1, "the empty upgrader withdraws somewhere");
+            assert.equal(calls.lastWithdrawn, container.id, "below RCL 4 the source container is still the rung");
+            assert.notEqual(calls.lastWithdrawn, "spawn1", "the pool is not touched below the gate");
+            assert.equal(calls.harvest, undefined, "no self-harvest trip while the container holds energy");
+        });
+
+        it("skips the pool below the 50% floor even at RCL 5", () => {
+            // The floor is a hold-back, not decoration: with the store
+            // under BUILDER_WITHDRAW_FRACTION of capacity a full-size
+            // income replacement could no longer be spawned, so the
+            // upgrader falls back to the container rung and leaves the
+            // pool for the respawn queue.
+            const { creep, calls } = makeUpgrader({});
+            const container = makeSourceContainer(1000);
+            withContainer(creep, container);
+            withPool(creep, makeSpawn(300), 5, 100); // 100 < 150 (50% of 300)
+            creep.pos = container.pos; // standing on the container's tile
+            // @ts-ignore : one upgrader and five income creeps are alive.
+            global.Game.creeps = {
+                u1: {memory: {role: "upgrader", working: false}},
+                m1: {memory: {role: "miner", working: false}},
+                h1: {memory: {role: "harvester", working: false}},
+                h2: {memory: {role: "harvester", working: false}},
+                l1: {memory: {role: "hauler", working: false}},
+                l2: {memory: {role: "hauler", working: false}},
+            } as any;
+
+            runUpgrader(creep);
+
+            assert.equal(calls.withdraw, 1, "the empty upgrader withdraws somewhere");
+            assert.equal(calls.lastWithdrawn, container.id, "below the floor the source container is the rung");
+            assert.notEqual(calls.lastWithdrawn, "spawn1", "the pool is not drained below the floor");
+        });
+    });
+
     describe("work latch (owner feedback v9.4, URGENT 1)", () => {
         /**
          * Reports a single source container through FIND_STRUCTURES with the
