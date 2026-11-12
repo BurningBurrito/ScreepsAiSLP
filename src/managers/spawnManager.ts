@@ -886,7 +886,35 @@ export function checkAndSpawn(room: Room): void
     // the peak below capacity, so "spawn idle while full" and the dropped
     // piles at a full spawn both shrink (M5, 2026-11-12).
     const minimumsMet = SPAWN_ORDER.every((role) => getCreepCount(role) >= minimums[role]);
-    if (minimumsMet && energyAvailable >= room.energyCapacityAvailable * SURPLUS_SPAWN_ENERGY_RATIO)
+    const valveOpen = energyAvailable >= room.energyCapacityAvailable * SURPLUS_SPAWN_ENERGY_RATIO;
+
+    // TEMP DEBUG (M5 valve investigation) - remove before commit. Logs the
+    // full valve decision every 100 ticks, whatever the outcome.
+    if (Game.time % 100 === 0)
+    {
+        const srcCounts: Record<string, number> = {};
+        for (const source of room.find(FIND_SOURCES_ACTIVE))
+        {
+            srcCounts[source.id] = 0;
+        }
+        for (const name in Game.creeps)
+        {
+            const creep = Game.creeps[name];
+            if (creep.memory.role === "harvester" && creep.memory.sourceId !== undefined && srcCounts[creep.memory.sourceId] !== undefined)
+            {
+                srcCounts[creep.memory.sourceId] += 1;
+            }
+        }
+        console.log(
+            `dbgValve: t=${Game.time} e=${energyAvailable}/${room.energyCapacityAvailable} ratio=${SURPLUS_SPAWN_ENERGY_RATIO}`
+            + ` c:m${getCreepCount("miner")}h${getCreepCount("harvester")}b${getCreepCount("builder")}u${getCreepCount("upgrader")}d${getCreepCount("defender")}hl${getCreepCount("hauler")}`
+            + ` min:m${minimums.miner}h${minimums.harvester}b${minimums.builder}u${minimums.upgrader}d${minimums.defender}hl${minimums.hauler}`
+            + ` met=${String(minimumsMet)} valve=${String(valveOpen)} sites=${room.find(FIND_CONSTRUCTION_SITES).length} mode=${Memory.mode ?? "peace"}`
+            + ` srcs=${Object.entries(srcCounts).map(([id, n]) => id.slice(-2) + ":h" + String(n)).join(" ")}`
+        );
+    }
+
+    if (minimumsMet && valveOpen)
     {
         spawnSurplus(room, spawn, energyAvailable, attempted);
     }
@@ -903,6 +931,12 @@ export function checkAndSpawn(room: Room): void
  */
 function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number, attempted: Set<Role>): void
 {
+    // TEMP DEBUG (M5 valve investigation) - remove before commit.
+    const dbg = Game.time % 100 === 0;
+    if (dbg)
+    {
+        console.log(`dbgSurplus: t=${Game.time} called e=${energyAvailable}`);
+    }
     for (const role of SURPLUS_ORDER)
     {
         if (attempted.has(role))
@@ -914,6 +948,10 @@ function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number
             // One per uncovered source, never more: sourceWithoutHarvester
             // returns undefined while every source already has a harvester.
             const source = sourceWithoutHarvester(room);
+            if (dbg)
+            {
+                console.log(`dbgSurplus: t=${Game.time} harvester src=${source === undefined ? "none" : source.id.slice(-2)}`);
+            }
             if (source !== undefined && trySpawnRole(room, spawn, role, energyAvailable, source.id))
             {
                 return;
@@ -921,6 +959,10 @@ function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number
         }
         else if (role === "upgrader")
         {
+            if (dbg)
+            {
+                console.log(`dbgSurplus: t=${Game.time} upgrader count=${getCreepCount(role)} max=${SURPLUS_UPGRADER_MAX}`);
+            }
             if (getCreepCount(role) < SURPLUS_UPGRADER_MAX && trySpawnRole(room, spawn, role, energyAvailable))
             {
                 return;
@@ -931,6 +973,10 @@ function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number
             // Only while there is something to build; the minimum crew
             // already covers the baseline builder.
             const hasSites = room.find(FIND_CONSTRUCTION_SITES).length > 0;
+            if (dbg)
+            {
+                console.log(`dbgSurplus: t=${Game.time} builder sites=${String(hasSites)} count=${getCreepCount(role)} max=${SURPLUS_BUILDER_MAX}`);
+            }
             if (hasSites && getCreepCount(role) < SURPLUS_BUILDER_MAX && trySpawnRole(room, spawn, role, energyAvailable))
             {
                 return;
