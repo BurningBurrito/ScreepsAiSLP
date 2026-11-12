@@ -81,6 +81,12 @@ declare global {
      * this tick is at least config.DEFEND_REVERT_TICKS old.
      */
     lastHostileTick?: number;
+    /**
+     * Number of containers built here as of the last construction tick,
+     * used only to log each newly finished container once (the count
+     * survives a global reset; losing it merely repeats the log).
+     */
+    containersSeen?: number;
   }
 
   /**

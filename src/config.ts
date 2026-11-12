@@ -348,13 +348,17 @@ export const CONTAINER_EARLY_MIN_LEVEL = 5;
 
 /**
  * M4 extension floor (static-mining case): the number of FINISHED
- * extensions a level 4+ room must have before a container may take the
- * whole builder crew - the bootstrap boost (containerFirstForRoom) and,
- * from level CONTAINER_EARLY_MIN_LEVEL up, rungs 3-4 of the static-mining
- * ladder (selectContainerFirstSite). Three is exactly the M4 acceptance
- * floor ("at least 3 extensions are finished"): the crew switches to a
- * container only after M4's contract is already met, so the containers
- * cannot starve the third extension. The un-gated container-first of
+ * extensions a level 4+ room must have before any rung AFTER the first
+ * source container may take the whole builder crew - the bootstrap boost
+ * (containerFirstForRoom) and, from level CONTAINER_EARLY_MIN_LEVEL up,
+ * rungs 4-10 of the static-mining ladder (selectContainerFirstSite). The
+ * first source container (rung 2) is the single rung that runs ahead of
+ * this floor by owner design (v9.4, 2026-11-11): behind it the container
+ * finished at ~tick 3,880 of the 5,000-tick M5 window (minedShare 0.585
+ * of 0.6). Three is exactly the M4 acceptance floor ("at least 3
+ * extensions are finished"): the crew switches to any other container
+ * only after M4's contract is already met, so the containers cannot
+ * starve the third extension. The un-gated container-first of
  * 2026-11-09/10 failed M4 for exactly this: the crew camped the 5,000-
  * energy container sites (extensionsBuilt 1, energyCapacity 350 versus
  * the required 3 and 450) and the extensions never caught up.

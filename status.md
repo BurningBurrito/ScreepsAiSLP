@@ -244,6 +244,43 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-11 (M5 minedShare fix: first source container right after the first tower)
+- Owner feedback v9.4 "Then: minedShare": after URGENT 1 (upgradePerTick
+  0.05 -> 0.55) and URGENT 2 (builders refuel from the source container
+  before the spawn pool), the 21:43 M5 run (URGENT 1+2) still failed
+  line 105: the first source container finished ~tick 3,880 of the
+  5,000-tick window, minedShare below 0.6 (the harness writes no
+  scorecard for failed runs). URGENT 2 changes where the builder
+  refuels, not the build order - the container still finished after the
+  window's bar.
+- Fix (src/roles/builder.ts, selectContainerFirstSite): new Rung 2 - the
+  FIRST source container runs right after the first tower (Rung 1) and
+  AHEAD of the M4 extension floor; only the first one - the second
+  source container, the second tower and the ramparts keep waiting for
+  the floor, exactly the owner's scope. Rungs renumbered: floor 3,
+  remaining source containers 4, controller container 5, ramparts 6,
+  second tower 7, remaining extensions 8, roads 9, leftover 10. Rung 2
+  counts built source containers via room.find(FIND_STRUCTURES,
+  {filter}) with a StructureContainer type guard - FIND_MY_STRUCTURES
+  excludes containers (the same pattern getEnergy in src/utils/energy.ts
+  already uses).
+- Completion log (the feedback asked for one console line per finished
+  container): logNewContainers in src/managers/constructionManager.ts
+  compares the built container ids against the reset-proof
+  Memory.rooms[name].containersSeen counter (new field in
+  src/types/memory.ts) and logs each new container with its id and the
+  tick it finished.
+- test/unit/builder.test.ts: 3 level-5 ladder tests rewritten for the new
+  order, 3 new (first source container ahead of the floor; floor open
+  with no extension site still takes the first container; second source
+  container held behind the floor; second source container after the
+  floor and before the controller container). 180 unit passing (177 + 3),
+  lint + build clean, dist/main.js rebuilt.
+- PENDING: M4 regression on the URGENT 1+2 tree (started 22:19:57; live
+  at tick 4,700: harvested 16.02/tick, upgraded 1/tick, energy 450/450,
+  RCL 5, 13 creeps); then M5 acceptance on this Rung 2 build; the two M5
+  fixes commit with before/after numbers only if M4 still passes (v9.4
+  rule: "If M4 fails, revert it and write the numbers in status.md").
 ### 2026-11-11 (M2 regression on the M3 death-spiral fix: PASSED)
 - acceptance-m2 on the fix tree (ec7a3f6): 1 passing (13m), EXIT 0, 3001
   ticks. Snapshot: level 2, extensionsBuilt 2 + extensionSites 3 (needs
@@ -1208,15 +1245,20 @@ yet.
   commit only if M4 still passes).
   1. [x] Cleanup: probe-m5-builder.test.ts moved to probe-tmp/ (commit
      d0ec3a0).
-  2. [ ] URGENT 1: upgrader latch (src/roles/upgrader.ts) - close the work
+  2. [x] URGENT 1: upgrader latch (src/roles/upgrader.ts) - close the work
      cycle only on an EMPTY store (working false at 0, true at capacity),
      getEnergy only in the fetch phase. 2 new unit tests (half-full store
      keeps upgrading; empty store closes the latch and tops up). M5
-     before: upgradePerTick 0.05 (gate run); M4 must stay >= 3.0.
+     before: upgradePerTick 0.05 (gate run); after (URGENT 1 only run):
+     0.55 - much better, still below the 1.0 criterion. minedShare stayed
+     0.585 (the latch does not touch the build order). Committed 73d682c.
   3. [ ] URGENT 2: getEnergy rung order (src/utils/energy.ts) - source
      container (>= 100) BEFORE the builder pool rung; spawn/extensions only
      when no container holds 100+. 1 new unit test (full room + container
-     with 1000 -> withdraw from container). Watch M4 extension count.
+     with 1000 -> withdraw from container; fails against the old order,
+     passes against the new). 177 unit passing, lint + build clean, dist
+     rebuilt. M5 acceptance with URGENT 1+2 running (started 21:43); M4
+     regression after it.
   4. [ ] minedShare 0.585 -> >= 0.6 only if 2 and 3 did not close it:
      first source container right after the first tower (3-extension floor
      kept for the second container, second tower, ramparts); console line
@@ -1224,6 +1266,9 @@ yet.
   Baseline 2026-11-11 (M5 gate run, pre-fix): harvested 4.56/tick,
   upgradePerTick 0.05 (need 1), builtByTick3000 0, containerByTick3000
   0, minedShare 0.585 (need 0.6), 0 console errors.
+  After URGENT 1 only (M5 run 2026-11-11 21:09): upgradePerTick 0.55,
+  minedShare 0.585 - failed at acceptance-m5 line 105 (minedShare < 0.6);
+  first source container finished ~tick 3800.
 - **M3 death-spiral fix (2026-11-11, this run).** The M3 failure is
   two-layered: the b1b9be1 death spiral (2 creeps at t=4000) is driven by
   the v9.3 builder pool rung draining the store below full-size income

@@ -1458,6 +1458,43 @@ function areSourcesAndControllerConnected(room: Room): boolean
 }
 
 /** Manages construction of extensions, roads, towers, and containers */
+/**
+ * Log each container that just finished, at most once per container
+ * (owner feedback v9.4, 2026-11-11: "Add a console.log when the first
+ * container is finished").
+ *
+ * The detector is a count in Memory.rooms[name].containersSeen: a global
+ * reset loses it and the log simply repeats for the containers built so
+ * far - a few extra lines, never a per-tick one. The count is also the
+ * reset-proof way to say "this container is NEW": an in-memory
+ * module-level set of structure ids would lose the knowledge after a
+ * reset and would re-log the old ones on every reset.
+ * @param room The room to watch.
+ * @param structures The room's current structures (already found this tick).
+ */
+function logNewContainers(room: Room, structures: Structure[]): void
+{
+    const roomMemory = Memory.rooms[room.name];
+    if (roomMemory === undefined)
+    {
+        return;
+    }
+
+    const containers = structures.filter((structure) => structure.structureType === STRUCTURE_CONTAINER);
+    const seen = roomMemory.containersSeen ?? 0;
+    if (containers.length <= seen)
+    {
+        return;
+    }
+
+    for (let i = seen; i < containers.length; i++)
+    {
+        const container = containers[i];
+        console.log(`[Construction] Container finished at ${container.pos.x},${container.pos.y} (${containers.length} built in ${room.name})`);
+    }
+    roomMemory.containersSeen = containers.length;
+}
+
 export function manageConstruction(room: Room): void
 {
     // Compute road paths first (needed for cleanup and for the layout invariant:
@@ -1473,6 +1510,9 @@ export function manageConstruction(room: Room): void
     const level = getControllerLevel(room);
     const structures = room.find(FIND_MY_STRUCTURES);
     const sites = room.find(FIND_CONSTRUCTION_SITES);
+
+    // One log line per newly finished container (owner feedback v9.4).
+    logNewContainers(room, structures);
 
     const towersBuilt = structures.filter((s) => s.structureType === STRUCTURE_TOWER).length;
     const towerSites = sites.filter((s) => s.structureType === STRUCTURE_TOWER).length;

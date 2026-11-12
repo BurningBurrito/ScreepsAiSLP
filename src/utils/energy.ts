@@ -13,7 +13,16 @@
  *      already at the creep's feet and costs nothing to grab.
  *   2. Upgrader only: the controller container (rung 4). It is the
  *      upgrader's fuel stop - one withdraw per tick, no walking.
- *   3. Builder only: the spawn/extensions pool, but only above
+ *   3. The source container with the most energy, but only while it holds
+ *      at least MIN_CONTAINER_WITHDRAW_ENERGY: below that the miner tops
+ *      the container back up within a few ticks, and a partial load is not
+ *      worth a round trip to a source. Owner feedback v9.4 (URGENT 2,
+ *      2026-11-11) moved this rung ABOVE the builder pool: with the pool
+ *      first, five builders drained a full spawn pool while 4000 energy
+ *      sat in the source containers (the 18:31 M5 gate: the containers
+ *      maxed at 4000/4000, the pool was constantly drained, and the
+ *      energy the haulers could not push out dropped on the ground).
+ *   4. Builder only: the spawn/extensions pool, but only above
  *      BUILDER_WITHDRAW_FRACTION and only while the upgrader AND the income
  *      crews are at minimum. Both are hold-backs that keep a capacity-sized
  *      replacement spawnable: the upgrader's (the M2 "no upgrader ever
@@ -21,19 +30,14 @@
  *      2026-11-11: a dead harvester's 300-energy replacement waited for a
  *      store the builders kept draining below that cost, the crew
  *      ratcheted down, and the run ended with 2 creeps at tick 4000).
- *      The pool sits ABOVE the source container rung: the builder's build
- *      sites are on the road network around the spawn (M4: the tower, the
- *      ramparts, the extensions), so a full pool a few tiles away is worth
- *      more than a source container that is a ~25-tile round trip. On
- *      2026-11-11 the container-first order sent every builder refill to
- *      the source container as soon as it held 100 energy, and M4 finished
- *      with 1 of its 3 required extensions built (capacity 350 of 450).
- *   4. The source container with the most energy, but only while it holds
- *      at least MIN_CONTAINER_WITHDRAW_ENERGY: below that the round trip is
- *      not worth it against self-harvest, and the miner tops the container
- *      back up within a few ticks. For builders this rung is reached only
- *      while the pool is below the withdrawal floor, so the builder never
- *      takes a long container trip while energy sits at its build sites.
+ *      The pool sits BELOW the source container rung: it serves the
+ *      builder only while no source container holds
+ *      MIN_CONTAINER_WITHDRAW_ENERGY, so a full pool never outranks a full
+ *      container. The pool-first order was the M4 fix of 2026-11-11
+ *      (container-first once sent every builder refill to a ~25-tile round
+ *      trip and M4 finished with 1 of its 3 required extensions built,
+ *      capacity 350 of 450), so the M4 extension count is re-checked in
+ *      the acceptance test after the v9.4 swap.
  *   5. Nothing above worked: harvest a source - UNLESS a container holds
  *      some energy below the threshold. Then the creep idles this tick:
  *      the miner (or a hauler) refills it within a few ticks, and
@@ -132,10 +136,35 @@ export function getEnergy(creep: Creep, role: EnergyRole): EnergyOutcome
         return "acted";
     }
 
-    // 3. Builder only: the spawn/extensions pool, above the floor, and only
-    //    while the upgrader AND the income crews are at minimum. Both are
-    //    hold-backs that keep a capacity-sized replacement spawnable (see
-    //    managers/spawnManager.ts): the upgrader's from the M2 "no
+    // 3. The fullest source container (built, on a tile next to a source,
+    //    not the controller container): worth the trip only from a real
+    //    hauler delivery up, not from a trickle. Owner feedback v9.4
+    //    (URGENT 2) puts this rung ABOVE the builder pool: with the pool
+    //    first, the builders drained a full spawn pool while 4000 energy
+    //    sat in the source containers (the 18:31 M5 gate). A builder that
+    //    can refill at the container no longer competes with the income
+    //    crew for the pool.
+    const sourceContainer = pickFullestSourceContainer(room);
+    const sourceContainerEnergy = sourceContainer !== null
+        ? sourceContainer.store.getUsedCapacity(RESOURCE_ENERGY)
+        : 0;
+    if (sourceContainer !== null && sourceContainerEnergy >= MIN_CONTAINER_WITHDRAW_ENERGY)
+    {
+        if (creep.pos.getRangeTo(sourceContainer) > 1)
+        {
+            moveToToward(creep, sourceContainer, 1);
+        }
+        else
+        {
+            creep.withdraw(sourceContainer, RESOURCE_ENERGY);
+        }
+        return "acted";
+    }
+
+    // 4. Builder only: the spawn/extensions pool, above the floor, and
+    //    only while the upgrader AND the income crews are at minimum. Both
+    //    are hold-backs that keep a capacity-sized replacement spawnable
+    //    (see managers/spawnManager.ts): the upgrader's from the M2 "no
     //    upgrader ever spawns" bug, the income crew's from the M3 death
     //    spiral of 2026-11-11 - a dead harvester's 300-energy replacement
     //    waited for a store the builders kept draining below that cost,
@@ -144,11 +173,12 @@ export function getEnergy(creep: Creep, role: EnergyRole): EnergyOutcome
     //    source instead (the fallback below), so the store climbs to
     //    capacity and the full-size replacement starts. The pool is tried
     //    spawn-first so a half-full spawn still serves the builder. The
-    //    pool sits ABOVE the source container rung (the M4 fix of
-    //    2026-11-11): the builder's sites sit around the spawn, so a pool
-    //    a few tiles away beats a source container that is a ~25-tile
-    //    round trip - with the container-first order M4 finished with 1 of
-    //    its 3 required extensions built (capacity 350 of 450).
+    //    pool sits BELOW the source container rung (owner feedback v9.4,
+    //    URGENT 2): it is reached only while no source container holds
+    //    MIN_CONTAINER_WITHDRAW_ENERGY, so a full pool never outranks a
+    //    full container. The pool-first order was the M4 fix of
+    //    2026-11-11; the M4 extension count is re-checked in the
+    //    acceptance test after this swap.
     if (role === "builder"
         && !upgraderBelowMinimum(room)
         && !incomeBelowMinimum(room)
@@ -172,29 +202,6 @@ export function getEnergy(creep: Creep, role: EnergyRole): EnergyOutcome
                 return "acted";
             }
         }
-    }
-
-    // 4. The fullest source container (built, on a tile next to a source,
-    //    not the controller container): worth the trip only from a real
-    //    hauler delivery up, not from a trickle. For builders this rung is
-    //    reached only while the pool is below the withdrawal floor, so the
-    //    builder never takes the long container trip while energy sits at
-    //    its build sites.
-    const sourceContainer = pickFullestSourceContainer(room);
-    const sourceContainerEnergy = sourceContainer !== null
-        ? sourceContainer.store.getUsedCapacity(RESOURCE_ENERGY)
-        : 0;
-    if (sourceContainer !== null && sourceContainerEnergy >= MIN_CONTAINER_WITHDRAW_ENERGY)
-    {
-        if (creep.pos.getRangeTo(sourceContainer) > 1)
-        {
-            moveToToward(creep, sourceContainer, 1);
-        }
-        else
-        {
-            creep.withdraw(sourceContainer, RESOURCE_ENERGY);
-        }
-        return "acted";
     }
 
     // 5. Nothing worked. A container with a trickle of energy means "wait
