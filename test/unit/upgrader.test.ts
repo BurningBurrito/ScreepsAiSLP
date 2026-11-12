@@ -613,9 +613,11 @@ describe("upgrader", () => {
         it("waits out a trickle in a source container instead of self-harvesting", () => {
             // Below MIN_CONTAINER_WITHDRAW_ENERGY the miner tops the
             // container back up within a few ticks; idling this tick beats
-            // a round trip to a source for a partial load.
+            // a round trip to a source for a partial load. 49 = one energy
+            // under the threshold (50 since the M5 build-pace change of
+            // 2026-11-12, down from 100).
             const { creep, calls } = makeUpgrader({});
-            withContainer(creep, makeSourceContainer(50));
+            withContainer(creep, makeSourceContainer(49));
 
             runUpgrader(creep);
 

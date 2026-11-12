@@ -917,11 +917,12 @@ describe("spawnManager", () => {
       "harvester-1": {role: "harvester", sourceId: "source-2"},
       "upgrader-2": {role: "upgrader"},
       "upgrader-3": {role: "upgrader"},
-      "builder-4": {role: "builder"},
+      "upgrader-4": {role: "upgrader"},
+      "builder-5": {role: "builder"},
     });
-    // Five creeps already exist, so the next name uses counter value 5.
+    // Six creeps already exist, so the next name uses counter value 6.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 5;
+    (global as any).Memory.creepCounter = 6;
     const {room, calls} = makeRoom({
       capacity: 300,
       available: 300,
@@ -934,13 +935,47 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
-    // Sources covered, both upgraders alive (the cap), one builder (the
-    // minimum): the surplus step adds a second builder because construction
-    // sites exist (capped at SURPLUS_BUILDER_MAX = 5 total - raised from
-    // three for the M5 static-mining transition, 2026-11-10).
+    // Sources covered, three upgraders alive (the cap - SURPLUS_UPGRADER_MAX
+    // raised from 2 to 3 for the M5 upgrade rate, 2026-11-12), one builder
+    // (the minimum): the surplus step adds a second builder because
+    // construction sites exist (capped at SURPLUS_BUILDER_MAX = 5 total -
+    // raised from three for the M5 static-mining transition, 2026-11-10).
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "builder-5");
+    assert.equal(calls[0].name, "builder-6");
     assert.equal(calls[0].memory.role, "builder");
+  });
+
+  it("spawns a surplus upgrader below the upgrader cap while sites exist", () => {
+    // Same room as the builder test above, but only two upgraders alive:
+    // the surplus walk (harvester -> upgrader -> builder) spends the idle
+    // energy on a second upgrader before a second builder, because the
+    // controller progress is the room's standing 2-per-tick energy sink
+    // (SURPLUS_UPGRADER_MAX = 3 since the M5 upgrade-rate work, 2026-11-12).
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "upgrader-2": {role: "upgrader"},
+      "builder-3": {role: "builder"},
+    });
+    // Four creeps already exist, so the next name uses counter value 4.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 4;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 2,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "upgrader-4");
+    assert.equal(calls[0].memory.role, "upgrader");
+    assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
   });
 
   it("does not spawn a surplus creep while the store is not full", () => {
@@ -1009,12 +1044,16 @@ describe("spawnManager", () => {
       "harvester-1": {role: "harvester", sourceId: "source-2"},
       "upgrader-2": {role: "upgrader"},
       "upgrader-3": {role: "upgrader"},
-      "builder-4": {role: "builder"},
+      "upgrader-4": {role: "upgrader"},
       "builder-5": {role: "builder"},
       "builder-6": {role: "builder"},
       "builder-7": {role: "builder"},
       "builder-8": {role: "builder"},
+      "builder-9": {role: "builder"},
     });
+    // Ten creeps already exist, so the next name uses counter value 10.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 10;
     const {room, calls} = makeRoom({
       capacity: 300,
       available: 300,
@@ -1027,10 +1066,11 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
-    // Sources covered, two upgraders (the cap), five builders (the cap -
-    // raised from three for the M5 static-mining transition, 2026-11-10):
-    // the surplus step has nothing left to spend the idle energy on, so the
-    // spawn idles - correct now, because every sink is busy.
+    // Sources covered, three upgraders (the cap, raised from 2 to 3 for the
+    // M5 upgrade rate, 2026-11-12), five builders (the cap - raised from
+    // three for the M5 static-mining transition, 2026-11-10): the surplus
+    // step has nothing left to spend the idle energy on, so the spawn
+    // idles - correct now, because every sink is busy.
     assert.equal(calls.length, 0);
   });
 
