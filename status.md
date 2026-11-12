@@ -4,7 +4,8 @@
 Current state (2026-11-12, run 93): the failed gate - unit test failures in
 test/unit/spawnManager.test.ts and test/unit/upgrader.test.ts, left stale by
 this morning's config changes (commit 877cba7: SURPLUS_UPGRADER_MAX 2 -> 3,
-MIN_CONTAINER_WITHDRAW_ENERGY 100 -> 50, BUILDER_MIN_SITES 1 -> 2) - is
+new SURPLUS_SPAWN_ENERGY_RATIO 0.9 pressure valve, MIN_CONTAINER_WITHDRAW_
+ENERGY 100 -> 50, new 450-energy 3-WORK/2-CARRY harvester body) - is
 fixed: the surplus-builder test now runs against the 3-upgrader cap (expects
 builder-6), a new surplus-upgrader test documents the cap (upgrader-4 with 2
 upgraders and 3 builders), the all-caps test now uses 3 upgraders and
@@ -12,7 +13,7 @@ counter 10, and the upgrader trickle test uses 49 energy (below the new 50
 threshold). 184 unit passing, lint 0 errors, build clean (commit b09a7e4).
 Next: the M5 acceptance test on this tree (baseline reports/latest.md,
 probe-m5-creeps: harvested 9.36/tick vs 13 needed, upgrade 0.43/tick vs 1,
-spawn idle-while-full 59 % vs 30 % max, RCL 5/550 at 5,500 ticks), then the
+spawn idle-while-full 59 % vs 30 % max, RCL 5/802 at 5,000 ticks), then the
 M4 regression.
 Previous state (2026-11-12, pool rung run): the M5 gate failures (harvest
 11.68/tick vs 13 needed, upgrade 0.5/tick vs 1, spawn idle-while-full 76 %
@@ -1318,16 +1319,17 @@ yet.
 
 ## In Progress
 - **Run 93 (2026-11-12): failed gate, then the M5 decision.** The gate's
-  unit step failed (178 passing, 6 failing) - the 877cba7 config changes
-  (SURPLUS_UPGRADER_MAX 2 -> 3, MIN_CONTAINER_WITHDRAW_ENERGY 100 -> 50,
-  BUILDER_MIN_SITES 1 -> 2) left 3 unit tests stale.
+  unit step failed (178 passing, 6 failing) - the 877cba7 changes
+  (SURPLUS_UPGRADER_MAX 2 -> 3, new SURPLUS_SPAWN_ENERGY_RATIO 0.9 valve,
+  MIN_CONTAINER_WITHDRAW_ENERGY 100 -> 50, new 450-energy harvester body)
+  left 3 unit tests stale.
   1. [x] Gate fix: update the stale unit tests (commit b09a7e4). 184 unit
      passing, lint 0 errors, build clean.
   2. [ ] M5 acceptance on the current tree. Baseline 2026-11-12
      (probe-m5-creeps, reports/latest.md, tree 54985c0 - everything below
      the 877cba7 valve changes): harvested 9.36/tick (need 13), upgrade
      0.43/tick (need 1), spawn idle-while-full 59 % (need 30 %), creep idle
-     22 %, CPU 2.29, RCL 5/550 at 5,500 ticks, 0 console errors.
+     41 %, CPU 2.57 avg, RCL 5/802 at 5,000 ticks, 0 console errors.
   3. [ ] If M5 fails: fix one cause at a time (measure before touching the
      same code twice; a worse number is a problem, not something to try
      around). If M5 passes: the M4 regression (the upgrader pool rung and
