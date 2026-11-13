@@ -1,7 +1,19 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state (2026-11-13, run 98, 12:31 start): M4/M5 regression fix - the
+Current state (2026-11-13, 17:01 start): M5a verification run. The owner
+split M5 into M5a/M5b/M5c (FEEDBACK v9.5): M5a (>= 1 controller progress
+per tick over the last 1000 ticks, same M5 world) is the current
+milestone, and the gate now pushes when lint + unit tests + M1-M4 pass -
+the current milestone's test is information only. Both named M5a fixes
+from v9.4 are already committed in this tree (the upgrader working latch
+in 73d682c; the builder getEnergy container-first rework in
+src/utils/energy.ts), and the 17:01 gate run measured upgradePerTick
+1.33, level 5, 21 creeps on the M5 window - the M5a criteria met on
+paper; the failing harvest 9.88 < 13 is the M5b criterion (static
+mining), not M5a's. This run verifies acceptance-m5a on the current tree
+and keeps M1-M4 green for the gate. Result: pending.
+Previous state (2026-11-13, run 98, 12:31 start): M4/M5 regression fix - the
 90 % pool gate is reverted. Run 97's ae46644 (90 % no-hold-back
 builderPoolReady at RCL 4+ plus the decoupled upgrader gate) regressed the
 suite run of 10:24-10:55 EST on 3c92272: M1 4.63 harvest / 3.71 build, M2
@@ -1670,8 +1682,33 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **Run 98 (2026-11-13 17:01 start): M5a - verify the current milestone
+  (both named v9.4 fixes are already committed; no new src/ change
+  planned).**
+  Baseline (2026-11-13, rule 07 A5): reports/latest.md = acceptance-m4
+  on 4e1ddf6 - controller progress 1.81/tick (last 1000 ticks), harvest
+  13.28/tick, build 2.42/tick, idle-full 31 %, creep idle 40 %,
+  extensionsBuilt 3, capacity 450. M5-world gate run (LAST_GATE.md,
+  old M5 test on the same tree): upgradePerTick 1.33 over the last
+  1000-tick window (M5a needs >= 1), level 5, creeps 21 (M5a needs >=
+  3) - M5a's criteria already met on paper; harvestedPerTick 9.88 < 13
+  is the M5b criterion (static mining), not M5a's.
+  1. [x] Verified the named v9.4 fixes are committed: the upgrader
+     working latch in runUpgrader (src/roles/upgrader.ts lines 111-137,
+     73d682c; unit tests (a)/(b) in test/unit/upgrader.test.ts) and
+     getEnergy's source-container rung ABOVE the builder pool
+     (src/utils/energy.ts lines 219-242; unit test
+     test/unit/builder.test.ts:419). No new code needed.
+  2. [ ] Fast checks: lint, build, test-unit.
+  3. [ ] acceptance-m5a via agent-test (5000 ticks, ~22 min).
+  4. [ ] If it passes: Part D - agent-test start all (M1-M4 must stay
+     green for the gate), tick M5a, README, blog post, docs commit.
+  5. [ ] If it fails: one measurement, one named attempt (v9.5
+     protocol), otherwise STUCK with the M5a snapshot numbers.
 - **Run 98 (2026-11-13 12:31 start): M4/M5 regression fix (revert the 90 %
-  pool gate; full crew at 400 capacity).**
+  pool gate; full crew at 400 capacity). SUPERSEDED by the owner's M5
+  split into M5a/M5b/M5c (FEEDBACK v9.5); its remaining steps (M5
+  analysis) moved to the M5b entry in Upcoming Features.**
   Baseline (10:24-10:55 EST suite on 3c92272): M1 4.63 harvest / 3.71
   build, M2 5.07 / 5.58, M3 7.52 harvest / 0.14 upgrade / 1.48 build -
   all PASSED; M4 FAILED extensionsBuilt 2 (verified tree d32a596: 3,
@@ -1686,16 +1723,19 @@ yet.
      build clean.
   3. [x] Smoke passed (500 ticks, early game bit-identical to the
      3c92272 smoke).
-  4. [~] agent-test all (started 12:34): M1 4.63 / 3.71, M2 5.07 / 5.58,
+  4. [x] agent-test all (started 12:34): M1 4.63 / 3.71, M2 5.07 / 5.58,
      M3 7.52 / 1.48 - PASSED, identical to the verified baselines. M4
      PASSED: harvest 13.28 (baseline 12.72), upgrade 1.81 (0.63), build
      2.42 (3.8 - ramparts + second container took the spend), idle-full
      31 % (71 %), creep idle 40 % (43 %), extensionsBuilt 3 (capacity
      450), tower 1 + 2 ramparts + 1 tower site, intruder killed. Full
-     crew engaged at tick ~3,500 (capacity crossed 400). M5 acceptance
-     running (8,500 ticks, started ~62 min into the suite).
-  5. [ ] If M5 fails: analyze the scorecard timeline (which source,
-     which role is the new cap) and iterate once.
+     crew engaged at tick ~3,500 (capacity crossed 400). The old M5 test
+     then FAILED at the 17:01 gate (harvest 9.88 < 13 over the last
+     1000 ticks; upgrade 1.33, level 5, 21 creeps) - the owner split M5
+     into M5a/M5b/M5c and removed the old test.
+  5. [x] Superseded: the M5 harvest failure is now the M5b milestone
+     (static mining); M5a (the upgrade criterion) already measured 1.33
+     >= 1 in that gate run and is verified in this run.
 - **Run 97 (2026-11-13 07:45 start): M5 harvest/upgrade - SUPERSEDED by
   run 98 (its fix set regressed M4 and M5; see the run 98 entry above).**
   1. [x] Fix set: split pool gate (upgraderPoolReady/builderPoolReady,
@@ -2483,7 +2523,9 @@ yet.
 - [x] M1: basic economy and creep management (completed)
 - [x] M3: build priorities, layout and a tower (completed 2026-10-30, acceptance 1 passing)
 - [x] M4: Hold the room (level 5) - towers, ramparts, defend mode (completed 2026-10-31, acceptance 1 passing)
-- [ ] M5: static mining with containers and haulers (UNBLOCKED - the M4 replay finished 2026-11-09; the parked acceptance test comes back per the owner before M5 starts. Construction-priorities step done 2026-11-09 in 88fb080: the container boost after the towers is gated on RCL 4+ and 3+ BUILT extensions so it cannot starve the M4 extension floor, and at RCL 4+ a container takes its road-network pocket tile directly - M4 acceptance re-verified 1 passing, 131 unit passing)
+- [ ] M5a: the controller gets upgraded (>= 1 controller progress per tick over the last 1000 ticks in the M5 world; spec milestones/M5a.md, test acceptance-m5a.test.ts; CURRENT - both named v9.4 fixes already committed, verification run 2026-11-13 17:01)
+- [ ] M5b: static mining (a container at every source, a miner on it in >= 60 % of the samples from tick 3000, >= 13 harvested per tick; spec milestones/M5b.md; its test comes when M5a is done)
+- [ ] M5c: the energy is spent (spawn idle with full energy <= 30 %, on average <= 300 energy on the ground; spec milestones/M5c.md; its test comes when M5b is done)
 - [ ] CPU profiling and path caching (former M5, before the M4 renumber)
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
 
@@ -2621,6 +2663,32 @@ yet.
 - Energy delivery issue: previous scorecard showed 72.7 energy delivered/tick vs ~3 harvested (energy going in circles) - this is now fixed by hauler changes
 
 ## Feedback acknowledged
+- Acknowledged 2026-11-13 (v9.5) - M5 split into M5a/M5b/M5c: done in
+  status.md - the M5 line in Upcoming Features is replaced with three
+  unchecked lines (M5a, M5b, M5c); M5a is ticked only when
+  acceptance-m5a passes in this run. Current milestone: M5a.
+- Acknowledged 2026-11-13 (v9.5) - the gate lets progress through (push
+  needs lint + unit tests + M1-M4; the current milestone's test is
+  information only): noted - every commit this run keeps M1-M4 green,
+  verified by agent-test all in Part D before the run ends.
+- Acknowledged 2026-11-13 (v9.5) - STUCK mechanism: noted - if a fix
+  does not move the number after one acceptance run with no named next
+  step, or the same problem lasts more than an hour, write one line
+  starting with "STUCK:" in status.md, put details under Known Issues /
+  Notes, commit and finish the run.
+- Acknowledged 2026-11-13 (v9.5) - M5a named fixes, skip what is already
+  done and committed: BOTH are already committed, so no new src/ change
+  this run - URGENT 1 (the upgrader working latch) in 73d682c with unit
+  tests (a)/(b) in test/unit/upgrader.test.ts (lines 855-890), URGENT 2
+  (builder getEnergy: source container >= MIN_CONTAINER_WITHDRAW_ENERGY
+  above the pool) in the src/utils/energy.ts rework with the unit test
+  "withdraws from a source container even when the pool is full"
+  (test/unit/builder.test.ts:419). This run runs acceptance-m5a and the
+  full suite to verify; if M5a still fails after that, STUCK with the
+  M5a snapshot numbers.
+- Acknowledged 2026-11-13 (v9.5) - clean-up (owner): probe-m5-builder
+  moved to test/candidates/ - nothing to do; one-off probes stay in
+  probe-tmp/ (git-ignored) and are deleted when done.
 - Acknowledged 2026-11-12 (v9.4) - URGENT 1 (upgrader latch): done in
   73d682c - the work latch now gates the fetch phase (working with energy > 0
   -> upgrade at the controller without asking getEnergy; energy 0 -> working
