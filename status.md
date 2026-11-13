@@ -1609,12 +1609,33 @@ yet.
      LEAD_TICKS, countMinerMinimum + assignMinerSource), body rows
      (miner 300, upgrader 400 2-MOVE, hauler 400/450). 192 unit passing,
      lint 0 errors, build clean. Committed.
-  2. [ ] Smoke 500 ticks (running, started 07:47) - watch: no regressions
-     in the early game (the split gate only changes behavior from RCL 5,
-     the crew/lead/body changes are level-gated or capacity-gated).
-  3. [ ] acceptance-m5 (5,000 ticks, ~25 min): harvest >= 13, upgrade
-     >= 1, idle-full <= 30 % over the last 1,000 ticks (window 4,000-
-     5,000); cB site must be PLACED (built or site) by then.
+  2. [x] Smoke 500 ticks (1 passing, 2m): harvest 4.34 -> 4.2, upgrade
+     0.5 -> 0.5, construction 0.05 -> 1.31, CPU 1.77 -> 1.7, 0 console
+     errors. Early game (RCL 1) unchanged as expected. Committed ae46644.
+  3. [ ] acceptance-m5 (running, started 07:58, 5,000 ticks).
+     MID-RUN FINDING (tick 1,800 of the 07:58 run): the 90% builder
+     pool line (builderPoolReady) is a NET NEGATIVE in this room - the
+     builders self-harvest at the source instead of drinking the pool
+     (gate only opens above 270/300), the first extension is still
+     unbuilt at tick 1,800 (M4 baseline tree: capacity 350 by ~2,800),
+     and the harvester crew ratcheted 5 -> 3 -> 1 while the store sat at
+     198, below the 300-energy replacement body (the classic M3 spiral,
+     only slower). Planned focused iteration once the run's timeline is
+     in: (a) builderPoolReady reverts to the old poolReady (50% floor +
+     hold-backs - the verified M4 construction speed and crew
+     protection); (b) the upgrader keeps the L5 decoupling
+     (poolAboveFloor, no hold-backs) but gets the OLD gate back below L5
+     (it is currently false - the verified tree gave the upgrader the
+     pool at every level); (c) a 400-energy 2-CARRY harvester row
+     [W,W,C,C,M,M] (or HARVESTER_CREW_FULL_CAPACITY lowered to 400): the
+     M5 window is 4,000-5,000 and capacity 450 only arrives ~4,200 in
+     this room (measured: M4 06:28 timeline), so a full 5-harvester
+     crew on the 450 body starts too late to lift the window average to
+     13 - at 400 capacity (~3,400) a 2-WORK/2-CARRY/2-MOVE body does
+     ~100 energy per ~55-tick trip (~1.8/tick each, 5-9/tick from the
+     uncovered source) and the crew is in place before the window.
+     (d) possibly MIN_CREEPS_BY_LEVEL level-5 builder 3 -> 5 to pull the
+     extension floor earlier.
   4. [ ] If m5 passes: acceptance-m4 regression (6,000 ticks), then
      Part D (agent-test start all).
   5. [ ] If m5 fails: analyze the new scorecard timeline (which source,
