@@ -43,24 +43,31 @@
  *
  * Surplus spawning (owner feedback 2026-10-30, ratio 2026-11-12):
  *   The minimums keep the colony alive, not busy. While every minimum is
- *   met AND the store has climbed to SURPLUS_SPAWN_ENERGY_RATIO of the
- *   room's capacity (90 % - a pressure valve, see config.ts), checkAndSpawn
- *   spends the idle energy on one extra creep, in this order:
+ *   met AND the store has climbed to the surplus gate, checkAndSpawn spends
+ *   the idle energy on one extra creep, in this order:
  *     1. Harvester - the source no living harvester is assigned to (one per
  *        source, never more). The source is passed to the spawn explicitly:
  *        assignSource's score would re-pick the covered source on a tie.
  *     2. Upgrader - the fixed 2-per-tick (more with a bigger body) energy
  *        sink at the controller; this is what keeps the store cycling
- *        instead of sitting full. Capped at SURPLUS_UPGRADER_MAX total.
- *     3. Builder - while sites exist, one more beyond the minimum crew,
- *        capped at SURPLUS_BUILDER_MAX total.
+ *        instead of sitting full.
+ *     3. Builder - while sites exist, one more beyond the minimum crew.
+ *   The gate and the caps depend on the controller level (M2 gate failure
+ *   of 2026-11-12 20:11, see SURPLUS_VALVE_MIN_LEVEL in config.ts): at
+ *   SURPLUS_VALVE_MIN_LEVEL and above the gate is 90 % of capacity
+ *   (SURPLUS_SPAWN_ENERGY_RATIO - a pressure valve) and the caps are
+ *   SURPLUS_UPGRADER_MAX / SURPLUS_BUILDER_MAX; below it the store must be
+ *   completely full and the pre-2026-11-12 caps apply
+ *   (SURPLUS_UPGRADER_MAX_LOW / SURPLUS_BUILDER_MAX_LOW) - the M5 valve and
+ *   caps would starve the builder at RCL 1-2, where the 300-energy pool
+ *   refills at only ~3-4 energy per tick.
  *   This deliberately inverts rule 02b's builder-before-upgrader order for
  *   the surplus step: an upgrader parks within range 3 and spends
  *   reliably, a builder's spend is walk-limited, and the surplus upgrader
  *   is what lands RCL 2 inside the 500-tick smoke window.
  */
 
-import { CONTAINER_BOOST_MIN_LEVEL, CONTAINER_HAULER_SPARE, CONTROLLER_CONTAINER_RANGE, ENERGY_INCOME_FLOOR, MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_SPAWN_ENERGY_RATIO, SURPLUS_UPGRADER_MAX, UNCOVERED_SOURCE_HARVESTERS_L4 } from "config";
+import { CONTAINER_BOOST_MIN_LEVEL, CONTAINER_HAULER_SPARE, CONTROLLER_CONTAINER_RANGE, ENERGY_INCOME_FLOOR, MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_BUILDER_MAX_LOW, SURPLUS_SPAWN_ENERGY_RATIO, SURPLUS_UPGRADER_MAX, SURPLUS_UPGRADER_MAX_LOW, SURPLUS_VALVE_MIN_LEVEL, UNCOVERED_SOURCE_HARVESTERS_L4 } from "config";
 import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
 
 /** Roles checked each tick, highest priority first (owner rule #5). The miner
@@ -893,32 +900,50 @@ export function checkAndSpawn(room: Room): void
     }
 
     // The loop started nothing. If every role is at its minimum (the loop
-    // never needed to spawn) and the store has climbed to the surplus ratio
-    // (90 % of capacity - the pressure valve, see config.ts), spend the
-    // idle energy on a surplus creep instead of idling (owner feedback
-    // 2026-10-30). Opening the valve before the store is 100 % full keeps
-    // the peak below capacity, so "spawn idle while full" and the dropped
-    // piles at a full spawn both shrink (M5, 2026-11-12).
+    // never needed to spawn) and the store has climbed to the surplus gate,
+    // spend the idle energy on a surplus creep instead of idling (owner
+    // feedback 2026-10-30). The gate is level-dependent (see
+    // SURPLUS_VALVE_MIN_LEVEL in config.ts): at RCL 5 and above it opens at
+    // SURPLUS_SPAWN_ENERGY_RATIO of capacity (90 % - the M5 pressure valve,
+    // which keeps the peak below capacity so "spawn idle while full" and the
+    // dropped piles at a full spawn both shrink); below it the store must be
+    // completely full, the pre-2026-11-12 behavior - the M5 valve plus the
+    // raised caps starved the builder's withdrawal floor at RCL 1-2 (M2 gate
+    // failure of 2026-11-12 20:11: 19 road energy instead of 1,126 in the
+    // RCL 1 road phase, zero finished roads).
     const minimumsMet = SPAWN_ORDER.every((role) => getCreepCount(role) >= minimums[role]);
-    const valveOpen = energyAvailable >= room.energyCapacityAvailable * SURPLUS_SPAWN_ENERGY_RATIO;
+    const level = room.controller !== undefined ? room.controller.level : 1;
+    const valveOpen = level >= SURPLUS_VALVE_MIN_LEVEL
+        ? energyAvailable >= room.energyCapacityAvailable * SURPLUS_SPAWN_ENERGY_RATIO
+        : energyAvailable >= room.energyCapacityAvailable;
 
     if (minimumsMet && valveOpen)
     {
-        spawnSurplus(room, spawn, energyAvailable, attempted);
+        spawnSurplus(room, spawn, energyAvailable, level, attempted);
     }
 }
 
 /**
  * Starts one surplus spawn (see the file header). Called only while every
- * role is at its minimum and the store has reached the surplus ratio:
+ * role is at its minimum and the store has reached the surplus gate:
  * walks SURPLUS_ORDER and starts the first role whose cap and
- * preconditions hold.
+ * preconditions hold. The caps are level-dependent too (see
+ * SURPLUS_VALVE_MIN_LEVEL in config.ts): the M5 caps (5 upgraders / 10
+ * builders) apply at SURPLUS_VALVE_MIN_LEVEL and above, the pre-2026-11-12
+ * caps (2 / 5) below it.
  * @param room The room to spawn in
  * @param spawn The free spawn to use
  * @param energyAvailable room.energyAvailable at the start of this tick
+ * @param level The controller's level (1 when there is no controller)
+ * @param attempted Roles whose spawn attempt already failed this tick
  */
-function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number, attempted: Set<Role>): void
+function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number, level: number, attempted: Set<Role>): void
 {
+    const upgraderMax = level >= SURPLUS_VALVE_MIN_LEVEL
+        ? SURPLUS_UPGRADER_MAX : SURPLUS_UPGRADER_MAX_LOW;
+    const builderMax = level >= SURPLUS_VALVE_MIN_LEVEL
+        ? SURPLUS_BUILDER_MAX : SURPLUS_BUILDER_MAX_LOW;
+
     for (const role of SURPLUS_ORDER)
     {
         if (attempted.has(role))
@@ -937,7 +962,7 @@ function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number
         }
         else if (role === "upgrader")
         {
-            if (getCreepCount(role) < SURPLUS_UPGRADER_MAX && trySpawnRole(room, spawn, role, energyAvailable))
+            if (getCreepCount(role) < upgraderMax && trySpawnRole(room, spawn, role, energyAvailable))
             {
                 return;
             }
@@ -947,7 +972,7 @@ function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number
             // Only while there is something to build; the minimum crew
             // already covers the baseline builder.
             const hasSites = room.find(FIND_CONSTRUCTION_SITES).length > 0;
-            if (hasSites && getCreepCount(role) < SURPLUS_BUILDER_MAX && trySpawnRole(room, spawn, role, energyAvailable))
+            if (hasSites && getCreepCount(role) < builderMax && trySpawnRole(room, spawn, role, energyAvailable))
             {
                 return;
             }

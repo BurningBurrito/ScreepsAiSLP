@@ -939,31 +939,78 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
-    // Sources covered, five upgraders alive (the cap - SURPLUS_UPGRADER_MAX
-    // raised from 3 to 5 for the M5 upgrade rate, 2026-11-12), one builder
-    // (the minimum): the surplus step adds a second builder because
-    // construction sites exist (capped at SURPLUS_BUILDER_MAX = 10 total -
-    // raised from five for the M5 static-mining transition, 2026-11-12).
+    // RCL 1 (no controller level): the low surplus caps apply - the
+    // pre-2026-11-12 values SURPLUS_UPGRADER_MAX_LOW 2 / SURPLUS_BUILDER_MAX_LOW
+    // 5 (see SURPLUS_VALVE_MIN_LEVEL in config.ts). Five upgraders are well
+    // past the low upgrader cap, so the surplus step adds a second builder
+    // because construction sites exist (one of the five the low builder cap
+    // allows).
     assert.equal(calls.length, 1);
     assert.equal(calls[0].name, "builder-8");
     assert.equal(calls[0].memory.role, "builder");
   });
 
-  it("spawns a surplus upgrader below the upgrader cap while sites exist", () => {
-    // Same room as the builder test above, but only two upgraders alive:
-    // the surplus walk (harvester -> upgrader -> builder) spends the idle
-    // energy on a second upgrader before a second builder, because the
-    // controller progress is the room's standing 2-per-tick energy sink
-    // (SURPLUS_UPGRADER_MAX = 5 since the M5 upgrade-rate work, 2026-11-12).
+  it("at RCL 5 spawns a surplus upgrader below the upgrader cap while sites exist", () => {
+    // At SURPLUS_VALVE_MIN_LEVEL the surplus caps are the M5 values
+    // (SURPLUS_UPGRADER_MAX = 5, 2026-11-12): with two upgraders alive the
+    // surplus walk (harvester -> upgrader -> builder) spends the idle energy
+    // on a third upgrader before a fourth builder, because the controller
+    // progress is the room's standing energy sink. (At RCL 1 the low cap of
+    // two would block this spawn and give the builder the energy instead -
+    // see the next test.)
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "harvester-2": {role: "harvester", sourceId: "source-1"},
+      "harvester-3": {role: "harvester", sourceId: "source-2"},
+      "harvester-4": {role: "harvester", sourceId: "source-1"},
+      "upgrader-5": {role: "upgrader"},
+      "upgrader-6": {role: "upgrader"},
+      "builder-7": {role: "builder"},
+      "builder-8": {role: "builder"},
+      "builder-9": {role: "builder"},
+    });
+    // Ten creeps already exist, so the next name uses counter value 10.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 10;
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 2,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      controllerLevel: 5,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "upgrader-10");
+    assert.equal(calls[0].memory.role, "upgrader");
+    assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
+  });
+
+  it("below RCL 5 the surplus upgrader cap is two: the surplus goes to the builder instead", () => {
+    // RCL 1 (no controller level), full store, two upgraders - exactly the
+    // low upgrader cap (SURPLUS_UPGRADER_MAX_LOW, the pre-2026-11-12 value)
+    // - and one builder with sites: the surplus walk cannot add a third
+    // upgrader, so the idle energy goes to a second builder. This is the
+    // M2 fix (2026-11-12 20:11 gate failure): with the M5 cap of five the
+    // same room spawned up to four surplus upgraders at RCL 1 that drained
+    // the 300-energy pool faster than the harvest refilled it and starved
+    // the builder's road phase.
     addCreeps({
       "harvester-0": {role: "harvester", sourceId: "source-1"},
       "harvester-1": {role: "harvester", sourceId: "source-2"},
       "upgrader-2": {role: "upgrader"},
-      "builder-3": {role: "builder"},
+      "upgrader-3": {role: "upgrader"},
+      "builder-4": {role: "builder"},
     });
-    // Four creeps already exist, so the next name uses counter value 4.
+    // Five creeps already exist, so the next name uses counter value 5.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 4;
+    (global as any).Memory.creepCounter = 5;
     const {room, calls} = makeRoom({
       capacity: 300,
       available: 300,
@@ -977,9 +1024,40 @@ describe("spawnManager", () => {
     checkAndSpawn(room);
 
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "upgrader-4");
-    assert.equal(calls[0].memory.role, "upgrader");
-    assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
+    assert.equal(calls[0].name, "builder-5");
+    assert.equal(calls[0].memory.role, "builder");
+  });
+
+  it("below RCL 5 the surplus builder cap is five (the pre-2026-11-12 value)", () => {
+    // RCL 1, full store, two upgraders (the low upgrader cap) and five
+    // builders (the low builder cap, SURPLUS_BUILDER_MAX_LOW) with sites:
+    // the surplus walk has nothing left to spend the energy on, so the
+    // spawn stays idle - with the M5 cap of ten a sixth builder would
+    // spawn here.
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "upgrader-2": {role: "upgrader"},
+      "upgrader-3": {role: "upgrader"},
+      "builder-4": {role: "builder"},
+      "builder-5": {role: "builder"},
+      "builder-6": {role: "builder"},
+      "builder-7": {role: "builder"},
+      "builder-8": {role: "builder"},
+    });
+    const {room, calls} = makeRoom({
+      capacity: 300,
+      available: 300,
+      sites: 2,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    assert.equal(calls.length, 0);
   });
 
   it("spawns a surplus builder with the 4-WORK body once the capacity reaches 550", () => {
@@ -1018,23 +1096,68 @@ describe("spawnManager", () => {
     assert.deepEqual(calls[0].body, [WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE]);
   });
 
-  it("spawns a surplus upgrader with the 3-WORK body at the 400 capacity", () => {
+  it("at RCL 5 spawns a surplus upgrader with the 3-WORK body at the 400 capacity", () => {
     // At the RCL 4 capacity (400) the 400-energy row fills the gap between
     // the 350 and 500 walking bodies: the upgrader takes the whole capacity
     // (2026-11-12). The body must cost exactly 400 or the row would only
-    // start being picked at 450 capacity.
+    // start being picked at 450 capacity. The room is at SURPLUS_VALVE_MIN_LEVEL:
+    // with two upgraders alive only the M5 cap of five (not the low cap of
+    // two) allows the surplus upgrader at all.
     addCreeps({
       "harvester-0": {role: "harvester", sourceId: "source-1"},
       "harvester-1": {role: "harvester", sourceId: "source-2"},
-      "upgrader-2": {role: "upgrader"},
-      "builder-3": {role: "builder"},
+      "harvester-2": {role: "harvester", sourceId: "source-1"},
+      "harvester-3": {role: "harvester", sourceId: "source-2"},
+      "harvester-4": {role: "harvester", sourceId: "source-1"},
+      "upgrader-5": {role: "upgrader"},
+      "upgrader-6": {role: "upgrader"},
+      "builder-7": {role: "builder"},
+      "builder-8": {role: "builder"},
+      "builder-9": {role: "builder"},
     });
-    // Four creeps already exist, so the next name uses counter value 4.
+    // Ten creeps already exist, so the next name uses counter value 10.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 4;
+    (global as any).Memory.creepCounter = 10;
     const {room, calls} = makeRoom({
       capacity: 400,
       available: 400,
+      sites: 2,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      controllerLevel: 5,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "upgrader-10");
+    assert.deepEqual(calls[0].body, [WORK, WORK, WORK, CARRY, MOVE]);
+  });
+
+  it("below RCL 5 the store must be completely full: 93.75 % does not open the surplus", () => {
+    // The M5 pressure valve (90 % of capacity, 2026-11-12) only applies from
+    // SURPLUS_VALVE_MIN_LEVEL: below it the store must be completely full,
+    // the pre-2026-11-12 gate. 750 of 800 is 93.75 % - far above the M5
+    // valve's 90 %, not a completely full store: no surplus spawn. (M2 gate
+    // failure of 2026-11-12 20:11: the valve at RCL 1 pulsed surplus
+    // upgraders into the 300-energy pool that drained it faster than the
+    // harvest refilled it, starving the builder's road phase.)
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "harvester-2": {role: "harvester", sourceId: "source-1"},
+      "harvester-3": {role: "harvester", sourceId: "source-2"},
+      "harvester-4": {role: "harvester", sourceId: "source-1"},
+      "upgrader-5": {role: "upgrader"},
+      "builder-6": {role: "builder"},
+      "builder-7": {role: "builder"},
+      "builder-8": {role: "builder"},
+    });
+    const {room, calls} = makeRoom({
+      capacity: 800,
+      available: 750,
       sites: 2,
       containers: 0,
       spawning: null,
@@ -1044,9 +1167,47 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
+    assert.equal(calls.length, 0);
+  });
+
+  it("at RCL 5 the 90 % valve opens the surplus below a full store", () => {
+    // The same room at SURPLUS_VALVE_MIN_LEVEL: 750 of 800 is above 90 % of
+    // capacity, so the M5 valve opens and the surplus step runs even though
+    // the store is not completely full - the first surplus role it can pay
+    // is the upgrader (its walking body costs 500 at this capacity).
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "harvester-2": {role: "harvester", sourceId: "source-1"},
+      "harvester-3": {role: "harvester", sourceId: "source-2"},
+      "harvester-4": {role: "harvester", sourceId: "source-1"},
+      "upgrader-5": {role: "upgrader"},
+      "builder-6": {role: "builder"},
+      "builder-7": {role: "builder"},
+      "builder-8": {role: "builder"},
+    });
+    // Nine creeps already exist, so the next name uses counter value 9.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 9;
+    const {room, calls} = makeRoom({
+      capacity: 800,
+      available: 750,
+      sites: 2,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      controllerLevel: 5,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    // Level 5 wants five harvesters and three builders while sites exist -
+    // all alive, so the surplus walk runs and takes the second upgrader
+    // (cap SURPLUS_UPGRADER_MAX = 5 at RCL 5).
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "upgrader-4");
-    assert.deepEqual(calls[0].body, [WORK, WORK, WORK, CARRY, MOVE]);
+    assert.equal(calls[0].name, "upgrader-9");
+    assert.equal(calls[0].memory.role, "upgrader");
   });
 
   it("does not spawn a surplus creep while the store is not full", () => {

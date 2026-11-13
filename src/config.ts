@@ -112,6 +112,44 @@ export const SURPLUS_SPAWN_ENERGY_RATIO = 0.9;
 export const SURPLUS_BUILDER_MAX = 10;
 
 /**
+ * Controller level from which the M5 surplus policy applies: the 90 %
+ * pressure valve (SURPLUS_SPAWN_ENERGY_RATIO) plus the raised caps
+ * (SURPLUS_UPGRADER_MAX 5 / SURPLUS_BUILDER_MAX 10).
+ *
+ * M2 gate failure of 2026-11-12 20:11: the valve and the raised caps were
+ * designed and measured only for the RCL 5 M5 window (probe-m5-creeps:
+ * 550-energy capacity, ~20-per-tick harvest) - but they applied at every
+ * level. At RCL 1 the room holds only 300 energy and two harvesters bring
+ * in ~3-4 per tick, so the valve (90 % of 300) plus the cap of five
+ * upgraders pulsed 4-5 two-WORK surplus upgraders into the pool that
+ * drained it at ~5-6 per tick - faster than the harvest refilled it. The
+ * builder's 50 % withdrawal floor (poolReady in src/utils/energy.ts) was
+ * never reached, it fell back to self-harvesting from the source, and the
+ * whole RCL 1 road phase built 19 road energy instead of the 1,126 of the
+ * 2026-11-12 15:04 run: zero finished roads at tick 3,000 and the M2
+ * acceptance test failed. Below this level the pre-2026-11-12 policy stays:
+ * the store must be completely full (a 100 % gate) and the low caps
+ * (SURPLUS_UPGRADER_MAX_LOW / SURPLUS_BUILDER_MAX_LOW) apply - the exact
+ * economy M1-M4 passed on.
+ */
+export const SURPLUS_VALVE_MIN_LEVEL = 5;
+
+/**
+ * Surplus upgrader cap BELOW SURPLUS_VALVE_MIN_LEVEL (total, including the
+ * minimum crew) - the pre-2026-11-12 value. At RCL 1-2 the minimum upgrader
+ * crew already fills it, so no surplus upgrader is ever spawned: the
+ * known-good M1/M2 economy (the 2026-11-12 15:04 run built 4.7 road energy
+ * per tick with exactly this crew).
+ */
+export const SURPLUS_UPGRADER_MAX_LOW = 2;
+
+/**
+ * Surplus builder cap BELOW SURPLUS_VALVE_MIN_LEVEL (total, including the
+ * minimum crew) - the pre-2026-11-12 value.
+ */
+export const SURPLUS_BUILDER_MAX_LOW = 5;
+
+/**
  * Harvesters kept per container-less source at level 4 and up, where the
  * miner body tops out at 2-3 WORK (4-6 energy per tick - the RCL 4-5 room
  * holds 300-450 energy) and so can no longer drain a source's 10-per-tick
@@ -389,15 +427,19 @@ export const CONTAINER_BOOST_MIN_LEVEL = 4;
  * build queue switches from the bootstrap order (tower, extension,
  * container) to the static-mining ladder in builder.ts
  * (selectContainerFirstSite): first tower, the first source container,
- * the two-extension mini-floor (CONTAINER_MINI_FLOOR_EXTENSIONS), the
- * second source container, the M4 three-extension floor completion,
- * the controller container, ramparts, the second tower, the remaining
- * extensions, roads. The mini-floor and the full floor gate the rest:
- * the un-gated order of 2026-11-10 spent the container pair before the
- * third extension and failed M4 at tick 6,000 (extensionsBuilt 1,
- * capacity 350 of 450). Level 5 only: the M4 and M5 acceptance worlds
- * are level 5, and M2 (level 1-2) and M3 (level 3-4) measure the
- * bootstrap order, so the ladder must not touch them.
+ * the M4 three-extension floor (CONTAINER_BOOST_MIN_EXTENSIONS_L4), the
+ * second source container, the controller container, ramparts, the
+ * second tower, the remaining extensions, roads. The floor gates the
+ * rest: the un-gated order of 2026-11-10 spent the container pair
+ * before the third extension and failed M4 at tick 6,000
+ * (extensionsBuilt 1, capacity 350 of 450), and the 2026-11-12
+ * two-extension mini-floor that let the second source container run
+ * ahead of the third extension failed this run's M4 the same way from
+ * the other direction (extensionsBuilt 2, capacity 400 of 450 - the
+ * 5,000-energy container ate the crew before the 3,000-energy
+ * extension). Level 5 only: the M4 and M5 acceptance worlds are level
+ * 5, and M2 (level 1-2) and M3 (level 3-4) measure the bootstrap
+ * order, so the ladder must not touch them.
  */
 export const CONTAINER_EARLY_MIN_LEVEL = 5;
 
@@ -419,33 +461,20 @@ export const CONTAINER_EARLY_MIN_LEVEL = 5;
  * energyCapacity 350 versus the required 3 and 450) and the extensions
  * never caught up.
  *
- * The second source container (rung 4, 2026-11-12) runs ahead of the
- * FULL floor but behind the two-extension mini-floor (rung 3,
- * CONTAINER_MINI_FLOOR_EXTENSIONS): the M5 probe of 2026-11-12 showed the
- * second container at 0 progress at tick 5,000 because the full floor
- * held the crew on the third extension, and source B stayed on bootstrap
- * harvesters the whole window (minedShare failed at 0.402 of 0.6). With
- * the mini-floor the second container starts at ~2 extensions built, so
- * the third extension still gets the crew after it - enough to land the
- * M4 450 capacity inside its 6,000-tick window.
+ * The second source container (rung 4) runs BEHIND this floor (rung 3).
+ * The 2026-11-12 attempt to split the floor into a two-extension
+ * mini-floor ahead of the second container failed this run's M4
+ * acceptance: the 5,000-energy container took the crew after two
+ * extensions and the 3,000-energy third extension had not even started
+ * at tick 6,000 (extensionsBuilt 2, capacity 400 of 450), while the
+ * un-split floor - this order - finished all three extensions inside
+ * the window in the 2026-11-12 11:02 M4 run (commit f3a6863). M5 does
+ * not need the second container BUILT: its "every source has a
+ * container" criterion counts a placed site, and its minedShare
+ * criterion is satisfied by the first source's stationary miner
+ * (rung 2, which the 2026-11-12 probe proved reaches source A).
  */
 export const CONTAINER_BOOST_MIN_EXTENSIONS_L4 = 3;
-
-/**
- * The two-extension mini-floor of the M5 static-mining ladder
- * (selectContainerFirstSite, 2026-11-12): while fewer than this many
- * extensions are finished, the whole builder crew converges on extension
- * sites - but this rung sits AHEAD of the second source container. It is
- * the M4/M5 compromise: M4's acceptance fixture needs three finished
- * extensions inside 6,000 ticks, while M5 needs the second source
- * container early (its stationary miner, and with it the minedShare and
- * upgradePerTick criteria, unlock only once it exists - in the
- * 2026-11-12 21:01 probe it had not even started at tick 5,000 because
- * the three-extension floor held the crew). Two extensions (400 of the
- * 450 capacity) leaves the third extension a short final sprint after
- * the second container is done, instead of a full-window stand-off.
- */
-export const CONTAINER_MINI_FLOOR_EXTENSIONS = 2;
 
 /**
  * Controller sign text (owner request, feedback 2026-11-02): the exact string

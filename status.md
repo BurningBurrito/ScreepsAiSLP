@@ -1,7 +1,41 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state (2026-11-12, run 93): the failed gate - unit test failures in
+Current state (2026-11-13, run 96): the M4 acceptance regression is FIXED
+and VERIFIED - the re-run after the fix (started 22:38, 6,000 ticks)
+finished EXIT 0 (mocha success): extensionsBuilt 3, energyCapacity 450,
+maxTowerEnergy 1000, towersBuilt 1 + 1 site, towersWithRampart 1,
+spawnHasRampart, spawnHits 5000, firstHostile 5401 / firstDefend 5401,
+intruder gone after 2 ticks, safeModeTicks 0, hostilesAtEnd 0, mode
+peace, creeps 21, farthestFromSpawn 8 - every one of the test's 17
+assertions met (reports/acceptance-m4.md, snapshot line in the Change
+Log below). Scorecard vs the last passing M4 (f3a6863): RCL 5/1,650
+(was 5/1,254), construction 3.8/tick (was 1.46), CPU 3.48 avg / 36.06
+max. How it broke: the run 94 mini-floor
+(CONTAINER_MINI_FLOOR_EXTENSIONS = 2) let the second source container
+(5,000 energy) take the builder crew after TWO extensions and starve the
+third (3,000 energy): the M4 acceptance failed this run (commit b9a4099)
+with extensionsBuilt 2 and energyCapacity 400 of 450 at tick 6,000.
+Fix: the mini-floor and the floor-completion rung are merged back into
+one M4 three-extension floor (rung 3,
+CONTAINER_BOOST_MIN_EXTENSIONS_L4) that runs BEFORE the remaining
+source-container rung (rung 4) in selectContainerFirstSite
+(src/roles/builder.ts); CONTAINER_MINI_FLOOR_EXTENSIONS is removed from
+src/config.ts; the lower rungs are renumbered; test/unit/builder.test.ts
+updated (the "two extensions -> second source container" test is flipped
+to "crew stays on the third extension before the second source
+container"). This restores the v9.4 order that the 2026-11-12 11:02 M4
+run (f3a6863) proved fits the 6,000-tick window (all three extensions
+finished well before tick 5,000), and it is exactly the order FEEDBACK
+v9.4 prescribes ("build the FIRST source container right after the first
+tower, and keep the 3-extension floor for everything after it"). M5 does
+not need the second container BUILT: its "every source has a container"
+criterion counts a placed site, and its minedShare criterion is
+satisfied by the first source's stationary miner (rung 2). 192 unit
+passing, lint 0 errors, build clean. Next: the full suite
+(agent-test start all), then the M5 work (its three failing criteria are
+pre-existing and out of scope for the M4 fix).
+Previous state (2026-11-12, run 93): the failed gate - unit test failures in
 test/unit/spawnManager.test.ts and test/unit/upgrader.test.ts, left stale by
 this morning's config changes (commit 877cba7: SURPLUS_UPGRADER_MAX 2 -> 3,
 new SURPLUS_SPAWN_ENERGY_RATIO 0.9 pressure valve, MIN_CONTAINER_WITHDRAW_
@@ -277,6 +311,81 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-13 (run 96: M4 fix - the second source container back behind the M4 floor)
+- M4 acceptance (b9a4099, this run, 6,000 ticks) FAILED: extensionsBuilt
+  2 (needs 3), energyCapacity 400 (needs 450); every other criterion met
+  (level 5, tower 1 + site, 2 tower sites, 27 extension sites, ramparts,
+  hostile/defend/kill all inside limits). Root cause: the run 94
+  mini-floor (CONTAINER_MINI_FLOOR_EXTENSIONS = 2, rung 3) handed the
+  builder crew to the second source container (rung 4, 5,000 energy)
+  after TWO extensions, and the 3,000-energy third extension had not
+  even started by the window's end. The 2026-11-12 M5 probe that
+  motivated the mini-floor measured a stall with a different cause (the
+  run 93/94 surplus caps leaving builders idle), and M5 never needs the
+  second container BUILT (its "every source has a container" criterion
+  counts a placed site; minedShare is satisfied by source A's stationary
+  miner, rung 2). Fix: the mini-floor and the floor-completion rung are
+  merged back into one M4 three-extension floor - rung 3 of
+  selectContainerFirstSite (src/roles/builder.ts), gated on
+  CONTAINER_BOOST_MIN_EXTENSIONS_L4 (3) - executing BEFORE the remaining
+  source-container rung (rung 4). This restores the v9.4 order that the
+  2026-11-12 11:02 M4 run (f3a6863) proved lands the M4 contract inside
+  the window (all three extensions finished well before tick 5,000).
+  Files: src/roles/builder.ts (rungs 3-5 merged/renumbered: 3 = M4 floor,
+  4 = remaining source containers, 5 = controller container, 6 = ramparts,
+  7 = second tower, 8 = remaining extensions, 9 = roads, 10 = leftover
+  containers; header and hasPriorityBuildSites docs updated),
+  src/config.ts (CONTAINER_MINI_FLOOR_EXTENSIONS removed; the
+  CONTAINER_EARLY_MIN_LEVEL and CONTAINER_BOOST_MIN_EXTENSIONS_L4 docs
+  describe the new order), test/unit/builder.test.ts (the "takes the
+  second source container once two extensions are built" test is flipped
+  to "keeps the crew on the third extension before the second source
+  container at level 5"; rung numbers and wording updated in the floor
+  tests). 192 unit passing (the flipped test plus the whole ladder
+  suite), lint 0 errors, build clean. M4 acceptance re-run (this run,
+  started 22:38, 6,000 ticks): PASSED - agent-test FINISHED with EXIT 0
+  (mocha success; all 17 assertions of the suite met), snapshot:
+  {"intruderGoneAfterTicks":2,"intruderLeftRoom":false,
+  "maxTowerEnergy":1000,"hostileTicks":2,"defendTicks":6,
+  "firstHostile":5401,"firstDefend":5401,"safeModeTicks":0,
+  "snapshot":{"level":5,"towersBuilt":1,"towerSites":1,
+  "towersWithRampart":1,"extensionsBuilt":3,"extensionSites":27,
+  "energyCapacity":450,"creeps":21,"spawnHits":5000,
+  "spawnHasRampart":true,"hostilesAtEnd":0,"mode":"peace",
+  "farthestFromSpawn":8}}. The failing run's snapshot differed in
+  exactly the two extension criteria (extensionsBuilt 2 -> 3,
+  energyCapacity 400 -> 450); every other value is at or above the
+  previous passing M4 (f3a6863). Scorecard (reports/acceptance-m4.md)
+  vs f3a6863: RCL 5/1,650 (was 1,254), construction 3.8/tick (was
+  1.46), controller progress 0.63/tick (was 0.45), spawn idle-while-
+  full 71 % (was 92 %), creeps at end 21 (was 12), CPU 3.48 avg /
+  36.06 max (was 2.43 / 29.38). Full-suite regression run pending.
+### 2026-11-13 (run 95: M2 gate fix - level-gating the surplus policy)
+- The 20:11 gate failed at M2: roadsBuilt 0 at tick 3000 (M1 passed). Root
+  cause: the 2026-11-12 M5 surplus changes (90 % energy valve + raised
+  surplus caps, upgrader 2 -> 5 / builder 5 -> 10) applied at every
+  controller level. At RCL 1 the 300-energy pool was pulsed by surplus
+  upgraders faster than two harvesters refill it, the builder's 50 %
+  withdrawal floor (poolReady) was never reached, and the RCL 1 road phase
+  produced ~19 road energy instead of ~1,126 - zero finished roads. Fix:
+  the M5 policy is now gated by controller level (SURPLUS_VALVE_MIN_LEVEL
+  = 5 in src/config.ts). Below RCL 5 the pre-2026-11-12 behavior is
+  restored (completely-full-store gate, caps 2/5 via
+  SURPLUS_UPGRADER_MAX_LOW / SURPLUS_BUILDER_MAX_LOW); at RCL 5 and above
+  the 90 % valve and 5/10 caps are unchanged (checkAndSpawn's valveOpen
+  uses the ratio only at level >= 5, spawnSurplus receives the level and
+  picks the caps). 192 unit passing (188 + 4 new: RCL 1 low upgrader cap
+  routes the surplus to the builder, RCL 1 low builder cap leaves the
+  spawn idle, the valve closed at 93.75 % below RCL 5, the valve open at
+  RCL 5), lint + build clean. M2 acceptance PASSED on the fix (this run,
+  agent-test all): 3000-tick snapshot level 2, extensionsBuilt 2 + 3 sites,
+  roadsBuilt 4 + 55 sites (the failed 20:11 gate: roadsBuilt 0),
+  energyCapacity 400, creeps 6 - every criterion met. M3 acceptance
+  PASSED on the fix (this run, agent-test all): 4000-tick snapshot level
+  3, towersBuilt 1 + maxTowerEnergy 500, extensionsBuilt 4 + 6 sites,
+  energyCapacity 500, creeps 10, roadShare 0, roadTiles 59 / 0 on wall /
+  0 stray, sources 2 of 2 connected, controller connected, farthest 6.
+  Full agent-test suite: <result line>.
 ### 2026-11-13 (run 94: M5 stagnation fix - mini-floor, caps, bodies)
 - The M5 probe (probe-m5-creeps, reports/latest.md) showed the colony
   stuck at RCL 5/802 at 5,000 ticks: 82 % creep idle because the 3
@@ -1361,6 +1470,69 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **Run 96 (2026-11-13): M4 acceptance failure - second source container
+  before the third extension.** M4 acceptance (b9a4099, this run, 6,000
+  ticks) failed: extensionsBuilt 2 (needs 3), energyCapacity 400 (needs
+  450). Root cause: the run 94 mini-floor (rung 3 = two extensions)
+  hands the crew to the second source container (rung 4, 5,000 energy)
+  while the third extension (3,000 energy) is still open.
+  - Fix (restore the v9.4 full-floor order that f3a6863 proved fits the
+    6,000-tick window - 11:02 M4 run of 2026-11-12: all three
+    extensions finished well before tick 5,000):
+    1. [x] builder.ts: merge the mini-floor and floor-completion rungs
+       into one three-extension floor (rung 3,
+       CONTAINER_BOOST_MIN_EXTENSIONS_L4) BEFORE the remaining
+       source-container rung (rung 4); renumber rungs 5-10.
+    2. [x] config.ts: remove CONTAINER_MINI_FLOOR_EXTENSIONS; document
+       the order.
+    3. [x] Unit tests: flip the "two extensions -> second container"
+       test to "crew stays on the third extension before the second
+       source container"; renumber the floor tests. 192 passing, lint +
+       build clean.
+    4. [x] M4 acceptance (agent-test, started 22:38): PASSED (EXIT 0)
+       - extensionsBuilt 3, energyCapacity 450, all 17 assertions met
+       (snapshot line in the Change Log above).
+    5. [ ] Full suite (agent-test start all), then commit.
+- Previous - **Run 95 (2026-11-12): M2 gate failure (roadsBuilt 0 at tick 3000).**
+  The 20:11 gate failed at the M2 acceptance test: roadsBuilt 0 (M1 passed).
+  Baseline 2026-11-12: M2 gate run vs last passing M2 (f3a6863 15:04 run):
+  road energy in the 481-801 window 19 vs 1126 (4.7/tick), RCL 2 at 614 vs
+  720, end of run 4 extensions + partial 5th vs 2 extensions + 1 container
+  + 4 roads.
+  - Root cause (code diff f3a6863..69474de + both scorecards): builder and
+    site-placement code is unchanged. The regression is the run 93/94
+    surplus changes applied at every controller level: SURPLUS_SPAWN_ENERGY_RATIO
+    0.9 valve + SURPLUS_UPGRADER_MAX 5 + SURPLUS_BUILDER_MAX 10. At RCL 1 the
+    room holds only 300 energy and ~2 harvesters bring in 3-4/tick, so the
+    valve pulsed 4-5 two-WORK surplus upgraders into the pool (M1 timeline:
+    upgrader 4 at tick 500, 5 at 600) that drained it at ~5-6/tick - faster
+    than the harvest refilled it. The builder's 50 % withdrawal floor
+    (poolReady) was never reached, it fell back to self-harvesting, and the
+    RCL 1 road phase (ticks ~200-614) built ~19 road energy instead of ~1126:
+    zero finished roads. RCL 2 at 614 then placed all 5 extension sites (the
+    builder's rung 5 beats rung 6 roads) and the 4-WORK builders finished 4
+    extensions with none left for roads.
+  - Fix (the valve and raised caps were designed and measured only for the
+    RCL 5 M5 window - probe-m5-creeps - so gate them by controller level):
+    1. [x] config.ts: SURPLUS_VALVE_MIN_LEVEL = 5; SURPLUS_UPGRADER_MAX_LOW
+       = 2 and SURPLUS_BUILDER_MAX_LOW = 5 (the pre-2026-11-12 values M1-M4
+       passed on).
+    2. [x] spawnManager.ts: below the level the store must be completely
+       full (100 % gate, pre-2026-11-12 behavior) and the low caps apply;
+       at/above the level the 0.9 valve and 5/10 caps stay.
+    3. [x] Unit tests: the two cap-5/cap-10 tests move to controllerLevel 5;
+       new tests for the RCL 1 low caps and the 100 % gate. 192 unit passing
+       (188 + 4: low upgrader cap -> builder gets the surplus, low builder
+       cap -> idle, valve closed at 93.75 %, valve open at RCL 5), lint +
+       build clean.
+    4. [x] M2 + M3 acceptance on the fix: M2 PASSED (roadsBuilt 4, was 0
+       in the failed gate), M3 PASSED (tower built + filled, roadShare 0).
+    5. [ ] M4 + M5 + full suite (agent-test all): M4/M5 run at RCL 5 where
+       the 90 % valve and 5/10 caps stay active (untouched by the fix);
+       the suite result line goes into the Change Log.
+    4. [ ] lint + build + test-unit.
+    5. [ ] agent-test start all; expect M1-M4 green, M5 failing as before
+       (its own milestone, next run). Commit with scorecard numbers.
 - **Run 94 (2026-11-12): M5 stagnation fix (mini-floor, caps, bodies).**
   The M5 probe showed the colony stuck at RCL 5/802: 82 % creep idle
   because 3 upgraders drained the store faster than the 90 % valve
@@ -2028,6 +2200,24 @@ yet.
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
 
 ## Known Issues / Notes
+- **M5 acceptance is failing (pre-existing since run 94, 2026-11-12) -
+  out of scope for the M4 fix of run 96.** Latest full M5 run
+  (b9a4099, started 2026-11-12 22:09, EXIT 1, snapshot at 5,000 ticks):
+  harvestedPerTick 10.52 (needs 13), upgradePerTick 0.61 (needs 1),
+  spawnIdleFullShare 50.7 % (max 30 %); minedShare 0.98 (passes 0.6),
+  sourcesWithContainer 2/2, sourcesWithBuiltContainer 1/2, energy
+  400/400 (the mini-floor's third-extension starvation, fixed in run 96
+  and verified: M4 acceptance PASSED this run, capacity 450 at 6,000
+  ticks), 21 creeps with 5 upgraders + 10 builders (the run 93/94
+  surplus caps - the upgraders burn the pool faster than the harvest
+  refills it, the same stall pattern as probe-m5-creeps: RCL 5/802,
+  82 % creep idle). The failure is in the RCL 5 economy (harvest
+  throughput, upgrade rate, idle-full share), not in the build order:
+  the run 96 floor change restores the best-known M5 trajectory
+  (1a1507d probe: 3 extensions/450 at 5,000, harvest 12.47, upgrade
+  0.6, idle-full 68 %) without changing any of the economy code, so M5
+  is expected to fail the same criteria with no regression. Fixing M5
+  itself (harvest/upgrade/idle-full) is the next milestone's work.
 - **Step 6 container boost (cad8c5b) broke M4 - reverted per owner protocol, NOT repaired
   (2026-11-09).** Re-applied on the step 4 tree as e996131 (128 unit passing); its M4
   acceptance ran in the 2026-11-09 full suite (7542b1f): FAILED, extensionsBuilt 1
@@ -2139,8 +2329,10 @@ yet.
   an empty store and tops up from the container"). M5 numbers: upgrade
   0.05 -> 0.55/tick (URGENT 1 run), 0.43/tick (probe-m5-creeps,
   reports/latest.md - still below the 1.0 criterion, not reverted); harvest
-  9.36/tick, spawn idle-while-full 59 %. This run's M5 acceptance on the
-  current tree gives the final numbers.
+  9.36/tick, spawn idle-while-full 59 %. M5 on the current tree (b9a4099
+  run of 2026-11-12 22:09): upgrade 0.61/tick (need 1, still failing),
+  harvest 10.52/tick, spawn idle-while-full 50.7 % (max 30 %, still
+  failing); the floor-fixed tree's numbers come from this run's full suite.
 - Acknowledged 2026-11-12 (v9.4) - URGENT 2 (builder order): done in the
   getEnergy rework (src/utils/energy.ts): the source-container rung (>=
   MIN_CONTAINER_WITHDRAW_ENERGY) now sits ABOVE the builder pool rung for
@@ -2150,9 +2342,20 @@ yet.
   empty builder, full room, container with 1000 -> withdraws from the
   container, not the spawn). M5 before (18:31 gate per the v9.4 note):
   harvested 9.05/tick (need 13), upgrade 0.43/tick (need 1), spawn idle
-  59 %, RCL 5/550. M5 after + M4 result: pending this run.
+  59 %, RCL 5/550. M5 after (b9a4099 run of 2026-11-12 22:09, the tree
+  right before the run 96 floor fix): harvested 10.52/tick (need 13),
+  upgrade 0.61/tick (need 1), spawn idle-while-full 50.7 % (max 30 %),
+  minedShare 0.98, energy 400/400 at 5,000 ticks - improved on every
+  failing criterion, M5 still EXIT 1. M4 result: the run 94 mini-floor had
+  broken M4 (extensionsBuilt 2, capacity 400); the run 96 floor fix
+  restores it - M4 acceptance PASSED this run (EXIT 0, extensionsBuilt 3,
+  capacity 450), so the floor fix is kept, not reverted. The M5 "after"
+  numbers on the floor-fixed tree come from the full-suite run.
 - Acknowledged 2026-11-12 (v9.4) - minedShare > 0.6 (only if still failing
-  after URGENT 1 and 2): pending this run's M5 acceptance.
+  after URGENT 1 and 2): not needed - the b9a4099 M5 run of 2026-11-12
+  22:09 already gives minedShare 0.98 (passes the 0.6 criterion; source A's
+  stationary miner, rung 2). No extra change made; the M4 floor fix of run
+  96 does not touch the first source container (still rung 2).
 - Acknowledged 2026-11-12 (v9.4) - cleanup probe-m5-builder: done in d0ec3a0
   (removed from test/integration/, the folder the gate scans).
 - Acknowledged 2026-11-11 (v9.3): FEEDBACK v9.3 - the M5 regression has

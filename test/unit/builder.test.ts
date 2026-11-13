@@ -1101,11 +1101,11 @@ describe("builder", () => {
         assert.equal(calls.lastBuilt, "con-src", "the first source container outranks the open floor even without extension sites");
     });
 
-    it("holds the second source container behind the mini-floor at level 5", () => {
+    it("holds the second source container behind the M4 extension floor at level 5", () => {
         // With one source container already built (rung 2 is done) and only
-        // ONE extension finished, the two-extension mini-floor (rung 3) is
-        // still open: the crew converges on the most advanced extension
-        // site instead of the second source container.
+        // ONE extension finished, the M4 extension floor (rung 3) is still
+        // open: the crew converges on the most advanced extension site
+        // instead of the second source container.
         const { creep, calls } = makeCarryingBuilder(
             [
                 { id: "con-src-2", structureType: "container", progress: 10, pos: pos(38, 14) }, // next to source B
@@ -1123,16 +1123,20 @@ describe("builder", () => {
 
         runBuilder(creep);
 
-        assert.equal(calls.lastBuilt, "ext2", "rung 3: the mini-floor owns the crew until two extensions are built");
+        assert.equal(calls.lastBuilt, "ext2", "rung 3: the M4 floor owns the crew until three extensions are built");
     });
 
-    it("takes the second source container once two extensions are built, ahead of the third at level 5", () => {
-        // Rung 3 (the two-extension mini-floor, 2026-11-12) is met, so the
-        // second source container's site takes the crew AHEAD of the third
-        // extension (rung 5). In the v9.4 order this crew converged on the
-        // third extension for the whole window and the second container
-        // never started (probe of 2026-11-12: 0 progress at tick 5,000,
-        // minedShare 0.402 of 0.6) - the regression this rung order fixes.
+    it("keeps the crew on the third extension before the second source container at level 5", () => {
+        // Rung 3 (the M4 extension floor) is still open with two
+        // extensions built: the crew converges on the third extension
+        // AHEAD of the second source container (rung 4). The 2026-11-12
+        // mini-floor that let the 5,000-energy container run first failed
+        // the M4 acceptance (at tick 6,000 the 3,000-energy third
+        // extension had not even started: extensionsBuilt 2, capacity 400
+        // of 450); the un-split floor is the order the 2026-11-12 11:02
+        // M4 run finished all three extensions inside the window. M5 does
+        // not need the second container built - its "every source has a
+        // container" criterion counts a placed site.
         const { creep, calls } = makeCarryingBuilder(
             [
                 { id: "con-src-2", structureType: "container", progress: 0, pos: pos(38, 14) }, // next to source B
@@ -1151,15 +1155,15 @@ describe("builder", () => {
 
         runBuilder(creep);
 
-        assert.equal(calls.lastBuilt, "con-src-2", "rung 4: the mini-floor hands the crew to the second source container");
+        assert.equal(calls.lastBuilt, "ext3", "rung 3: the open M4 floor outranks the second source container");
     });
 
-    it("finishes the third extension before the controller container after the mini-floor at level 5", () => {
-        // Two extensions are built (mini-floor met) and no source container
-        // site is left, so the third extension (rung 5, the M4 floor
-        // completion) still takes the crew ahead of the controller
-        // container (rung 6) - the M4 contract (three extensions before
-        // any non-source container) is untouched by the mini-floor.
+    it("finishes the third extension before the controller container below the M4 floor at level 5", () => {
+        // Two extensions are built (the M4 floor is still open) and no
+        // source container site is left, so the third extension (rung 3)
+        // still takes the crew ahead of the controller container
+        // (rung 5) - the M4 contract (three extensions before any
+        // non-source container) holds at every rung below the floor.
         const { creep, calls } = makeCarryingBuilder(
             [
                 { id: "con-ctrl", structureType: "container", progress: 0, pos: pos(24, 25) },
@@ -1179,13 +1183,13 @@ describe("builder", () => {
 
         runBuilder(creep);
 
-        assert.equal(calls.lastBuilt, "ext3", "rung 5: the floor completion still outranks the controller container");
+        assert.equal(calls.lastBuilt, "ext3", "rung 3: the open M4 floor still outranks the controller container");
     });
 
     it("takes the second source container after the floor, before the controller container at level 5", () => {
         // Rung 4: the floor is met (three extensions built) and one source
         // container is done, so the remaining source container site takes
-        // the crew ahead of the controller container (rung 6).
+        // the crew ahead of the controller container (rung 5).
         const { creep, calls } = makeCarryingBuilder(
             [
                 { id: "con-src-2", structureType: "container", progress: 0, pos: pos(38, 14) },
@@ -1209,10 +1213,10 @@ describe("builder", () => {
     });
 
     it("takes the controller container once the source containers are done at level 5", () => {
-        // Rung 6: the M4 extension floor (rung 5) is met (three extensions
+        // Rung 5: the M4 extension floor (rung 3) is met (three extensions
         // built) and no source container site is left, so the controller's
         // energy cache takes the crew - ahead of the remaining extension
-        // (rung 9), but only after the floor, which M4's contract requires
+        // (rung 8), but only after the floor, which M4's contract requires
         // before any container takes the crew.
         const { creep, calls } = makeCarryingBuilder(
             [
@@ -1234,13 +1238,13 @@ describe("builder", () => {
 
         runBuilder(creep);
 
-        assert.equal(calls.lastBuilt, "con-ctrl", "rung 6: the controller container follows the floor, ahead of the remaining extension");
+        assert.equal(calls.lastBuilt, "con-ctrl", "rung 5: the controller container follows the floor, ahead of the remaining extension");
     });
 
     it("finishes the most advanced extension of the floor at level 5", () => {
-        // Rung 5: the two-extension mini-floor (rung 3) is already met, so
-        // the floor completion (rung 5) converges the crew on the most
-        // advanced extension site (the M4 floor: 450 capacity).
+        // Rung 3: the M4 floor is still open (two of three extensions
+        // built), so it converges the crew on the most advanced extension
+        // site (the M4 floor: 450 capacity).
         const { creep, calls } = makeCarryingBuilder(
             [
                 { id: "ext2", structureType: "extension", progress: 800, pos: pos(18, 25) }, // far, but further along
@@ -1258,11 +1262,11 @@ describe("builder", () => {
 
         runBuilder(creep);
 
-        assert.equal(calls.lastBuilt, "ext2", "rung 5: the floor converges on the most advanced extension");
+        assert.equal(calls.lastBuilt, "ext2", "rung 3: the open M4 floor converges on the most advanced extension");
     });
 
     it("builds the second tower after the extension floor is met at level 5", () => {
-        // Rung 8: with three extensions built and no rampart left, the
+        // Rung 7: with three extensions built and no rampart left, the
         // second tower site takes the crew.
         const { creep, calls } = makeCarryingBuilder(
             [{ id: "tower2", structureType: "tower", progress: 0, pos: pos(20, 24) }],
@@ -1279,11 +1283,11 @@ describe("builder", () => {
 
         runBuilder(creep);
 
-        assert.equal(calls.lastBuilt, "tower2", "rung 8: the second tower follows the floor");
+        assert.equal(calls.lastBuilt, "tower2", "rung 7: the second tower follows the floor");
     });
 
     it("builds a rampart before the second tower at level 5", () => {
-        // Rung 7: in peace mode the ramparts sit between the extension
+        // Rung 6: in peace mode the ramparts sit between the extension
         // floor and the second tower (the M4 spec order: towers, then
         // ramparts, then the rest).
         const { creep, calls } = makeCarryingBuilder(
@@ -1304,7 +1308,7 @@ describe("builder", () => {
 
         runBuilder(creep);
 
-        assert.equal(calls.lastBuilt, "rampart1", "rung 7: the rampart precedes the second tower");
+        assert.equal(calls.lastBuilt, "rampart1", "rung 6: the rampart precedes the second tower");
     });
 
     it("pauses the upgrader for the first tower site at level 5", () => {
@@ -1318,7 +1322,7 @@ describe("builder", () => {
     });
 
     it("does not pause the upgrader for the second tower site at level 5", () => {
-        // Rung 8 is after the extension floor: by then the upgrader's
+        // Rung 7 is after the extension floor: by then the upgrader's
         // WORK belongs to the controller again.
         const room = makeRoomForPriority(
             [{ id: "tower2", structureType: "tower", progress: 0, pos: pos(14, 20) }],
