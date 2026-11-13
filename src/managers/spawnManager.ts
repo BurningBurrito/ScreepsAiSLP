@@ -149,13 +149,14 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
         // round trip.
         [WORK, WORK, WORK, CARRY, CARRY, MOVE], // 450
         // M4/M5 fix (2026-11-13): the full crew now starts at 400
-        // capacity (one extension, see HARVESTER_CREW_FULL_CAPACITY), so
-        // this is the body five walkers actually run. The old 3-WORK /
-        // 1-CARRY / 1-MOVE row crawled (4 non-MOVE parts cost 8 fatigue
-        // per step against 2 recovered per tick) and its 50 of carry
-        // forced a delivery stop every ~8 harvest ticks. Two CARRY plus
-        // two MOVE keeps the same 400-energy cost: one step per tick on
-        // plain, 100 per trip.
+        // capacity (two extensions in this harness, see
+        // HARVESTER_CREW_FULL_CAPACITY), so this is the body five
+        // walkers actually run. The old 3-WORK / 1-CARRY / 1-MOVE row
+        // crawled (4 non-MOVE parts cost 8 fatigue per step against 2
+        // recovered per tick) and its 50 of carry forced a delivery
+        // stop every ~8 harvest ticks. Two CARRY plus two MOVE keeps
+        // the same 400-energy cost: one step per tick on plain, 100 per
+        // trip.
         [WORK, WORK, CARRY, CARRY, MOVE, MOVE], // 400
         [WORK, WORK, CARRY, MOVE], // 300
         [WORK, CARRY, MOVE], // 200

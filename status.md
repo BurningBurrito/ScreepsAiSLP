@@ -14,16 +14,24 @@ src/utils/energy.ts (poolReady = 50 % BUILDER_WITHDRAW_FRACTION floor plus
 the upgrader AND income hold-backs, for the builder rung; upgraderPoolReady
 = poolReady + CONTAINER_BOOST_MIN_LEVEL, for the upgrader rung) and keeps
 run 97's early miner replacement. New: the full 5-harvester crew now starts
-at 400 capacity (HARVESTER_CREW_FULL_CAPACITY, was 450 - unreachable, since
-capacity steps 300 + 100 per extension), with a balanced 2-WORK/2-CARRY/
-2-MOVE harvester 400 row (the old 3-WORK/1-MOVE row crawled one tile every
-4 ticks and hauled 50) and a 3-WORK miner 400 row (6/tick; before, the
-miner replacement sat on the 2-WORK 350 row until 450 capacity). Unit test
-updated for the new RCL 5 minimum at 400 capacity (ten harvesters in the
-surplus-upgrader test). 192 unit passing, lint 0 errors, build clean.
-Smoke running, then the full suite (M4: expect extensionsBuilt 3+; M5:
-harvest >= 13, upgrade >= 1, idle-full <= 30 %, drops <= 300,
-minedShare >= 0.6).
+at 400 capacity (HARVESTER_CREW_FULL_CAPACITY, was 450 - in this harness
+capacity is 300 + 50 per extension, so 450 waited for THREE extensions;
+400 fires on two and is exactly the cost of the balanced body), with a
+balanced 2-WORK/2-CARRY/2-MOVE harvester 400 row (the old 3-WORK/1-MOVE row
+crawled one tile every 4 ticks and hauled 50) and a 3-WORK miner 400 row
+(6/tick; before, the miner replacement sat on the 2-WORK 350 row until 450
+capacity). Unit test updated for the new RCL 5 minimum at 400 capacity
+(ten harvesters in the surplus-upgrader test). 192 unit passing, lint 0
+errors, build clean. Results: smoke passed (500 ticks, early game
+bit-identical to the 3c92272 smoke). Full suite (agent-test all, 12:34
+start): M1 PASSED 4.63 harvest / 3.71 build, M2 PASSED 5.07 / 5.58, M3
+PASSED 7.52 / 1.48 - all identical to the verified baselines (level-gated
+out, as predicted). M4 PASSED: 13.28 harvest (baseline 12.72), 1.81
+upgrade (0.63), 2.42 build (3.8 - the difference went to ramparts and the
+second source container), idle-full 31 % (71 %), creep idle 40 % (43 %),
+extensionsBuilt 3 (capacity 450), tower + 2 ramparts, intruder killed -
+the full crew engaged at tick ~3,500 when capacity crossed 400 and lifted
+the late-run harvest above the verified baseline. M5 acceptance running.
 Previous state (2026-11-13, run 97, 07:45 start): M5 improvement on the
 reverted M4-passing tree. The M5 baseline numbers (2026-11-13 gate run,
 referenced in the config comments; no report file survives): harvest
@@ -411,13 +419,15 @@ yet.
   builderPoolReady and the decoupling removed; SURPLUS_SPAWN_ENERGY_RATIO
   import dropped from this file.
 - Fix 2 (src/config.ts, src/managers/spawnManager.ts):
-  HARVESTER_CREW_FULL_CAPACITY 450 -> 400 (capacity is 300 + 100 per
-  extension, so 450 was never reached and the full crew only ever started
-  at 500); new harvester 400 row [W,W,C,C,M,M] (2 MOVE keeps one step per
-  tick, 100 per trip - the old [W,W,W,C,M] crawled 4 ticks per tile); new
-  miner 400 row [W,W,W,C,M] (3 WORK = 6/tick; before the replacement sat
-  on the 2-WORK 350 row until 450 capacity). Run 97's
-  MINER_REPLACEMENT_LEAD_TICKS early miner replacement is untouched.
+  HARVESTER_CREW_FULL_CAPACITY 450 -> 400 (in this harness capacity is
+  300 + 50 per extension - scorecards: 2 ext = 400, 3 ext = 450 - so 450
+  waited for three extensions while 400 fires on two, one rung earlier,
+  and 400 is exactly the cost of the new balanced body); new harvester 400
+  row [W,W,C,C,M,M] (2 MOVE keeps one step per tick, 100 per trip - the
+  old [W,W,W,C,M] crawled 4 ticks per tile); new miner 400 row
+  [W,W,W,C,M] (3 WORK = 6/tick; before the replacement sat on the 2-WORK
+  350 row until 450 capacity). Run 97's MINER_REPLACEMENT_LEAD_TICKS early
+  miner replacement is untouched.
 - Tests: test/unit/spawnManager.test.ts - the RCL 5 400-capacity
   surplus-upgrader test now carries ten harvesters (five per uncovered
   source, the new minimum); the valve-test comment (450) -> (400).
@@ -1674,15 +1684,18 @@ yet.
      harvester 400 row [W,W,C,C,M,M] and miner 400 row [W,W,W,C,M]
      (src/managers/spawnManager.ts). 192 unit passing, lint 0 errors,
      build clean.
-  3. [ ] Smoke (running, started 12:31) - expect the early game
-     unchanged (RCL 1, capacity 300 rows untouched).
-  4. [ ] agent-test start all - the M4 acceptance must build 3+
-     extensions again (construction back to ~3.8/tick) and M5 must clear
-     harvest >= 13 / upgrade >= 1 / idle-full <= 30 % / drops <= 300 /
-     minedShare >= 0.6.
-  5. [ ] If M5 still fails: analyze the scorecard timeline (which source,
-     which role is the new cap) and iterate once; if M4 fails, the gate
-     revert did not take - diff src/utils/energy.ts against afe540c.
+  3. [x] Smoke passed (500 ticks, early game bit-identical to the
+     3c92272 smoke).
+  4. [~] agent-test all (started 12:34): M1 4.63 / 3.71, M2 5.07 / 5.58,
+     M3 7.52 / 1.48 - PASSED, identical to the verified baselines. M4
+     PASSED: harvest 13.28 (baseline 12.72), upgrade 1.81 (0.63), build
+     2.42 (3.8 - ramparts + second container took the spend), idle-full
+     31 % (71 %), creep idle 40 % (43 %), extensionsBuilt 3 (capacity
+     450), tower 1 + 2 ramparts + 1 tower site, intruder killed. Full
+     crew engaged at tick ~3,500 (capacity crossed 400). M5 acceptance
+     running (8,500 ticks, started ~62 min into the suite).
+  5. [ ] If M5 fails: analyze the scorecard timeline (which source,
+     which role is the new cap) and iterate once.
 - **Run 97 (2026-11-13 07:45 start): M5 harvest/upgrade - SUPERSEDED by
   run 98 (its fix set regressed M4 and M5; see the run 98 entry above).**
   1. [x] Fix set: split pool gate (upgraderPoolReady/builderPoolReady,

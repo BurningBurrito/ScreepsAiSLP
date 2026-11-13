@@ -183,9 +183,11 @@ export const UNCOVERED_SOURCE_HARVESTERS_FULL = 5;
  * bootstrap store before the extension floor exists (the M3 death-spiral
  * pattern of 2026-11-11).
  *
- * M4 fix (2026-11-13): lowered from 450. The pool is 300 plus 100 per
- * extension, so 450 was never a real capacity - the first extension puts
- * the room at 400, and the full crew now starts one extension earlier.
+ * M4 fix (2026-11-13): lowered from 450. In this test harness a room's
+ * capacity is 300 plus 50 per completed extension (scorecards: 2 ext =
+ * 400, 3 ext = 450, 4 ext = 500), so the old 450 line waited for three
+ * extensions while 400 fires on two - one rung earlier, and exactly the
+ * cost of the balanced body it buys.
  */
 export const HARVESTER_CREW_FULL_CAPACITY = 400;
 
