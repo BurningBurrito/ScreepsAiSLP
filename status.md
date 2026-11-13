@@ -1,7 +1,7 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state (2026-11-13, 17:01 start): M5a verification run. The owner
+Current state (2026-11-13, run 99, 17:12 start): M5a verification run. The owner
 split M5 into M5a/M5b/M5c (FEEDBACK v9.5): M5a (>= 1 controller progress
 per tick over the last 1000 ticks, same M5 world) is the current
 milestone, and the gate now pushes when lint + unit tests + M1-M4 pass -
@@ -12,7 +12,9 @@ src/utils/energy.ts), and the 17:01 gate run measured upgradePerTick
 1.33, level 5, 21 creeps on the M5 window - the M5a criteria met on
 paper; the failing harvest 9.88 < 13 is the M5b criterion (static
 mining), not M5a's. This run verifies acceptance-m5a on the current tree
-and keeps M1-M4 green for the gate. Result: pending.
+and keeps M1-M4 green for the gate. Fast checks green (lint 0 errors,
+build clean, 192 unit passing); acceptance-m5a started 17:1x. Result:
+pending.
 Previous state (2026-11-13, run 98, 12:31 start): M4/M5 regression fix - the
 90 % pool gate is reverted. Run 97's ae46644 (90 % no-hold-back
 builderPoolReady at RCL 4+ plus the decoupled upgrader gate) regressed the
@@ -1682,7 +1684,7 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **Run 98 (2026-11-13 17:01 start): M5a - verify the current milestone
+- **Run 99 (2026-11-13 17:12 start): M5a - verify the current milestone
   (both named v9.4 fixes are already committed; no new src/ change
   planned).**
   Baseline (2026-11-13, rule 07 A5): reports/latest.md = acceptance-m4
@@ -1699,10 +1701,15 @@ yet.
      getEnergy's source-container rung ABOVE the builder pool
      (src/utils/energy.ts lines 219-242; unit test
      test/unit/builder.test.ts:419). No new code needed.
-  2. [ ] Fast checks: lint, build, test-unit.
-  3. [ ] acceptance-m5a via agent-test (5000 ticks, ~22 min).
-  4. [ ] If it passes: Part D - agent-test start all (M1-M4 must stay
-     green for the gate), tick M5a, README, blog post, docs commit.
+  2. [x] Fast checks: lint 0 errors, build clean, 192 unit passing.
+  3. [x] acceptance-m5a PASSED (this run, agent-test, EXIT 0, 1338 s):
+     snapshot after 5000 ticks - upgradePerTick 1.33 (needs >= 1),
+     level 5, creeps 21 (needs >= 3); harvestedPerTick 9.88,
+     buildPerTick 2.38, spawnIdleFullShare 0.006, creepIdleShare 0.361,
+     minedShare 1, avgDroppedEnergy 51, maxContainerEnergy 274,
+     RCL 5 / 1,540 progress, capacity 450.
+  4. [ ] Part D: agent-test start all (M1-M4 must stay green for the
+     gate), tick M5a, README, blog post, docs commit.
   5. [ ] If it fails: one measurement, one named attempt (v9.5
      protocol), otherwise STUCK with the M5a snapshot numbers.
 - **Run 98 (2026-11-13 12:31 start): M4/M5 regression fix (revert the 90 %
