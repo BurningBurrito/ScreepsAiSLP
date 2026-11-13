@@ -160,6 +160,44 @@ export const SURPLUS_BUILDER_MAX_LOW = 5;
 export const UNCOVERED_SOURCE_HARVESTERS_L4 = 2;
 
 /**
+ * Harvesters kept per container-less source at level 4 and up once the
+ * room's energy capacity reaches HARVESTER_CREW_FULL_CAPACITY: the full
+ * walking crew.
+ *
+ * M5 (2026-11-13): the pair (UNCOVERED_SOURCE_HARVESTERS_L4) is what the
+ * M5 gate ran with - harvest 8.56 against the 13 minimum, with the
+ * uncovered source still holding two harvesters at tick 5,000 while part
+ * of its 10-per-tick refill went to waste. Once the capacity buys the
+ * 450-energy 3-WORK / 2-CARRY harvester body (~1.9 per tick each), five
+ * walkers drain the source at refill rate.
+ */
+export const UNCOVERED_SOURCE_HARVESTERS_FULL = 5;
+
+/**
+ * The energy capacity at which an uncovered source (level 4 and up) gets
+ * the full harvester crew (UNCOVERED_SOURCE_HARVESTERS_FULL) instead of
+ * the early pair (UNCOVERED_SOURCE_HARVESTERS_L4). 450 is where both the
+ * 450-energy harvester body and the 3-WORK miner replacement become
+ * possible, so the extra walkers actually earn their body cost. Below it
+ * the pair stays: five 300-energy bodies would eat the bootstrap store
+ * before the extension floor exists (the M3 death-spiral pattern of
+ * 2026-11-11).
+ */
+export const HARVESTER_CREW_FULL_CAPACITY = 450;
+
+/**
+ * Ticks of remaining life at which a stationary miner's replacement starts
+ * spawning (M5 window economy, 2026-11-13). The replacement takes a few
+ * ticks to spawn and ~100+ ticks to walk from the spawn to its container
+ * tile (miner bodies are WORK-heavy: one MOVE per three other parts
+ * crawls on plain), so without the lead the source idles for the whole
+ * walk time between the old miner's death and the new miner's arrival.
+ * 200 covers spawn plus walk plus a busy spawn queue, so the replacement
+ * takes the tile over before the old miner expires.
+ */
+export const MINER_REPLACEMENT_LEAD_TICKS = 200;
+
+/**
  * Extra haulers the spawn keeps beyond the one-per-source-container
  * minimum at level 4 and up (owner feedback v9.2 idea a, 2026-11-10): a
  * hauler that dies is only replaced on the next spawn tick, and at

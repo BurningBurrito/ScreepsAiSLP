@@ -1096,13 +1096,18 @@ describe("spawnManager", () => {
     assert.deepEqual(calls[0].body, [WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE]);
   });
 
-  it("at RCL 5 spawns a surplus upgrader with the 3-WORK body at the 400 capacity", () => {
+  it("at RCL 5 spawns a surplus upgrader with the 2-MOVE body at the 400 capacity", () => {
     // At the RCL 4 capacity (400) the 400-energy row fills the gap between
     // the 350 and 500 walking bodies: the upgrader takes the whole capacity
     // (2026-11-12). The body must cost exactly 400 or the row would only
     // start being picked at 450 capacity. The room is at SURPLUS_VALVE_MIN_LEVEL:
     // with two upgraders alive only the M5 cap of five (not the low cap of
     // two) allows the surplus upgrader at all.
+    // 2026-11-13: the row is now 2-WORK / 2-CARRY / 2-MOVE - the old
+    // 3-WORK / 1-MOVE body crawled the pool round trip on plain (one tile
+    // every 4 ticks) and the M5 gate measured 0.70 upgrade/tick with four
+    // upgraders on it. Two MOVE parts plus the CARRY buffer at the same
+    // 400-energy cost.
     addCreeps({
       "harvester-0": {role: "harvester", sourceId: "source-1"},
       "harvester-1": {role: "harvester", sourceId: "source-2"},
@@ -1133,7 +1138,7 @@ describe("spawnManager", () => {
 
     assert.equal(calls.length, 1);
     assert.equal(calls[0].name, "upgrader-10");
-    assert.deepEqual(calls[0].body, [WORK, WORK, WORK, CARRY, MOVE]);
+    assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, CARRY, MOVE, MOVE]);
   });
 
   it("below RCL 5 the store must be completely full: 93.75 % does not open the surplus", () => {
@@ -1175,20 +1180,29 @@ describe("spawnManager", () => {
     // capacity, so the M5 valve opens and the surplus step runs even though
     // the store is not completely full - the first surplus role it can pay
     // is the upgrader (its walking body costs 500 at this capacity).
+    // 2026-11-13: at level 4+ with a capacity above
+    // HARVESTER_CREW_FULL_CAPACITY (450) each uncovered source keeps the
+    // full crew of five harvesters (UNCOVERED_SOURCE_HARVESTERS_FULL), so
+    // this two-source room needs ten of them before any surplus opens.
     addCreeps({
       "harvester-0": {role: "harvester", sourceId: "source-1"},
       "harvester-1": {role: "harvester", sourceId: "source-2"},
       "harvester-2": {role: "harvester", sourceId: "source-1"},
       "harvester-3": {role: "harvester", sourceId: "source-2"},
       "harvester-4": {role: "harvester", sourceId: "source-1"},
-      "upgrader-5": {role: "upgrader"},
-      "builder-6": {role: "builder"},
-      "builder-7": {role: "builder"},
-      "builder-8": {role: "builder"},
+      "harvester-5": {role: "harvester", sourceId: "source-2"},
+      "harvester-6": {role: "harvester", sourceId: "source-1"},
+      "harvester-7": {role: "harvester", sourceId: "source-2"},
+      "harvester-8": {role: "harvester", sourceId: "source-1"},
+      "harvester-9": {role: "harvester", sourceId: "source-2"},
+      "upgrader-10": {role: "upgrader"},
+      "builder-11": {role: "builder"},
+      "builder-12": {role: "builder"},
+      "builder-13": {role: "builder"},
     });
-    // Nine creeps already exist, so the next name uses counter value 9.
+    // Fourteen creeps already exist, so the next name uses counter value 14.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 9;
+    (global as any).Memory.creepCounter = 14;
     const {room, calls} = makeRoom({
       capacity: 800,
       available: 750,
@@ -1202,11 +1216,11 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
-    // Level 5 wants five harvesters and three builders while sites exist -
-    // all alive, so the surplus walk runs and takes the second upgrader
-    // (cap SURPLUS_UPGRADER_MAX = 5 at RCL 5).
+    // Level 5 wants five harvesters per uncovered source (ten), three
+    // builders while sites exist - all alive, so the surplus walk runs and
+    // takes the second upgrader (cap SURPLUS_UPGRADER_MAX = 5 at RCL 5).
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "upgrader-9");
+    assert.equal(calls[0].name, "upgrader-14");
     assert.equal(calls[0].memory.role, "upgrader");
   });
 

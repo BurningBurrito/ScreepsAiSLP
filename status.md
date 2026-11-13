@@ -1,7 +1,41 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state (2026-11-13, run 96, 06:20 start): the FAILED GATE of 06:05 is
+Current state (2026-11-13, run 97, 07:45 start): M5 improvement on the
+reverted M4-passing tree. The M5 baseline numbers (2026-11-13 gate run,
+referenced in the config comments; no report file survives): harvest
+8.56/tick (needs >= 13) and upgrade 0.70/tick (needs >= 1) over the last
+1,000 ticks, with the second source container site still unbuilt by the
+window end. Root causes this run addresses: (1) the shared pool-rung gate
+in getEnergy (src/utils/energy.ts) coupled builder AND upgrader pool
+access to BOTH hold-backs - once the surplus valve spawned a second
+upgrader (its cap is 5 from RCL 5), the upgraders' own rung closed and
+their 1-MOVE body crawled the pool round trip (4 ticks per tile on
+plain), capping upgrade at 0.70/tick, and the builder rung closed
+whenever the income crew oscillated above minimum, starving the
+second-container site (build 1.07/tick with ten builders would not
+finish cB before the window); (2) the uncovered source B kept only TWO
+harvesters (UNCOVERED_SOURCE_HARVESTERS_L4) at RCL 5, each a
+3-WORK/1-MOVE body that spends most of its life walking to the spawn
+with 100 energy - 2 walkers manage ~2.5-3/tick of the source's 10/tick
+refill; (3) the first miner spawned as 1-WORK at 300 energy and its
+replacement could not be 3-WORK before the 450 capacity arrived, and a
+dying miner left its source uncovered for the replacement's whole ~100
+tick walk (no early replacement). Fixes: the pool gate splits at
+CONTAINER_BOOST_MIN_LEVEL (upgrader takes the pool from the 50% floor
+with NO hold-backs - its own surplus must not cut off its fuel; the
+builder takes it only from the 90% surplus line, never the reserve);
+UNCOVERED_SOURCE_HARVESTERS_FULL = 5 at capacity >= 450
+(HARVESTER_CREW_FULL_CAPACITY); MINER_REPLACEMENT_LEAD_TICKS = 200 (the
+per-source miner minimum goes to 2 while a miner is inside its lead, and
+assignMinerSource frees the slot so the replacement goes to the SAME
+source); body rows: miner 300 [W,W,C,M], upgrader 400 [W,W,C,C,M,M]
+(2 MOVE instead of 1, same 400 cost), hauler 400 [C x4, M x4] and 450
+[C x6, M x3]. Unit suite updated for the two deliberate behavior changes
+(upgrader 400 body; the RCL 5 surplus-valve test now carries ten
+harvesters, the new per-source minimum). 192 unit passing, lint 0
+errors, build clean. Smoke and acceptance-m5 runs in this run.
+Previous state (2026-11-13, run 96, 06:20 start): the FAILED GATE of 06:05 is
 FIXED - the 06:05 gate failed the unit suite (150 passing, 1 failing:
 spawnManager "at RCL 5 spawns a surplus upgrader below the upgrader cap
 while sites exist", expected upgrader-10 got builder-10) plus a lint warning
@@ -334,6 +368,63 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-13 (run 97: M5 harvest/upgrade - full crews, decoupled pool gates, early miner replacement)
+- Baseline (2026-11-13 gate run; report file did not survive): M5
+  acceptance FAILED - harvest 8.56/tick (needs >= 13), upgrade 0.70/tick
+  (needs >= 1), second source-container site unbuilt by the window end.
+- Diagnosis (three independent bottlenecks, measured in the 06:28 M4
+  scorecard timeline and the code): (1) the pool rung of getEnergy
+  (src/utils/energy.ts) gated builder AND upgrader withdrawals on
+  upgraderBelowMinimum (hold-back); the surplus valve spawns upgraders up
+  to cap 5 at RCL 5, so once two upgraders exist the upgraders lose pool
+  access and their 1-MOVE body walks the pool round trip (2 fatigue per
+  part per step, 4 ticks per tile on plain) - 2x2 WORK from the pool is
+  at most ~1 progress/tick; the builder rung closed whenever
+  incomeBelowMinimum tripped (crew oscillates above the 2-per-source
+  minimum at RCL 5), so the second-container site (rung 4 of the builder
+  ladder) stalled at ~1.07 build/tick. (2) Source B (uncovered) ran TWO
+  harvesters at RCL 5 (UNCOVERED_SOURCE_HARVESTERS_L4): a 3-WORK/1-MOVE
+  walker harvests ~3/tick at the source then spends ~40 of its ~100-tick
+  round trip walking back - the source refills 10/tick, the rest is lost
+  at regeneration. (3) The first miner was 1-WORK (300 energy) and its
+  replacement could not be 3-WORK before the 450 capacity, and no
+  replacement spawned until the miner actually died (source uncovered
+  for the whole ~100-tick walk of the replacement).
+- Fix 1, pool gate split (src/utils/energy.ts): new upgraderPoolReady
+  (CONTAINER_BOOST_MIN_LEVEL and above: pool above the 50%
+  SURPLUS_POOL_FLOOR line, NO hold-backs - an upgrader's own surplus
+  must not cut off its own fuel; below: the old floor +
+  income/upgrader hold-backs) and builderPoolReady (same level: pool
+  above the 90% SURPLUS_VALVE line, no hold-backs; below: unchanged).
+  The upgrader rung uses upgraderPoolReady, the builder rung uses
+  builderPoolReady.
+- Fix 2, full harvester crew (src/config.ts, src/managers/spawnManager.ts):
+  UNCOVERED_SOURCE_HARVESTERS_FULL = 5 and HARVESTER_CREW_FULL_CAPACITY
+  = 450; countIncomeMinimum counts an uncovered source against the full
+  crew from RCL 5 with capacity >= 450 (the source's 10/tick refill
+  needs ~5 WORK to drain in time; below that the 2/2 split remains).
+- Fix 3, early miner replacement (src/managers/spawnManager.ts,
+  src/config.ts): MINER_REPLACEMENT_LEAD_TICKS = 200
+  (replacement spawn time 9 ticks + walk 50 + margin); the per-source
+  miner minimum is 2 while any living miner is inside its lead, so the
+  replacement starts ~200 ticks before the incumbent dies and walks the
+  path while the incumbent still harvests.
+- Fix 4, bodies (src/config.ts): miner 300-energy row [W,W,C,M] (was
+  [W,C,M] - covers the cold-boot wipe branch, which sizes a miner from
+  STORED energy instead of room capacity; 2 WORK instead of 1 keeps the
+  container cycling at 4/tick), upgrader 400 row
+  [W,W,C,C,M,M] (was [W,W,C,C,M] - 2 MOVE halves the walk period, same
+  400 cost); hauler 400 row [C x4, M x4] and 450 row [C x6, M x3]
+  (6 CARRY with 3 MOVE is road-mover; 1 MOVE per 2 CARRY is the
+  road-speed limit).
+- Tests: test/unit/spawnManager.test.ts updated for the two deliberate
+  behavior changes - the RCL 5 upgrader body test now expects
+  [W,W,C,C,M,M] (400), and the "surplus upgrader below the cap while
+  sites exist" test now carries ten harvesters (5 per source, the new
+  RCL 5 minimum) so the upgrader is still below minimum and the surplus
+  walk runs. 192 unit passing, lint 0 errors 0 warnings, build clean.
+- Smoke (500 ticks) and acceptance-m5 + acceptance-m4 regression:
+  in progress this run.
 ### 2026-11-13 (run 96, 06:20 start: gate fix - reverted the unfinished M5 experiment)
 - The 06:05 gate failed: unit 150 passing / 1 failing (spawnManager "at RCL
   5 spawns a surplus upgrader below the upgrader cap while sites exist":
@@ -1511,7 +1602,25 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **Run 96 (2026-11-13 06:20 start): failed-gate fix, then M5.**
+- **Run 97 (2026-11-13 07:45 start): M5 harvest/upgrade (takes over run 96's M5 steps).**
+  1. [x] Fix set: split pool gate (upgraderPoolReady/builderPoolReady,
+     src/utils/energy.ts), full harvester crew at RCL 5 (config +
+     countIncomeMinimum), early miner replacement (MINER_REPLACEMENT_
+     LEAD_TICKS, countMinerMinimum + assignMinerSource), body rows
+     (miner 300, upgrader 400 2-MOVE, hauler 400/450). 192 unit passing,
+     lint 0 errors, build clean. Committed.
+  2. [ ] Smoke 500 ticks (running, started 07:47) - watch: no regressions
+     in the early game (the split gate only changes behavior from RCL 5,
+     the crew/lead/body changes are level-gated or capacity-gated).
+  3. [ ] acceptance-m5 (5,000 ticks, ~25 min): harvest >= 13, upgrade
+     >= 1, idle-full <= 30 % over the last 1,000 ticks (window 4,000-
+     5,000); cB site must be PLACED (built or site) by then.
+  4. [ ] If m5 passes: acceptance-m4 regression (6,000 ticks), then
+     Part D (agent-test start all).
+  5. [ ] If m5 fails: analyze the new scorecard timeline (which source,
+     which role is the new cap), one focused iteration.
+- **Run 96 (2026-11-13 06:20 start): failed-gate fix, then M5 - steps 2-5
+  taken over by run 97.**
   Baseline (rule 07 A5): reports/latest.md = acceptance-m4, 2026-11-13
   06:28, commit d32a596 (== 9a39e9e code): harvested 12.72/tick, upgrade
   0.63/tick, construction 3.8/tick, spawn idle-while-full 71 %, CPU

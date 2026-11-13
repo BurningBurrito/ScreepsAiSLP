@@ -67,7 +67,7 @@
  *   is what lands RCL 2 inside the 500-tick smoke window.
  */
 
-import { CONTAINER_BOOST_MIN_LEVEL, CONTAINER_HAULER_SPARE, CONTROLLER_CONTAINER_RANGE, ENERGY_INCOME_FLOOR, MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_BUILDER_MAX_LOW, SURPLUS_SPAWN_ENERGY_RATIO, SURPLUS_UPGRADER_MAX, SURPLUS_UPGRADER_MAX_LOW, SURPLUS_VALVE_MIN_LEVEL, UNCOVERED_SOURCE_HARVESTERS_L4 } from "config";
+import { CONTAINER_BOOST_MIN_LEVEL, CONTAINER_HAULER_SPARE, CONTROLLER_CONTAINER_RANGE, ENERGY_INCOME_FLOOR, HARVESTER_CREW_FULL_CAPACITY, MINER_REPLACEMENT_LEAD_TICKS, MIN_CREEPS_BY_LEVEL, SURPLUS_BUILDER_MAX, SURPLUS_BUILDER_MAX_LOW, SURPLUS_SPAWN_ENERGY_RATIO, SURPLUS_UPGRADER_MAX, SURPLUS_UPGRADER_MAX_LOW, SURPLUS_VALVE_MIN_LEVEL, UNCOVERED_SOURCE_HARVESTERS_FULL, UNCOVERED_SOURCE_HARVESTERS_L4 } from "config";
 import { collectOccupiedTiles, countStandableTiles } from "utils/pickSource";
 
 /** Roles checked each tick, highest priority first (owner rule #5). The miner
@@ -121,6 +121,16 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
         [WORK, WORK, WORK, WORK, CARRY, CARRY, CARRY, MOVE], // 600
         [WORK, WORK, WORK, CARRY, CARRY, MOVE], // 450
         [WORK, WORK, CARRY, CARRY, MOVE], // 350
+        // M5 (2026-11-13): the first miner spawns while the room still
+        // holds 300 energy (the first source container is rung 1 and the
+        // extension floor is still under construction). The 1-WORK body
+        // below pulled 2 per tick from a source refilling at 10, and its
+        // life expired before the 450-energy 3-WORK replacement could be
+        // sized. Two WORK from the start puts that extra 1.7 energy per
+        // tick into the floor instead of the source, so the 450 capacity
+        // is reached before the first miner dies and its replacement is
+        // already 3-WORK.
+        [WORK, WORK, CARRY, MOVE], // 300
         [WORK, CARRY, MOVE], // 200
     ],
     harvester: [
@@ -176,14 +186,16 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
             // to 350, the balanced 350 body takes over.
             [WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE, MOVE, MOVE], // 750
             [WORK, WORK, WORK, CARRY, MOVE, MOVE, MOVE], // 500
-            // M5 (2026-11-12): fills the 400-energy gap between the 350
-            // and 500 rows - at RCL 4 (400 capacity) the walking upgrader
-            // used to stay on the 350 body and waste 50 of capacity. One
-            // MOVE is enough from RCL 4 on: the pool rung (rung 3 of
-            // getEnergy in utils/energy.ts) hands it energy a few tiles
-            // from the controller, so the long walk to the source
-            // container is gone and the spare part is WORK.
-            [WORK, WORK, WORK, CARRY, MOVE], // 400
+            // M5 (2026-11-13): replaced the 3-WORK / 1-MOVE body. One MOVE
+            // crawled the pool round trip on plain (4 non-MOVE parts cost
+            // 8 fatigue per step against 2 recovered per tick: one tile
+            // every 4 ticks), and the pool rung it was meant for sat
+            // closed by its own hold-backs whenever surplus upgraders
+            // existed (upgrade 0.70 per tick with four upgraders in the
+            // 2026-11-13 M5 gate). Two MOVE plus the 100-CARRY buffer: the
+            // walk is ~3x faster and each trip carries 100. Same 400-energy
+            // cost, so capacity sizing is unchanged.
+            [WORK, WORK, CARRY, CARRY, MOVE, MOVE], // 400
             [WORK, WORK, CARRY, MOVE, MOVE], // 350
             [WORK, WORK, CARRY, MOVE], // 300
             [WORK, CARRY, MOVE], // 200
@@ -202,6 +214,15 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
         [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE, MOVE], // 800
         [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE], // 550
         [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE], // 500
+        // M5 (2026-11-13): 450 capacity (three extensions) is where the M5
+        // window lives, and below the 500 row the hauler sat on the
+        // 200-energy 2-CARRY body (100 per trip, ~1.5 per tick on plain) -
+        // too slow to keep up with two 3-WORK miners (11.3 per tick into
+        // the containers). Six CARRY / three MOVE moves 300 per trip; the
+        // four-CARRY / four-MOVE row below keeps the 1-MOVE-per-2-CARRY
+        // plain speed (one step per tick) from 400 capacity up.
+        [CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE], // 450
+        [CARRY, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE, MOVE], // 400
         [CARRY, CARRY, MOVE, MOVE], // 200
     ],
     defender: [
@@ -382,6 +403,23 @@ function minCreepsPerRole(room: Room): Record<Role, number>
     const containers = room.find(FIND_STRUCTURES, {
         filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
     });
+    // Living miners with their memory assignment: the per-source split
+    // below needs to know which miner sits on which source and how many
+    // ticks it has left (the early replacement). Same Game.creeps lookup
+    // as getCreepCount (unit-test safe; no FIND_MY_CREEPS global).
+    const miners = Object.values(Game.creeps).filter(
+        (creep) => creep.memory.role === "miner",
+    );
+    // M5 (2026-11-13): at level 4+ an uncovered source keeps TWO harvesters
+    // (UNCOVERED_SOURCE_HARVESTERS_L4), and once the capacity buys the
+    // 450-energy harvester body (HARVESTER_CREW_FULL_CAPACITY) it keeps the
+    // FULL crew (UNCOVERED_SOURCE_HARVESTERS_FULL): the 2026-11-13 M5 gate
+    // harvested 8.56 per tick with the pair at tick 5,000 while the source
+    // refilled at 10. Below the capacity the pair stays - five 300-energy
+    // bodies would eat the bootstrap store before the extension floor
+    // exists.
+    const fullCrew = level >= CONTAINER_BOOST_MIN_LEVEL
+        && room.energyCapacityAvailable >= HARVESTER_CREW_FULL_CAPACITY;
     let minerCount = 0;
     let harvesterCount = 0;
     for (const source of sources)
@@ -389,13 +427,34 @@ function minCreepsPerRole(room: Room): Record<Role, number>
         const hasContainer = containers.some((container) => container.pos.getRangeTo(source) <= 1);
         if (hasContainer)
         {
-            minerCount += 1;
+            // One miner per container'd source - plus its replacement
+            // started early (MINER_REPLACEMENT_LEAD_TICKS) while the miner
+            // on it is about to expire: the replacement walks ~100+ ticks
+            // from the spawn to the container tile, so without the lead the
+            // source idles for the whole walk time between the old miner's
+            // death and the new miner's arrival. A source whose miner is
+            // gone counts one (the slot itself, no replacement to race).
+            const onSource = miners.filter((creep) => creep.memory.sourceId === source.id);
+            // ticksToLive is typed possibly-undefined but is always set on
+            // a live creep in-game; undefined counts as healthy.
+            const allHealthy = onSource.every(
+                (creep) => creep.ticksToLive === undefined
+                    || creep.ticksToLive >= MINER_REPLACEMENT_LEAD_TICKS,
+            );
+            if (onSource.length > 0 && !allHealthy)
+            {
+                minerCount += 2;
+            }
+            else
+            {
+                minerCount += 1;
+            }
         }
         else
         {
-            harvesterCount += level >= CONTAINER_BOOST_MIN_LEVEL
-                ? UNCOVERED_SOURCE_HARVESTERS_L4
-                : 1;
+            harvesterCount += fullCrew
+                ? UNCOVERED_SOURCE_HARVESTERS_FULL
+                : (level >= CONTAINER_BOOST_MIN_LEVEL ? UNCOVERED_SOURCE_HARVESTERS_L4 : 1);
         }
     }
 
@@ -635,7 +694,13 @@ function assignMinerSource(room: Room): string | undefined
     for (const name in Game.creeps)
     {
         const creep = Game.creeps[name];
-        if (creep.memory.role === "miner" && creep.memory.sourceId !== undefined)
+        // A miner that is within its replacement lead (MINER_REPLACEMENT_
+        // LEAD_TICKS) no longer blocks its own source's slot: the early
+        // replacement is assigned to the same source and takes the tile
+        // over before the old miner expires.
+        if (creep.memory.role === "miner" && creep.memory.sourceId !== undefined
+            && (creep.ticksToLive === undefined
+                || creep.ticksToLive >= MINER_REPLACEMENT_LEAD_TICKS))
         {
             if (counts[creep.memory.sourceId] !== undefined && counts[creep.memory.sourceId] >= 0)
             {
