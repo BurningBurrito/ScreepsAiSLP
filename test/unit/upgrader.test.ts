@@ -729,14 +729,15 @@ describe("upgrader", () => {
             // to the controller, so the pool is its cheapest fuel. Both
             // hold-backs must be off - with the one source container the
             // level-5 minimums are upgrader 1, miner 1, harvester 2
-            // (UNCOVERED_SOURCE_HARVESTERS_L4), hauler 2 (per-container
-            // plus CONTAINER_HAULER_SPARE) - and the pool above the 50%
-            // floor. Without the rung this test fails: the container wins.
+            // (UNCOVERED_SOURCE_HARVESTERS_L4), hauler 3 (per-container
+            // plus CONTAINER_HAULER_SPARE, two since 2026-11-12) - and the
+            // pool above the 50% floor. Without the rung this test fails:
+            // the container wins.
             const { creep, calls } = makeUpgrader({});
             const container = makeSourceContainer(1000);
             withContainer(creep, container);
             withPool(creep, makeSpawn(300), 5, 300);
-            // One upgrader and five income creeps are alive,
+            // One upgrader and six income creeps are alive,
             // so neither hold-back applies.
             global.Game.creeps = {
                 u1: {memory: {role: "upgrader", working: false}},
@@ -745,6 +746,7 @@ describe("upgrader", () => {
                 h2: {memory: {role: "harvester", working: false}},
                 l1: {memory: {role: "hauler", working: false}},
                 l2: {memory: {role: "hauler", working: false}},
+                l3: {memory: {role: "hauler", working: false}},
             } as any;
 
             runUpgrader(creep);
@@ -793,7 +795,8 @@ describe("upgrader", () => {
             withContainer(creep, container);
             withPool(creep, makeSpawn(300), 5, 100); // 100 < 150 (50% of 300)
             creep.pos = container.pos; // standing on the container's tile
-            // @ts-ignore : one upgrader and five income creeps are alive.
+            // @ts-ignore : one upgrader and six income creeps are alive
+            // (the hauler minimum is one plus the two spare haulers).
             global.Game.creeps = {
                 u1: {memory: {role: "upgrader", working: false}},
                 m1: {memory: {role: "miner", working: false}},
@@ -801,6 +804,7 @@ describe("upgrader", () => {
                 h2: {memory: {role: "harvester", working: false}},
                 l1: {memory: {role: "hauler", working: false}},
                 l2: {memory: {role: "hauler", working: false}},
+                l3: {memory: {role: "hauler", working: false}},
             } as any;
 
             runUpgrader(creep);

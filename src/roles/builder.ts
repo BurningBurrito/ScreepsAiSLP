@@ -67,17 +67,21 @@
  *
  *   Level 5 and up (M5): the whole queue above is replaced by the static-
  *   mining ladder (selectContainerFirstSite): first tower, the FIRST source
- *   container, the M4 extension floor (three finished extensions), the
- *   remaining source containers, the controller container, ramparts, the
- *   second tower, the remaining extensions, roads, and any leftover
- *   container site. The first source container is the one rung ahead of the
- *   floor (owner feedback v9.4, 2026-11-11: behind the floor it finished at
- *   ~tick 3,880 of the 5,000-tick M5 window and minedShare sat at 0.585 of
- *   0.6), and the floor gates everything after it - the 2026-11-10 run let
- *   the un-gated ladder spend the 15,000-energy container pair before the
- *   third extension and failed M4 at tick 6,000 (extensionsBuilt 1, capacity
- *   350 of 450). No container other than that first source container may
- *   take the crew before the floor is met - that is what the M4 window
+ *   container, the two-extension mini-floor, the remaining source
+ *   containers, the M4 three-extension floor completion, the controller
+ *   container, ramparts, the second tower, the remaining extensions,
+ *   roads, and any leftover container site. The first source container is
+ *   the one rung ahead of every floor (owner feedback v9.4, 2026-11-11:
+ *   behind the floor it finished at ~tick 3,880 of the 5,000-tick M5
+ *   window and minedShare sat at 0.585 of 0.6), and the second source
+ *   container runs ahead of the FULL floor but behind the two-extension
+ *   mini-floor (2026-11-12: the v9.4 order left it at 0 progress at tick
+ *   5,000 and minedShare failed at 0.402 of 0.6). The floors gate
+ *   everything after the containers - the 2026-11-10 run let the un-gated
+ *   ladder spend the 15,000-energy container pair before the third
+ *   extension and failed M4 at tick 6,000 (extensionsBuilt 1, capacity
+ *   350 of 450). No container other than the source containers may take
+ *   the crew before the floor is met - that is what the M4 window
  *   (6,000 ticks) needs to finish its three extensions and its 450
  *   capacity, and it still leaves the M5 window (5,000 ticks) its
  *   containers right after. Below level 5 the bootstrap order 1-6 owns
@@ -145,6 +149,7 @@ import {
     CONTAINER_BOOST_MIN_LEVEL,
     CONTAINER_BOOST_MIN_ROADS,
     CONTAINER_EARLY_MIN_LEVEL,
+    CONTAINER_MINI_FLOOR_EXTENSIONS,
     CONTROLLER_CONTAINER_RANGE,
 } from "config";
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
@@ -355,32 +360,42 @@ function selectBuildSite(creep: Creep, room: Room, excludeIds: ReadonlySet<strin
  *      colony into static mining - the stationary miner stands on it, and
  *      the M5 minedShare and upgradePerTick criteria both measure what
  *      happens once it exists. Only while no source container is finished
- *      yet; the second one waits for the floor like everything below it.
- *   3. The M4 extension FLOOR (rung 3): three finished extensions (450
- *      energy capacity), the most advanced first. It gates rungs 4-10:
- *      the un-gated container-first of 2026-11-10 spent the 15,000-energy
- *      source-plus-controller container pair before the third extension and
- *      failed M4 at tick 6,000 (extensionsBuilt 1, capacity 350 of 450) -
- *      the regression this rung order removes. While the floor is open the
- *      crew converges on ONE extension (shared room state, no memory,
- *      reset-proof, exactly like the bootstrap focus); with no extension
- *      site left the builder upgrades instead of idling - and never works
- *      a container before the floor, rung 2 (the first source container)
- *      being the single exception.
+ *      yet.
+ *   3. The two-extension MINI-floor (rung 3, 2026-11-12): while two
+ *      extensions are not finished, the crew converges on extension sites
+ *      (most advanced first) - and AHEAD of the second source container.
+ *      This is the M4/M5 compromise: the original v9.4 order made the
+ *      second container wait for the FULL three-extension floor, and the
+ *      2026-11-12 probe showed it at 0 progress at tick 5,000 of the M5
+ *      window (minedShare failed at 0.402 of 0.6). Two extensions (400 of
+ *      the 450 capacity) keeps M4's 450 capacity in reach inside its
+ *      6,000-tick window while the second container starts early.
  *   4. The remaining SOURCE container sites (rung 4): the second source's
- *      miner's tile follows the floor, ahead of the controller container.
- *   5. The CONTROLLER container (rung 5, idea d): within
+ *      miner's tile follows the mini-floor, ahead of the third extension
+ *      and the controller container.
+ *   5. The M4 extension FLOOR completion (rung 5): the third finished
+ *      extension (450 energy capacity), most advanced first. It gates
+ *      rungs 6-11: the un-gated container-first of 2026-11-10 spent the
+ *      15,000-energy source-plus-controller container pair before the
+ *      third extension and failed M4 at tick 6,000 (extensionsBuilt 1,
+ *      capacity 350 of 450) - the regression this rung order removes.
+ *      While the floor is open the crew converges on ONE extension
+ *      (shared room state, no memory, reset-proof, exactly like the
+ *      bootstrap focus); with no extension site left the builder upgrades
+ *      instead of idling - and never works a container before the floor,
+ *      rungs 2 and 4 (the source containers) being the exceptions.
+ *   6. The CONTROLLER container (rung 6, idea d): within
  *      CONTROLLER_CONTAINER_RANGE of the controller, it turns the
  *      upgrader's long harvest-to-controller round trip into a short hop,
  *      which is what the M5 "spend the spare energy" criterion measures.
- *   6. Ramparts (rung 6, peace mode only; defend/war already led with them
+ *   7. Ramparts (rung 7, peace mode only; defend/war already led with them
  *      in selectBuildSite).
- *   7. The SECOND tower (rung 7): its tile was reserved by the
+ *   8. The SECOND tower (rung 8): its tile was reserved by the
  *      construction manager, so the site exists whenever the first tower
  *      is done.
- *   8. The remaining extensions (rung 8), most advanced first.
- *   9. Roads (rung 9), and 10. any leftover container site (rung 10 -
- *      defensive: rungs 4 and 5 normally take them all).
+ *   9. The remaining extensions (rung 9), most advanced first.
+ *   10. Roads (rung 10), and 11. any leftover container site (rung 11 -
+ *      defensive: rungs 4 and 6 normally take them all).
  * @param creep The builder that needs a target
  * @param room The room to search
  * @param excludeIds Site ids to skip (the ERR_INVALID_TARGET retry passes
@@ -438,33 +453,54 @@ function selectContainerFirstSite(creep: Creep, room: Room, excludeIds: Readonly
         return creep.pos.findClosestByPath<ConstructionSite>(sourceContainerSites);
     }
 
-    // Rung 3: the M4 extension floor (three finished extensions, 450
-    // energy capacity) - and it is LOAD-BEARING. Every rung after the
-    // first source container (rungs 4-10) may not take the crew before
-    // the floor is met: on 2026-11-10 the un-gated ladder let the
-    // 15,000-energy container pair spend the crew first, and at the M4
-    // window's end (tick 6,000) only 1 of the 3 required extensions was
-    // finished (capacity 350 of 450) - the M4 regression. While the floor
-    // is open the crew converges on the most advanced extension, exactly
-    // like the bootstrap focus: shared room state, no memory, reset-proof.
-    // When no extension site is left the function returns null and the
-    // runBuilder phase above upgrades instead of idling - useful work, and
-    // never a container before the floor (the first source container, rung
-    // 2, is the single exception, by owner design).
-    if (extensionsBuilt < CONTAINER_BOOST_MIN_EXTENSIONS_L4)
+    // Rung 3: the two-extension MINI-floor (2026-11-12, the M4/M5
+    // compromise): while two extensions are not finished, the crew
+    // converges on extension sites BEFORE the second source container.
+    // The un-split three-extension floor of v9.4 held the crew on the
+    // third extension for the whole window, and the 2026-11-12 probe
+    // showed the second source container at 0 progress at tick 5,000 -
+    // source B stayed on bootstrap harvesters the whole time, and with it
+    // the minedShare criterion (0.402 of 0.6) and, once the controller
+    // container never got built, the upgradePerTick criterion. Two
+    // extensions (400 of the 450 capacity) leaves the third a short final
+    // sprint after the container, instead of a full-window stand-off.
+    // Same load-bearing semantics as the full floor: when no extension
+    // site is left the function returns null and the builder upgrades
+    // instead of idling - never a container before an open floor.
+    if (extensionsBuilt < CONTAINER_MINI_FLOOR_EXTENSIONS)
     {
         return focusExtension(extensionSites, room, creep);
     }
 
     // Rung 4: the remaining source container sites (rung 2 took the first
-    // one; the second source container follows the floor).
+    // one). After the mini-floor the second source container takes the
+    // crew AHEAD of the third extension and the controller container -
+    // its stationary miner is what the M5 minedShare criterion measures,
+    // and waiting for the full floor starved it (probe of 2026-11-12).
     if (sourceContainerSites.length > 0)
     {
         return creep.pos.findClosestByPath<ConstructionSite>(sourceContainerSites);
     }
 
-    // Rung 5: the controller container (idea d) - after the extension
-    // floor (rung 3), which M4's contract requires before any container
+    // Rung 5: finish the M4 extension floor (three finished extensions,
+    // 450 energy capacity) - and it is LOAD-BEARING. Every rung after the
+    // source containers may not take the crew before the floor is met: on
+    // 2026-11-10 the un-gated ladder let the 15,000-energy container pair
+    // spend the crew first, and at the M4 window's end (tick 6,000) only 1
+    // of the 3 required extensions was finished (capacity 350 of 450) -
+    // the M4 regression. While the floor is open the crew converges on
+    // the most advanced extension, exactly like the bootstrap focus:
+    // shared room state, no memory, reset-proof. When no extension site
+    // is left the function returns null and the runBuilder phase above
+    // upgrades instead of idling - useful work, and never a container
+    // before the floor (rungs 2 and 4 are the exceptions, by design).
+    if (extensionsBuilt < CONTAINER_BOOST_MIN_EXTENSIONS_L4)
+    {
+        return focusExtension(extensionSites, room, creep);
+    }
+
+    // Rung 6: the controller container (idea d) - after the extension
+    // floor (rung 5), which M4's contract requires before any container
     // takes the crew.
     const controller = room.controller;
     const controllerContainerSite = controller !== undefined
@@ -477,7 +513,7 @@ function selectContainerFirstSite(creep: Creep, room: Room, excludeIds: Readonly
         return controllerContainerSite;
     }
 
-    // Rung 6: ramparts (peace mode; defend/war led with them already).
+    // Rung 7: ramparts (peace mode; defend/war led with them already).
     const rampartSites = sitesOf(STRUCTURE_RAMPART);
     if (rampartSites.length > 0)
     {
@@ -491,27 +527,27 @@ function selectContainerFirstSite(creep: Creep, room: Room, excludeIds: Readonly
         )[0];
     }
 
-    // Rung 7: the second tower (its tile was reserved, so the site exists).
+    // Rung 8: the second tower (its tile was reserved, so the site exists).
     if (towerSites.length > 0)
     {
         return creep.pos.findClosestByPath<ConstructionSite>(towerSites);
     }
 
-    // Rung 8: the remaining extensions, most advanced first.
+    // Rung 9: the remaining extensions, most advanced first.
     const extensionFocus = focusExtension(extensionSites, room, creep);
     if (extensionFocus !== null)
     {
         return extensionFocus;
     }
 
-    // Rung 9: roads.
+    // Rung 10: roads.
     const roadSites = sitesOf(STRUCTURE_ROAD);
     if (roadSites.length > 0)
     {
         return creep.pos.findClosestByPath<ConstructionSite>(roadSites);
     }
 
-    // Rung 10: any leftover container site.
+    // Rung 11: any leftover container site.
     if (containerSites.length > 0)
     {
         return creep.pos.findClosestByPath<ConstructionSite>(containerSites);
@@ -609,18 +645,19 @@ export function containerFirstForRoom(room: Room): boolean
  *
  * At level CONTAINER_EARLY_MIN_LEVEL and up: the upgrader pauses only for
  * the FIRST tower (rung 1 of selectContainerFirstSite; the second tower is
- * rung 7, after the extension floor, by which time its WORK belongs to the
- * controller) and the FIRST extension (rung 3, while none is built yet).
- * The pause ends once the floor phase (extensions 2 and 3) takes over: the
- * M5 window measures controller progress in its last 1,000 ticks, so the
+ * rung 8, after the extension floor, by which time its WORK belongs to the
+ * controller) and the FIRST extension (the start of the rung-3 mini-floor,
+ * while none is built yet). The pause ends once the rest of the mini-floor
+ * and the floor completion phase (extensions 2 and 3) take over: the M5
+ * window measures controller progress in its last 1,000 ticks, so the
  * upgrader's WORK must not follow the crew onto extensions 2 and 3.
- * Container sites never pause it, including the first source container of
- * rung 2 (owner feedback 2026-11-10, cause 2, kept for v9.4): while a
- * source container or a controller container was still a site, the
+ * Container sites never pause it, including the source containers of
+ * rungs 2 and 4 (owner feedback 2026-11-10, cause 2, kept for v9.4): while
+ * a source container or a controller container was still a site, the
  * upgrader ran the builder role for the whole run (upgradePerTick 0 on the
  * 2026-11-09 M5 run, no energy in the controller container). The builder's
- * own ladder still builds those containers - selectBuildSite keeps rung 2
- * and rungs 4-5; only the upgrader's pause lost them.
+ * own ladder still builds those containers - selectBuildSite keeps rung 2,
+ * rung 4 and rung 6; only the upgrader's pause lost them.
  * @param room The room to search
  * @returns True when the upgrader should run the builder role instead
  */

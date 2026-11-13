@@ -547,10 +547,12 @@ describe("spawnManager", () => {
 
   it("adds one spare hauler on top of the per-container minimum at level 5", () => {
     // M5 (2026-11-10, owner feedback v9.2 idea a): from level 4 up the
-    // colony keeps CONTAINER_HAULER_SPARE (one) extra hauler beyond the
-    // one-per-source-container minimum. One container, one miner, the
-    // uncovered source covered by its two harvesters, and one hauler
-    // alive - the spare hauler is the only unmet minimum, so it spawns.
+    // colony keeps CONTAINER_HAULER_SPARE (two, raised from one for the
+    // 2026-11-12 build wave) extra haulers beyond the one-per-source-
+    // container minimum. One container, one miner, the uncovered source
+    // covered by its two harvesters, and one hauler alive - the spare
+    // hauler minimum is short, so the first of them spawns (one intent
+    // per tick, the rest wait).
     addCreeps({
       "miner-0": {role: "miner", sourceId: "source-1"},
       "upgrader-1": {role: "upgrader"},
@@ -858,7 +860,7 @@ describe("spawnManager", () => {
     // Both sources are covered and the minimums are met: the surplus step
     // takes the second upgrader - the room's fixed energy sink that keeps
     // the store cycling instead of sitting full (capped at
-    // SURPLUS_UPGRADER_MAX = 2 total).
+    // SURPLUS_UPGRADER_MAX = 5 total, raised from 3 on 2026-11-12).
     assert.equal(calls.length, 1);
     assert.equal(calls[0].name, "upgrader-3");
     assert.equal(calls[0].memory.role, "upgrader");
@@ -918,11 +920,13 @@ describe("spawnManager", () => {
       "upgrader-2": {role: "upgrader"},
       "upgrader-3": {role: "upgrader"},
       "upgrader-4": {role: "upgrader"},
-      "builder-5": {role: "builder"},
+      "upgrader-5": {role: "upgrader"},
+      "upgrader-6": {role: "upgrader"},
+      "builder-7": {role: "builder"},
     });
-    // Six creeps already exist, so the next name uses counter value 6.
+    // Eight creeps already exist, so the next name uses counter value 8.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 6;
+    (global as any).Memory.creepCounter = 8;
     const {room, calls} = makeRoom({
       capacity: 300,
       available: 300,
@@ -935,13 +939,13 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
-    // Sources covered, three upgraders alive (the cap - SURPLUS_UPGRADER_MAX
-    // raised from 2 to 3 for the M5 upgrade rate, 2026-11-12), one builder
+    // Sources covered, five upgraders alive (the cap - SURPLUS_UPGRADER_MAX
+    // raised from 3 to 5 for the M5 upgrade rate, 2026-11-12), one builder
     // (the minimum): the surplus step adds a second builder because
-    // construction sites exist (capped at SURPLUS_BUILDER_MAX = 5 total -
-    // raised from three for the M5 static-mining transition, 2026-11-10).
+    // construction sites exist (capped at SURPLUS_BUILDER_MAX = 10 total -
+    // raised from five for the M5 static-mining transition, 2026-11-12).
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "builder-6");
+    assert.equal(calls[0].name, "builder-8");
     assert.equal(calls[0].memory.role, "builder");
   });
 
@@ -950,7 +954,7 @@ describe("spawnManager", () => {
     // the surplus walk (harvester -> upgrader -> builder) spends the idle
     // energy on a second upgrader before a second builder, because the
     // controller progress is the room's standing 2-per-tick energy sink
-    // (SURPLUS_UPGRADER_MAX = 3 since the M5 upgrade-rate work, 2026-11-12).
+    // (SURPLUS_UPGRADER_MAX = 5 since the M5 upgrade-rate work, 2026-11-12).
     addCreeps({
       "harvester-0": {role: "harvester", sourceId: "source-1"},
       "harvester-1": {role: "harvester", sourceId: "source-2"},
@@ -976,6 +980,73 @@ describe("spawnManager", () => {
     assert.equal(calls[0].name, "upgrader-4");
     assert.equal(calls[0].memory.role, "upgrader");
     assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, MOVE]);
+  });
+
+  it("spawns a surplus builder with the 4-WORK body once the capacity reaches 550", () => {
+    // Same setup as the surplus-builder test above, but the room's capacity
+    // is the RCL 5 value (550): the sizing budget (the room's capacity,
+    // owner rule #5) now buys the full 4-WORK body - 200 build per tick for
+    // the static-mining build wave (2026-11-12). The body must cost exactly
+    // 550 or it would never spawn in the M5 window.
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "upgrader-2": {role: "upgrader"},
+      "upgrader-3": {role: "upgrader"},
+      "upgrader-4": {role: "upgrader"},
+      "upgrader-5": {role: "upgrader"},
+      "upgrader-6": {role: "upgrader"},
+      "builder-7": {role: "builder"},
+    });
+    // Eight creeps already exist, so the next name uses counter value 8.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 8;
+    const {room, calls} = makeRoom({
+      capacity: 550,
+      available: 550,
+      sites: 2,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "builder-8");
+    assert.deepEqual(calls[0].body, [WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE]);
+  });
+
+  it("spawns a surplus upgrader with the 3-WORK body at the 400 capacity", () => {
+    // At the RCL 4 capacity (400) the 400-energy row fills the gap between
+    // the 350 and 500 walking bodies: the upgrader takes the whole capacity
+    // (2026-11-12). The body must cost exactly 400 or the row would only
+    // start being picked at 450 capacity.
+    addCreeps({
+      "harvester-0": {role: "harvester", sourceId: "source-1"},
+      "harvester-1": {role: "harvester", sourceId: "source-2"},
+      "upgrader-2": {role: "upgrader"},
+      "builder-3": {role: "builder"},
+    });
+    // Four creeps already exist, so the next name uses counter value 4.
+    // @ts-ignore : write into the game globals
+    (global as any).Memory.creepCounter = 4;
+    const {room, calls} = makeRoom({
+      capacity: 400,
+      available: 400,
+      sites: 2,
+      containers: 0,
+      spawning: null,
+      spawnResult: OK,
+      sources: [{id: "source-1"}, {id: "source-2"}],
+    });
+
+    checkAndSpawn(room);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "upgrader-4");
+    assert.deepEqual(calls[0].body, [WORK, WORK, WORK, CARRY, MOVE]);
   });
 
   it("does not spawn a surplus creep while the store is not full", () => {
@@ -1045,15 +1116,22 @@ describe("spawnManager", () => {
       "upgrader-2": {role: "upgrader"},
       "upgrader-3": {role: "upgrader"},
       "upgrader-4": {role: "upgrader"},
-      "builder-5": {role: "builder"},
-      "builder-6": {role: "builder"},
+      "upgrader-5": {role: "upgrader"},
+      "upgrader-6": {role: "upgrader"},
       "builder-7": {role: "builder"},
       "builder-8": {role: "builder"},
       "builder-9": {role: "builder"},
+      "builder-10": {role: "builder"},
+      "builder-11": {role: "builder"},
+      "builder-12": {role: "builder"},
+      "builder-13": {role: "builder"},
+      "builder-14": {role: "builder"},
+      "builder-15": {role: "builder"},
+      "builder-16": {role: "builder"},
     });
-    // Ten creeps already exist, so the next name uses counter value 10.
+    // Seventeen creeps already exist, so the next name uses counter value 17.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 10;
+    (global as any).Memory.creepCounter = 17;
     const {room, calls} = makeRoom({
       capacity: 300,
       available: 300,
@@ -1066,11 +1144,11 @@ describe("spawnManager", () => {
 
     checkAndSpawn(room);
 
-    // Sources covered, three upgraders (the cap, raised from 2 to 3 for the
-    // M5 upgrade rate, 2026-11-12), five builders (the cap - raised from
-    // three for the M5 static-mining transition, 2026-11-10): the surplus
-    // step has nothing left to spend the idle energy on, so the spawn
-    // idles - correct now, because every sink is busy.
+    // Sources covered, five upgraders (the cap, raised from 3 to 5 for the
+    // M5 upgrade rate, 2026-11-12), ten builders (the cap - raised from
+    // five to ten for the M5 build wave, 2026-11-12): the surplus step has
+    // nothing left to spend the idle energy on, so the spawn idles -
+    // correct now, because every sink is busy.
     assert.equal(calls.length, 0);
   });
 

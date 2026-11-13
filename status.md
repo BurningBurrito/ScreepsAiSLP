@@ -277,6 +277,49 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-13 (run 94: M5 stagnation fix - mini-floor, caps, bodies)
+- The M5 probe (probe-m5-creeps, reports/latest.md) showed the colony
+  stuck at RCL 5/802 at 5,000 ticks: 82 % creep idle because the 3
+  upgraders drained the store faster than the 90 % valve re-opened it
+  and there was nothing left to build (source B's container had not
+  started). Fix, one cause per file:
+  - src/roles/builder.ts: new mini-floor rung in
+    selectContainerFirstSite - after exactly
+    CONTAINER_MINI_FLOOR_EXTENSIONS (2, src/config.ts) finished
+    extensions the builder starts the second source's container, one
+    rung earlier than the old 3-extension threshold. Level 5 gate
+    unchanged, so M1-M4 (bootstrap order) are untouched.
+  - src/config.ts: SURPLUS_UPGRADER_MAX 3 -> 5, SURPLUS_BUILDER_MAX
+    5 -> 10, CONTAINER_HAULER_SPARE 1 -> 2, new
+    CONTAINER_MINI_FLOOR_EXTENSIONS = 2.
+  - src/managers/spawnManager.ts: 4-WORK builder row (200 build per
+    tick) and a 3-WORK walking-upgrader row for the 400 capacity.
+  - Cost-label audit (node check of every "body, // cost" label) found
+    4 mismatches: the two new rows were mislabeled (a 700-energy body
+    labeled 550 could never spawn in the M4/M5 window; a 450-energy
+    body labeled 400 left the 400-449 capacity band on the old 2-WORK
+    row) plus two pre-existing defender rows (520 labeled 620, 390
+    labeled 420). Fixed: builder row [W,W,W,W,C,M,M] = 550, upgrader
+    row [W,W,W,C,M] = 400 (one MOVE is enough from RCL 4 on - the pool
+    rung of getEnergy hands it energy a few tiles from the controller),
+    defender labels corrected to 520/390. All labels now match
+    BODYPART_COST sums.
+  - Tests: test/unit/builder.test.ts (mini-floor rung),
+    test/unit/spawnManager.test.ts (caps + two new body-cost tests:
+    the surplus builder takes [W,W,W,W,C,M,M] at 550 capacity, the
+    surplus upgrader takes [W,W,W,C,M] at 400 capacity),
+    test/unit/upgrader.test.ts (new caps). 188 unit passing, lint 0
+    errors, build clean.
+  - Smoke (500 ticks, twice: before and after the body fix): EXIT 0
+    both times, scorecards bit-identical (harvested 4.34/tick,
+    upgraded 0.5/tick, construction 0.05/tick, creep idle 16 %, CPU
+    1.77/24.78, RCL 1/100, 0 console errors) - the new rows are
+    provably a no-op in the 300-capacity smoke world.
+  - M4 acceptance (6000 ticks, baseline f3a6863 in
+    reports/acceptance-m4.md: harvested 14.02/tick, upgrade 0.45/tick,
+    construction 1.46/tick, spawn idle-while-full 92 %, creep idle 45
+    %, CPU 2.43/29.38, RCL 5/1254, 12 creeps) in progress; M5
+    acceptance (5000 ticks) next.
 ### 2026-11-12 (run 93: the failed gate - stale unit tests)
 - LAST_GATE.md: the unit step failed (178 passing, 6 failing) after this
   morning's config changes (877cba7): SURPLUS_UPGRADER_MAX 2 -> 3 made the
@@ -1318,6 +1361,37 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **Run 94 (2026-11-12): M5 stagnation fix (mini-floor, caps, bodies).**
+  The M5 probe showed the colony stuck at RCL 5/802: 82 % creep idle
+  because 3 upgraders drained the store faster than the 90 % valve
+  re-opened it and there was nothing left to build (source B's
+  container had not started).
+  1. [x] Builder mini-floor in src/roles/builder.ts: after exactly 2
+     extensions (CONTAINER_MINI_FLOOR_EXTENSIONS in src/config.ts) the
+     builder starts the second source's container - one rung earlier
+     than the old 3-extension threshold that left M5 without work.
+  2. [x] Caps in src/config.ts: SURPLUS_UPGRADER_MAX 3 -> 5,
+     SURPLUS_BUILDER_MAX 5 -> 10, CONTAINER_HAULER_SPARE 1 -> 2.
+  3. [x] Bodies in src/managers/spawnManager.ts: 4-WORK builder row
+     and 3-WORK 400-energy walking-upgrader row.
+  4. [x] Unit tests: builder.test.ts, spawnManager.test.ts (incl. two
+     new body-cost tests), upgrader.test.ts. 188 passing, lint 0
+     errors, build clean.
+  5. [x] Cost-label audit: a node check of every "body, // cost" label
+     found 4 mismatches - the two new rows (700 labeled 550, 450
+     labeled 400) plus two pre-existing defender rows (520 labeled
+     620, 390 labeled 420). Fixed: builder row is now [W,W,W,W,C,M,M]
+     = 550 (the RCL 5 capacity buys it; the old 10-part body could
+     never spawn in the M4/M5 window), upgrader row is [W,W,W,C,M] =
+     400 (one MOVE is enough from RCL 4 on - the pool rung hands it
+     energy a few tiles from the controller), defender labels
+     corrected to 520/390. All labels now match BODYPART_COST sums.
+  6. [x] Smoke re-run after the body fix: EXIT 0, scorecard
+     bit-identical to the pre-fix smoke (a no-op at 300 capacity).
+  7. [ ] M4 acceptance (in progress - canary for the RCL 4 economy the
+     body rows and caps change), then M5 acceptance.
+  8. [ ] Commit with the scorecard before -> after; then status.md/
+     README/blog per the run procedure.
 - **Run 93 (2026-11-12): failed gate, then the M5 decision.** The gate's
   unit step failed (178 passing, 6 failing) - the 877cba7 changes
   (SURPLUS_UPGRADER_MAX 2 -> 3, new SURPLUS_SPAWN_ENERGY_RATIO 0.9 valve,

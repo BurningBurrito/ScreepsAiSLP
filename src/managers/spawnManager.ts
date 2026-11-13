@@ -130,6 +130,11 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
         [WORK, CARRY, MOVE], // 200
     ],
     builder: [
+        // M5 (2026-11-12): the RCL 5 capacity (550) buys the full
+        // 4-WORK body - 200 build per tick at RCL 4+ - which is what the
+        // static-mining build wave (tower, two source containers, the
+        // extension floor, controller container) needs inside its window.
+        [WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE], // 550
         [WORK, WORK, WORK, CARRY, CARRY, MOVE, MOVE], // 500
         [WORK, WORK, WORK, CARRY, MOVE], // 400
         [WORK, WORK, CARRY, MOVE], // 300
@@ -164,6 +169,14 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
             // to 350, the balanced 350 body takes over.
             [WORK, WORK, WORK, WORK, WORK, CARRY, MOVE, MOVE, MOVE, MOVE], // 750
             [WORK, WORK, WORK, CARRY, MOVE, MOVE, MOVE], // 500
+            // M5 (2026-11-12): fills the 400-energy gap between the 350
+            // and 500 rows - at RCL 4 (400 capacity) the walking upgrader
+            // used to stay on the 350 body and waste 50 of capacity. One
+            // MOVE is enough from RCL 4 on: the pool rung (rung 3 of
+            // getEnergy in utils/energy.ts) hands it energy a few tiles
+            // from the controller, so the long walk to the source
+            // container is gone and the spare part is WORK.
+            [WORK, WORK, WORK, CARRY, MOVE], // 400
             [WORK, WORK, CARRY, MOVE, MOVE], // 350
             [WORK, WORK, CARRY, MOVE], // 300
             [WORK, CARRY, MOVE], // 200
@@ -190,8 +203,8 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
         // Bodies are ATTACK+MOVE pairs, as many pairs as the energy allows:
         // one MOVE per ATTACK part reaches a hostile on plain ground (owner
         // feedback 2026-11-02: bodies must match the job).
-        [ATTACK, ATTACK, ATTACK, ATTACK, MOVE, MOVE, MOVE, MOVE], // 620
-        [ATTACK, ATTACK, ATTACK, MOVE, MOVE, MOVE], // 420
+        [ATTACK, ATTACK, ATTACK, ATTACK, MOVE, MOVE, MOVE, MOVE], // 520
+        [ATTACK, ATTACK, ATTACK, MOVE, MOVE, MOVE], // 390
         [ATTACK, ATTACK, MOVE, MOVE], // 260
         [ATTACK, MOVE], // 130
     ],
@@ -412,11 +425,12 @@ function minCreepsPerRole(room: Room): Record<Role, number>
         // container. A single hauler cannot serve 30 extensions, 2 towers
         // and the spawn (owner feedback 2026-11-04).
         // M5 (2026-11-10, owner feedback v9.2 idea a): from level 4 up the
-        // colony also keeps CONTAINER_HAULER_SPARE (one) extra hauler on
-        // top of the per-container minimum: a hauler that dies is only
-        // replaced on the next spawn tick, and at RCL 5 a dead hauler is
-        // the single point of failure between the source containers and
-        // every consumer - the containers drop while it is out.
+        // colony also keeps CONTAINER_HAULER_SPARE (two, raised from one
+        // for the 2026-11-12 build wave) extra haulers on top of the
+        // per-container minimum: a hauler that dies is only replaced on
+        // the next spawn tick, and at RCL 5 a dead hauler is the single
+        // point of failure between the source containers and every
+        // consumer - the containers drop while it is out.
         hauler: minerCount > 0
             ? Math.max(row.hauler, minerCount)
                 + (level >= CONTAINER_BOOST_MIN_LEVEL ? CONTAINER_HAULER_SPARE : 0)
@@ -888,32 +902,6 @@ export function checkAndSpawn(room: Room): void
     const minimumsMet = SPAWN_ORDER.every((role) => getCreepCount(role) >= minimums[role]);
     const valveOpen = energyAvailable >= room.energyCapacityAvailable * SURPLUS_SPAWN_ENERGY_RATIO;
 
-    // TEMP DEBUG (M5 valve investigation) - remove before commit. Logs the
-    // full valve decision every 100 ticks, whatever the outcome.
-    if (Game.time % 100 === 0)
-    {
-        const srcCounts: Record<string, number> = {};
-        for (const source of room.find(FIND_SOURCES_ACTIVE))
-        {
-            srcCounts[source.id] = 0;
-        }
-        for (const name in Game.creeps)
-        {
-            const creep = Game.creeps[name];
-            if (creep.memory.role === "harvester" && creep.memory.sourceId !== undefined && srcCounts[creep.memory.sourceId] !== undefined)
-            {
-                srcCounts[creep.memory.sourceId] += 1;
-            }
-        }
-        console.log(
-            `dbgValve: t=${Game.time} e=${energyAvailable}/${room.energyCapacityAvailable} ratio=${SURPLUS_SPAWN_ENERGY_RATIO}`
-            + ` c:m${getCreepCount("miner")}h${getCreepCount("harvester")}b${getCreepCount("builder")}u${getCreepCount("upgrader")}d${getCreepCount("defender")}hl${getCreepCount("hauler")}`
-            + ` min:m${minimums.miner}h${minimums.harvester}b${minimums.builder}u${minimums.upgrader}d${minimums.defender}hl${minimums.hauler}`
-            + ` met=${String(minimumsMet)} valve=${String(valveOpen)} sites=${room.find(FIND_CONSTRUCTION_SITES).length} mode=${Memory.mode ?? "peace"}`
-            + ` srcs=${Object.entries(srcCounts).map(([id, n]) => id.slice(-2) + ":h" + String(n)).join(" ")}`
-        );
-    }
-
     if (minimumsMet && valveOpen)
     {
         spawnSurplus(room, spawn, energyAvailable, attempted);
@@ -931,12 +919,6 @@ export function checkAndSpawn(room: Room): void
  */
 function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number, attempted: Set<Role>): void
 {
-    // TEMP DEBUG (M5 valve investigation) - remove before commit.
-    const dbg = Game.time % 100 === 0;
-    if (dbg)
-    {
-        console.log(`dbgSurplus: t=${Game.time} called e=${energyAvailable}`);
-    }
     for (const role of SURPLUS_ORDER)
     {
         if (attempted.has(role))
@@ -948,10 +930,6 @@ function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number
             // One per uncovered source, never more: sourceWithoutHarvester
             // returns undefined while every source already has a harvester.
             const source = sourceWithoutHarvester(room);
-            if (dbg)
-            {
-                console.log(`dbgSurplus: t=${Game.time} harvester src=${source === undefined ? "none" : source.id.slice(-2)}`);
-            }
             if (source !== undefined && trySpawnRole(room, spawn, role, energyAvailable, source.id))
             {
                 return;
@@ -959,10 +937,6 @@ function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number
         }
         else if (role === "upgrader")
         {
-            if (dbg)
-            {
-                console.log(`dbgSurplus: t=${Game.time} upgrader count=${getCreepCount(role)} max=${SURPLUS_UPGRADER_MAX}`);
-            }
             if (getCreepCount(role) < SURPLUS_UPGRADER_MAX && trySpawnRole(room, spawn, role, energyAvailable))
             {
                 return;
@@ -973,10 +947,6 @@ function spawnSurplus(room: Room, spawn: StructureSpawn, energyAvailable: number
             // Only while there is something to build; the minimum crew
             // already covers the baseline builder.
             const hasSites = room.find(FIND_CONSTRUCTION_SITES).length > 0;
-            if (dbg)
-            {
-                console.log(`dbgSurplus: t=${Game.time} builder sites=${String(hasSites)} count=${getCreepCount(role)} max=${SURPLUS_BUILDER_MAX}`);
-            }
             if (hasSites && getCreepCount(role) < SURPLUS_BUILDER_MAX && trySpawnRole(room, spawn, role, energyAvailable))
             {
                 return;
