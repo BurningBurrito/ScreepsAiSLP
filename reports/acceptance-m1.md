@@ -1,6 +1,6 @@
-# Scorecard: acceptance-m1 · 2026-11-13 04:15 · 801 ticks · commit 9a39e9e
+# Scorecard: acceptance-m1 · 2026-11-13 05:30 · 801 ticks · commit d32a596
 
-| Metric (last 320 ticks unless noted) | This run | Previous run (2026-11-13 02:08, b9a4099) | Change |
+| Metric (last 320 ticks unless noted) | This run | Previous run (2026-11-13 04:15, 9a39e9e) | Change |
 | --- | --- | --- | --- |
 | Energy harvested / tick | 4.63 | 4.63 | 0 |
 | Energy wasted at source regeneration (sum) | 4,584 | 4,584 | 0 |
@@ -10,7 +10,7 @@
 | Spawn idle while energy is full | 0 % | 0 % | 0 pts |
 | Spawn busy | 3 % | 3 % | 0 pts |
 | Creep ticks idle (no action, no move for 5+ ticks) | 17 % | 17 % | 0 pts |
-| CPU / tick (average, max) | 1.87, 21.2 | 1.88, 21.04 | -0.01 |
+| CPU / tick (average, max) | 1.82, 21.1 | 1.87, 21.2 | -0.05 |
 | RCL / progress at end (whole run) | 2 / 0 | 2 / 0 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | 720 / - | 720 / - | 0 |
 | Energy harvested (whole run) | 3,276 | 3,276 | 0 |
@@ -29,12 +29,12 @@ Bot console: 19 lines, 0 with errors (reports/acceptance-m1-console.log). Probe 
 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
-      100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.5
+      100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.4
       200 | builder 1, harvester 2                   |   3.7 |     0 |   196/300 | idle | 1.3
-      300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.4
+      300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.3
       400 | builder 1, harvester 2, upgrader 2       |   3.7 |   0.5 |   263/300 | idle | 1.5
       500 | builder 2, harvester 2, upgrader 2       |   4.7 |   0.5 |   142/300 | idle | 1.8
-      600 | builder 2, harvester 2, upgrader 2       |   4.2 |   0.1 |   142/300 | idle | 1.9
-      700 | builder 2, harvester 2, upgrader 2       |   4.6 |   0.5 |   142/300 | idle | 1.9
-      800 | builder 2, harvester 3, upgrader 2       |   4.9 |   0.4 |   241/300 | idle | 1.8
-      801 | builder 2, harvester 3, upgrader 2       |     4 |     0 |   292/300 | idle | 2.4
+      600 | builder 2, harvester 2, upgrader 2       |   4.2 |   0.1 |   142/300 | idle | 1.8
+      700 | builder 2, harvester 2, upgrader 2       |   4.6 |   0.5 |   142/300 | idle | 1.8
+      800 | builder 2, harvester 3, upgrader 2       |   4.9 |   0.4 |   241/300 | idle | 1.7
+      801 | builder 2, harvester 3, upgrader 2       |     4 |     0 |   292/300 | idle | 2.3
