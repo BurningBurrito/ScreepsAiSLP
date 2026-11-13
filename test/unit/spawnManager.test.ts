@@ -1108,21 +1108,30 @@ describe("spawnManager", () => {
     // every 4 ticks) and the M5 gate measured 0.70 upgrade/tick with four
     // upgraders on it. Two MOVE parts plus the CARRY buffer at the same
     // 400-energy cost.
+    // M4/M5 fix (2026-11-13): the full harvester crew now starts at the
+    // 400 capacity (HARVESTER_CREW_FULL_CAPACITY), so each of the two
+    // uncovered sources must keep five harvesters before the surplus walk
+    // runs.
     addCreeps({
       "harvester-0": {role: "harvester", sourceId: "source-1"},
       "harvester-1": {role: "harvester", sourceId: "source-2"},
       "harvester-2": {role: "harvester", sourceId: "source-1"},
       "harvester-3": {role: "harvester", sourceId: "source-2"},
       "harvester-4": {role: "harvester", sourceId: "source-1"},
-      "upgrader-5": {role: "upgrader"},
-      "upgrader-6": {role: "upgrader"},
-      "builder-7": {role: "builder"},
-      "builder-8": {role: "builder"},
-      "builder-9": {role: "builder"},
+      "harvester-5": {role: "harvester", sourceId: "source-2"},
+      "harvester-6": {role: "harvester", sourceId: "source-1"},
+      "harvester-7": {role: "harvester", sourceId: "source-2"},
+      "harvester-8": {role: "harvester", sourceId: "source-1"},
+      "harvester-9": {role: "harvester", sourceId: "source-2"},
+      "upgrader-10": {role: "upgrader"},
+      "upgrader-11": {role: "upgrader"},
+      "builder-12": {role: "builder"},
+      "builder-13": {role: "builder"},
+      "builder-14": {role: "builder"},
     });
-    // Ten creeps already exist, so the next name uses counter value 10.
+    // Fifteen creeps already exist, so the next name uses counter value 15.
     // @ts-ignore : write into the game globals
-    (global as any).Memory.creepCounter = 10;
+    (global as any).Memory.creepCounter = 15;
     const {room, calls} = makeRoom({
       capacity: 400,
       available: 400,
@@ -1137,7 +1146,7 @@ describe("spawnManager", () => {
     checkAndSpawn(room);
 
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].name, "upgrader-10");
+    assert.equal(calls[0].name, "upgrader-15");
     assert.deepEqual(calls[0].body, [WORK, WORK, CARRY, CARRY, MOVE, MOVE]);
   });
 
@@ -1181,7 +1190,7 @@ describe("spawnManager", () => {
     // the store is not completely full - the first surplus role it can pay
     // is the upgrader (its walking body costs 500 at this capacity).
     // 2026-11-13: at level 4+ with a capacity above
-    // HARVESTER_CREW_FULL_CAPACITY (450) each uncovered source keeps the
+    // HARVESTER_CREW_FULL_CAPACITY (400) each uncovered source keeps the
     // full crew of five harvesters (UNCOVERED_SOURCE_HARVESTERS_FULL), so
     // this two-source room needs ten of them before any surplus opens.
     addCreeps({

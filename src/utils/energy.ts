@@ -69,7 +69,6 @@ import {
     CONTAINER_BOOST_MIN_LEVEL,
     CONTROLLER_CONTAINER_RANGE,
     MIN_CONTAINER_WITHDRAW_ENERGY,
-    SURPLUS_SPAWN_ENERGY_RATIO,
 } from "config";
 import { incomeBelowMinimum, upgraderBelowMinimum } from "managers/spawnManager";
 import { moveToToward } from "utils/movement";
@@ -187,37 +186,20 @@ export function getEnergy(creep: Creep, role: EnergyRole): EnergyOutcome
     }
 
     // Pool-rung gate, shared by the upgrader (rung 3) and the builder
-    // (rung 5).
-    //
-    // Below CONTAINER_BOOST_MIN_LEVEL both keep the historical gate: the
-    // 50 % floor plus both hold-backs, which protect the RCL 1-3 economy
-    // where a 300-energy replacement body is the room's whole capacity and
-    // income is 2-4 per tick (the M3 death spiral of 2026-11-11).
-    //
-    // From CONTAINER_BOOST_MIN_LEVEL up the static-mining income is fast
-    // enough (6+ per tick) that the hold-backs become the bottleneck -
-    // measured in the 2026-11-13 M5 gate: once the surplus valve spawned a
-    // second upgrader the upgraders' own pool rung closed (upgrade
-    // 0.70/tick with four upgraders alive), and the builder rung closed
-    // whenever the income crew oscillated above its minimum (build
-    // 1.07/tick with ten builders - the second source container would
-    // have finished around tick 9,000, long after the M5 window). So the
-    // builder takes the pool only from ABOVE the surplus line
-    // (SURPLUS_SPAWN_ENERGY_RATIO - the same 90 % the surplus valve uses:
-    // true excess, never the reserve), and the upgrader - the surplus
-    // role - takes it from the plain floor, because its own surplus must
-    // not cut off its own fuel.
-    const level = room.controller !== undefined ? room.controller.level : 1;
-    const poolAboveFloor = room.energyAvailable >= room.energyCapacityAvailable * BUILDER_WITHDRAW_FRACTION;
+    // (rung 5). The floor and both hold-backs keep a capacity-sized
+    // replacement spawnable (see the file header); the upgrader's rung
+    // additionally needs CONTAINER_BOOST_MIN_LEVEL so the M1-M3 economy
+    // (upgrader self-harvests when the container is a trickle) is
+    // untouched. The 2026-11-13 M5 attempt (ae46644) replaced this for
+    // level 4+ rooms with a 90 % no-hold-back gate for the builder: it
+    // starved the pool of the builder crew and dropped the M4 extension
+    // count from 3 to 2 (run 97 gate), so the historical gate is back.
     const poolReady = !upgraderBelowMinimum(room)
         && !incomeBelowMinimum(room)
-        && poolAboveFloor;
-    const upgraderPoolReady = level >= CONTAINER_BOOST_MIN_LEVEL
-        ? poolAboveFloor
-        : false;
-    const builderPoolReady = level >= CONTAINER_BOOST_MIN_LEVEL
-        ? room.energyAvailable >= room.energyCapacityAvailable * SURPLUS_SPAWN_ENERGY_RATIO
-        : poolReady;
+        && room.energyAvailable >= room.energyCapacityAvailable * BUILDER_WITHDRAW_FRACTION;
+    const upgraderPoolReady = poolReady
+        && room.controller !== undefined
+        && room.controller.level >= CONTAINER_BOOST_MIN_LEVEL;
 
     // 3. Upgrader only (RCL >= CONTAINER_BOOST_MIN_LEVEL): the spawn/
     //    extensions pool, ABOVE the source container. The upgrader works
@@ -259,14 +241,16 @@ export function getEnergy(creep: Creep, role: EnergyRole): EnergyOutcome
         return "acted";
     }
 
-    // 5. Builder only: the spawn/extensions pool. From
-    //    CONTAINER_BOOST_MIN_LEVEL up the gate is the surplus line (the
-    //    builderPoolReady above: 90 % of capacity, no hold-backs); below
-    //    it the historical floor plus both hold-backs. Both keep the
-    //    pool above a size that still lets the spawn queue a
-    //    capacity-sized replacement (see
-    //    managers/spawnManager.ts). While the gate is closed the builder
-    //    refuels from a
+    // 5. Builder only: the spawn/extensions pool, above the floor, and
+    //    only while the upgrader AND the income crews are at minimum (the
+    //    poolReady gate above). Both are hold-backs that keep a
+    //    capacity-sized replacement spawnable (see
+    //    managers/spawnManager.ts): the upgrader's from the M2 "no
+    //    upgrader ever spawns" bug, the income crew's from the M3 death
+    //    spiral of 2026-11-11 - a dead harvester's 300-energy replacement
+    //    waited for a store the builders kept draining below that cost,
+    //    the crew ratcheted down, and the run ended with 2 creeps at tick
+    //    4000. While either hold-back is on the builder refuels from a
     //    source instead (the fallback below), so the store climbs to
     //    capacity and the full-size replacement starts. The pool sits
     //    BELOW the source container rung (owner feedback v9.4,
@@ -275,7 +259,7 @@ export function getEnergy(creep: Creep, role: EnergyRole): EnergyOutcome
     //    full container. The pool-first order was the M4 fix of
     //    2026-11-11; the M4 extension count is re-checked in the
     //    acceptance test after this swap.
-    if (role === "builder" && builderPoolReady && withdrawFromPool(creep, room))
+    if (role === "builder" && poolReady && withdrawFromPool(creep, room))
     {
         return "acted";
     }

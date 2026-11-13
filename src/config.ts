@@ -167,23 +167,27 @@ export const UNCOVERED_SOURCE_HARVESTERS_L4 = 2;
  * M5 (2026-11-13): the pair (UNCOVERED_SOURCE_HARVESTERS_L4) is what the
  * M5 gate ran with - harvest 8.56 against the 13 minimum, with the
  * uncovered source still holding two harvesters at tick 5,000 while part
- * of its 10-per-tick refill went to waste. Once the capacity buys the
- * 450-energy 3-WORK / 2-CARRY harvester body (~1.9 per tick each), five
- * walkers drain the source at refill rate.
+ * of its 10-per-tick refill went to waste. From the 400-energy 2-WORK /
+ * 2-CARRY / 2-MOVE harvester body (a balanced walking body) five walkers
+ * drain the source at its 10-per-tick refill rate.
  */
 export const UNCOVERED_SOURCE_HARVESTERS_FULL = 5;
 
 /**
  * The energy capacity at which an uncovered source (level 4 and up) gets
  * the full harvester crew (UNCOVERED_SOURCE_HARVESTERS_FULL) instead of
- * the early pair (UNCOVERED_SOURCE_HARVESTERS_L4). 450 is where both the
- * 450-energy harvester body and the 3-WORK miner replacement become
- * possible, so the extra walkers actually earn their body cost. Below it
- * the pair stays: five 300-energy bodies would eat the bootstrap store
- * before the extension floor exists (the M3 death-spiral pattern of
- * 2026-11-11).
+ * the early pair (UNCOVERED_SOURCE_HARVESTERS_L4). 400 is where both the
+ * 400-energy 2-CARRY / 2-MOVE harvester body and the 3-WORK miner
+ * replacement become possible, so the extra walkers actually earn their
+ * body cost. Below it the pair stays: five 300-energy bodies would eat the
+ * bootstrap store before the extension floor exists (the M3 death-spiral
+ * pattern of 2026-11-11).
+ *
+ * M4 fix (2026-11-13): lowered from 450. The pool is 300 plus 100 per
+ * extension, so 450 was never a real capacity - the first extension puts
+ * the room at 400, and the full crew now starts one extension earlier.
  */
-export const HARVESTER_CREW_FULL_CAPACITY = 450;
+export const HARVESTER_CREW_FULL_CAPACITY = 400;
 
 /**
  * Ticks of remaining life at which a stationary miner's replacement starts

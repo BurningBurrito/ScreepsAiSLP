@@ -120,6 +120,12 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
         [WORK, WORK, WORK, WORK, WORK, CARRY, CARRY, CARRY, MOVE], // 700
         [WORK, WORK, WORK, WORK, CARRY, CARRY, CARRY, MOVE], // 600
         [WORK, WORK, WORK, CARRY, CARRY, MOVE], // 450
+        // M5 (2026-11-13): fills the 400-capacity gap (one extension):
+        // without it a miner replacement sat on the 2-WORK 350 row (4
+        // per tick) while the source refilled at 10. Three WORK mines 6
+        // per tick; the miner stands on its container, so one MOVE and
+        // one CARRY (50, a dump every 8 ticks) are enough.
+        [WORK, WORK, WORK, CARRY, MOVE], // 400
         [WORK, WORK, CARRY, CARRY, MOVE], // 350
         // M5 (2026-11-13): the first miner spawns while the room still
         // holds 300 energy (the first source container is rung 1 and the
@@ -142,7 +148,15 @@ function bodyTemplates(room: Room): Record<Role, BodyPartConstant[][]>
         // 1-CARRY body caps each harvester near 1 per tick on the source
         // round trip.
         [WORK, WORK, WORK, CARRY, CARRY, MOVE], // 450
-        [WORK, WORK, WORK, CARRY, MOVE], // 400
+        // M4/M5 fix (2026-11-13): the full crew now starts at 400
+        // capacity (one extension, see HARVESTER_CREW_FULL_CAPACITY), so
+        // this is the body five walkers actually run. The old 3-WORK /
+        // 1-CARRY / 1-MOVE row crawled (4 non-MOVE parts cost 8 fatigue
+        // per step against 2 recovered per tick) and its 50 of carry
+        // forced a delivery stop every ~8 harvest ticks. Two CARRY plus
+        // two MOVE keeps the same 400-energy cost: one step per tick on
+        // plain, 100 per trip.
+        [WORK, WORK, CARRY, CARRY, MOVE, MOVE], // 400
         [WORK, WORK, CARRY, MOVE], // 300
         [WORK, CARRY, MOVE], // 200
     ],
@@ -412,7 +426,7 @@ function minCreepsPerRole(room: Room): Record<Role, number>
     );
     // M5 (2026-11-13): at level 4+ an uncovered source keeps TWO harvesters
     // (UNCOVERED_SOURCE_HARVESTERS_L4), and once the capacity buys the
-    // 450-energy harvester body (HARVESTER_CREW_FULL_CAPACITY) it keeps the
+    // 400-energy harvester body (HARVESTER_CREW_FULL_CAPACITY) it keeps the
     // FULL crew (UNCOVERED_SOURCE_HARVESTERS_FULL): the 2026-11-13 M5 gate
     // harvested 8.56 per tick with the pair at tick 5,000 while the source
     // refilled at 10. Below the capacity the pair stays - five 300-energy
