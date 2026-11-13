@@ -66,31 +66,23 @@
  *   6. Road sites.
  *
  *   Level 5 and up (M5): the whole queue above is replaced by the static-
- *   mining ladder (selectContainerFirstSite): first tower, the FIRST
- *   source container, the level-5 six-extension floor
- *   (LEVEL5_EXTENSION_FLOOR - the M4 three-extension floor is a subset
- *   of it), the controller container, ramparts, the second tower, the
- *   remaining extensions, roads, and the second source container LAST.
+ *   mining ladder (selectContainerFirstSite): first tower, the FIRST source
+ *   container, the M4 three-extension floor, the remaining source
+ *   containers, the controller container, ramparts, the second tower,
+ *   the remaining extensions, roads, and any leftover container site.
  *   The first source container is
  *   the one rung ahead of every floor (owner feedback v9.4, 2026-11-11:
  *   behind the floor it finished at ~tick 3,880 of the 5,000-tick M5
- *   window and minedShare sat at 0.585 of 0.6). The controller
- *   container leads the post-floor rungs from 2026-11-13: it is what
- *   switches the upgrader to a 5-WORK body, and the M5 window measures
- *   controller progress in its last 1,000 ticks. The second source
- *   container runs BEHIND the roads and the 18,000-energy floor: the
- *   2026-11-12 mini-floor that let it run ahead of the third extension
- *   handed the crew to a 5,000-energy container before a 3,000-energy
- *   extension and failed this run's M4 acceptance (extensionsBuilt 2 of
- *   3 at tick 6,000), and M5 does not need it built - its "every source
- *   has a container" criterion counts a placed site, and its minedShare
- *   criterion is met by the first source's stationary miner. The
- *   six-extension floor gates the controller container, the ramparts
- *   and the second tower - at level 5 the room's capacity (the spawn's
- *   300 plus 50 per finished extension) is what the miner, upgrader,
- *   builder and hauler bodies are chosen from, and 600 is the smallest
- *   capacity at which the bodies the M5 window needs fit. The 2026-11-10
- *   run let the un-gated ladder spend the
+ *   window and minedShare sat at 0.585 of 0.6). The second source
+ *   container runs BEHIND the full M4 floor: the 2026-11-12 mini-floor
+ *   that let it run ahead of the third extension handed the crew to a
+ *   5,000-energy container before a 3,000-energy extension and failed
+ *   this run's M4 acceptance (extensionsBuilt 2 of 3 at tick 6,000),
+ *   while the order with the full floor finished all three extensions
+ *   inside the window (M4 run of 2026-11-12, 11:02). M5 does not need
+ *   the second container built - its "every source has a container"
+ *   criterion counts a placed site. The floor gates everything after the
+ *   containers - the 2026-11-10 run let the un-gated ladder spend the
  *   15,000-energy container pair before the third
  *   extension and failed M4 at tick 6,000 (extensionsBuilt 1, capacity
  *   350 of 450). No container other than the source containers may take
@@ -163,7 +155,6 @@ import {
     CONTAINER_BOOST_MIN_ROADS,
     CONTAINER_EARLY_MIN_LEVEL,
     CONTROLLER_CONTAINER_RANGE,
-    LEVEL5_EXTENSION_FLOOR,
 } from "config";
 import { pickSourceWithStandableTile, sortSourcesByDistance } from "utils/pickSource";
 import { getEnergy } from "utils/energy";

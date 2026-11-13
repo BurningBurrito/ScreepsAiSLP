@@ -1,8 +1,31 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state (2026-11-13, run 96): the M4 acceptance regression is FIXED
-and VERIFIED - the re-run after the fix (started 22:38, 6,000 ticks)
+Current state (2026-11-13, run 96, 06:20 start): the FAILED GATE of 06:05 is
+FIXED - the 06:05 gate failed the unit suite (150 passing, 1 failing:
+spawnManager "at RCL 5 spawns a surplus upgrader below the upgrader cap
+while sites exist", expected upgrader-10 got builder-10) plus a lint warning
+(LEVEL5_EXTENSION_FLOOR defined but never used in src/roles/builder.ts).
+Cause: the previous run died mid-experiment on M5 and its leftovers (auto-
+commit 6e5653c) were never tested: a new {level: 5, builder: 6} row in
+MIN_CREEPS_BY_LEVEL (so at RCL 5 three builders are BELOW minimum and the
+main spawn loop takes the slot before the surplus walk ever runs) and a new
+LEVEL5_EXTENSION_FLOOR = 6 constant imported into builder.ts but never used
+by the ladder. The verified M4-passing tree (9a39e9e, acceptance PASSED
+06:28 on d32a596 = same code) has none of that, so both leftovers were
+reverted with git checkout 9a39e9e -- src/config.ts src/roles/builder.ts.
+192 unit passing, lint 0 errors 0 warnings, build clean. No M5 report of
+the 8.56/0.7 run the config comment referenced survives in reports/
+(history.csv has no acceptance-m5 row for 2026-11-13); the best surviving
+M5 numbers are the 1a1507d probe (harvest 12.47, upgrade 0.6, idle-full
+68 %, RCL 5/950) and the b9a4099 acceptance (harvest 10.52, upgrade 0.61,
+idle-full 50.7 %, minedShare 0.98). This run: M5 acceptance baseline on the
+reverted tree, then one focused M5 improvement. M5 criteria (milestones/
+M5.md): harvested >= 13/tick and upgrade >= 1/tick over the last 1,000
+ticks, spawn idle-while-full <= 30 %, minedShare >= 60 % from tick 3000,
+ground energy <= 300 avg from tick 3000, >= 3 creeps at end, M1-M4 must
+still pass. Previous state (2026-11-13, the M4-fix run labeled "run 96" in
+the Change Log below): the M4 acceptance regression is FIXED and VERIFIED - the re-run after the fix (started 22:38, 6,000 ticks)
 finished EXIT 0 (mocha success): extensionsBuilt 3, energyCapacity 450,
 maxTowerEnergy 1000, towersBuilt 1 + 1 site, towersWithRampart 1,
 spawnHasRampart, spawnHits 5000, firstHostile 5401 / firstDefend 5401,
@@ -311,6 +334,24 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-13 (run 96, 06:20 start: gate fix - reverted the unfinished M5 experiment)
+- The 06:05 gate failed: unit 150 passing / 1 failing (spawnManager "at RCL
+  5 spawns a surplus upgrader below the upgrader cap while sites exist":
+  expected upgrader-10, got builder-10) and a lint warning (LEVEL5_EXTENSION_
+  FLOOR unused, src/roles/builder.ts:166). The cause was the previous run's
+  uncommitted M5 leftovers, auto-committed as 6e5653c: a {level: 5,
+  harvester: 5, builder: 6, upgrader: 1, hauler: 1} row in
+  MIN_CREEPS_BY_LEVEL (at RCL 5 with 3 builders alive the builder is below
+  minimum, so the main SPAWN_ORDER loop spawns the builder before the
+  surplus walk can run) and LEVEL5_EXTENSION_FLOOR = 6 plus doc rewrites in
+  builder.ts that the selectContainerFirstSite ladder never actually uses.
+  The experiment was never tested and never recorded here. Reverted both
+  files to 9a39e9e (the code of the verified M4-passing tree; d32a596,
+  which the 06:28 M4 acceptance ran on, is 9a39e9e plus report files only).
+  192 unit passing, lint 0 errors 0 warnings, build clean. The experiment's
+  idea (six builders at RCL 5 + an 18,000-energy six-extension floor so the
+  capacity reaches 600 and the store cycles instead of pinning full) is
+  parked in Known Issues, to be re-derived from measurements if M5 needs it.
 ### 2026-11-13 (run 96: M4 fix - the second source container back behind the M4 floor)
 - M4 acceptance (b9a4099, this run, 6,000 ticks) FAILED: extensionsBuilt
   2 (needs 3), energyCapacity 400 (needs 450); every other criterion met
@@ -1470,6 +1511,28 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **Run 96 (2026-11-13 06:20 start): failed-gate fix, then M5.**
+  Baseline (rule 07 A5): reports/latest.md = acceptance-m4, 2026-11-13
+  06:28, commit d32a596 (== 9a39e9e code): harvested 12.72/tick, upgrade
+  0.63/tick, construction 3.8/tick, spawn idle-while-full 71 %, CPU
+  3.35/29.26, RCL 5/1,650, creeps 21 (builder 10, harvester 2, hauler 3,
+  miner 1, upgrader 5). M5 baseline: no acceptance-m5 report survives from
+  2026-11-13 (history.csv rows end at acceptance-m4); best M5 numbers on
+  file: 1a1507d probe 11-12 22:56 harvest 12.47 / upgrade 0.6 / idle-full
+  68 % / RCL 5/950; b9a4099 acceptance 11-12 22:09 harvest 10.52 / upgrade
+  0.61 / idle-full 50.7 % / minedShare 0.98.
+  1. [x] Gate fix: revert 6e5653c's src leftovers to 9a39e9e (config
+     level-5 min-creeps row, unused LEVEL5_EXTENSION_FLOOR, builder.ts
+     docs/import). 192 unit passing, lint + build clean. Committed.
+  2. [ ] M5 baseline: agent-test start
+     test/integration/acceptance-m5.test.ts on the reverted tree.
+  3. [ ] One focused M5 improvement from the baseline analysis (harvest
+     >= 13, upgrade >= 1, idle-full <= 30 % are the failing criteria;
+     minedShare/ground/sources-with-container pass on recent trees).
+  4. [ ] Verify the change: unit suite, then acceptance-m5, then
+     acceptance-m4 regression (owner protocol: revert what breaks M4).
+  5. [ ] Part D: agent-test start all, result line into the Change Log,
+     status/README update.
 - **Run 96 (2026-11-13): M4 acceptance failure - second source container
   before the third extension.** M4 acceptance (b9a4099, this run, 6,000
   ticks) failed: extensionsBuilt 2 (needs 3), energyCapacity 400 (needs
@@ -2200,6 +2263,20 @@ yet.
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
 
 ## Known Issues / Notes
+- **Parked (2026-11-13, run 96): the previous run's unfinished M5
+  experiment, reverted for the gate.** 6e5653c added a level-5
+  MIN_CREEPS_BY_LEVEL row (builder 6) and LEVEL5_EXTENSION_FLOOR = 6 with
+  the idea "six 4-WORK builders drain the store as fast as harvest refills
+  it, so the store cycles instead of pinning full; an 18,000-energy
+  six-extension floor buys the 600 capacity the static-mining bodies
+  need". It was incomplete (the builder.ts ladder never used the new
+  constant), untested, and it broke the unit gate (the surplus-upgrader
+  test: with builder minimum 6 at RCL 5, three builders are below
+  minimum, so the main loop takes the spawn slot). Reverted to 9a39e9e.
+  If the M5 baseline of this run still shows a pinned-full store plus an
+  idle crew, this idea may deserve a proper redo (ladder rung + min-creeps
+  row + updated unit tests + M4/M5 verification); until then it is a note,
+  not a plan.
 - **M5 acceptance is failing (pre-existing since run 94, 2026-11-12) -
   out of scope for the M4 fix of run 96.** Latest full M5 run
   (b9a4099, started 2026-11-12 22:09, EXIT 1, snapshot at 5,000 ticks):
