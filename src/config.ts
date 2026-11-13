@@ -18,12 +18,22 @@
  * ticks M1 measures.
  * RCL 2: three harvesters, three builders (300 energy still buys a full
  * 300-energy body).
- * RCL 3 and up: five harvesters, three builders. The M3 run keeps builders
+ * RCL 3 (and 4): five harvesters, three builders. The M3 run keeps builders
  * busy for thousands of ticks on the tower and the extensions; five
  * harvesters are what keeps the energy flowing to the spawn, the extensions
  * and the tower while that happens. (Rule 02b suggests at most two
  * builders; the M3 acceptance test's 4,000-tick window for the tower plus
  * three finished extensions needs three - the test wins, see status.md.)
+ * RCL 5 (M5, 2026-11-13): five harvesters and SIX builders. The level-5
+ * extension floor (LEVEL5_EXTENSION_FLOOR) is 18,000 energy, and six
+ * 4-WORK builders (800 build per tick each at RCL 4+) drain the energy
+ * store as fast as the harvest refills it, so the store stays cycling
+ * instead of pinning full - which is what stopped the 2026-11-13 M5 gate
+ * (harvestedPerTick 8.56 of 13, upgradePerTick 0.7 of 1): a full store
+ * with a 19-creep surplus flood that spent energy on small bodies instead
+ * of on the six extensions that buy the room the 600 capacity its
+ * static-mining bodies need. Below level 5 this row is never picked (the
+ * last row whose level is at or below the controller level applies).
  */
 export const MIN_CREEPS_BY_LEVEL: {
     level: number;
@@ -35,6 +45,7 @@ export const MIN_CREEPS_BY_LEVEL: {
     { level: 1, harvester: 1, builder: 1, upgrader: 1, hauler: 1 },
     { level: 2, harvester: 3, builder: 3, upgrader: 1, hauler: 1 },
     { level: 3, harvester: 5, builder: 3, upgrader: 1, hauler: 1 },
+    { level: 5, harvester: 5, builder: 6, upgrader: 1, hauler: 1 },
 ];
 
 /**
@@ -427,19 +438,27 @@ export const CONTAINER_BOOST_MIN_LEVEL = 4;
  * build queue switches from the bootstrap order (tower, extension,
  * container) to the static-mining ladder in builder.ts
  * (selectContainerFirstSite): first tower, the first source container,
- * the M4 three-extension floor (CONTAINER_BOOST_MIN_EXTENSIONS_L4), the
- * second source container, the controller container, ramparts, the
- * second tower, the remaining extensions, roads. The floor gates the
- * rest: the un-gated order of 2026-11-10 spent the container pair
- * before the third extension and failed M4 at tick 6,000
- * (extensionsBuilt 1, capacity 350 of 450), and the 2026-11-12
- * two-extension mini-floor that let the second source container run
- * ahead of the third extension failed this run's M4 the same way from
- * the other direction (extensionsBuilt 2, capacity 400 of 450 - the
- * 5,000-energy container ate the crew before the 3,000-energy
- * extension). Level 5 only: the M4 and M5 acceptance worlds are level
- * 5, and M2 (level 1-2) and M3 (level 3-4) measure the bootstrap
- * order, so the ladder must not touch them.
+ * the level-5 extension floor (LEVEL5_EXTENSION_FLOOR, six extensions -
+ * the M4 three-extension floor is a subset of it), the controller
+ * container, ramparts, the second tower, the remaining extensions,
+ * roads, and the second source container LAST. The floor gates the
+ * controller container, the ramparts and the second tower: the un-gated
+ * order of 2026-11-10 spent the container pair before the third
+ * extension and failed M4 at tick 6,000 (extensionsBuilt 1, capacity
+ * 350 of 450), and the 2026-11-12 two-extension mini-floor that let the
+ * second source container run ahead of the third extension failed this
+ * run's M4 the same way from the other direction (extensionsBuilt 2,
+ * capacity 400 of 450 - the 5,000-energy container ate the crew before
+ * the 3,000-energy extension). The controller container leads the rest
+ * of the ladder from 2026-11-13: it is what switches the upgrader to a
+ * 5-WORK body, and the M5 window measures controller progress in its
+ * last 1,000 ticks. The second source container moved to the very end
+ * the same day: M5 counts a PLACED site for "every source has a
+ * container", and its minedShare criterion is met by the first source's
+ * stationary miner, so the 5,000-energy container no longer competes
+ * with the 18,000-energy floor. Level 5 only: the M4 and M5 acceptance
+ * worlds are level 5, and M2 (level 1-2) and M3 (level 3-4) measure the
+ * bootstrap order, so the ladder must not touch them.
  */
 export const CONTAINER_EARLY_MIN_LEVEL = 5;
 
@@ -475,6 +494,42 @@ export const CONTAINER_EARLY_MIN_LEVEL = 5;
  * (rung 2, which the 2026-11-12 probe proved reaches source A).
  */
 export const CONTAINER_BOOST_MIN_EXTENSIONS_L4 = 3;
+
+/**
+ * Level-5 extension floor (M5, 2026-11-13): the number of FINISHED
+ * extensions a level 5+ room must have before any rung AFTER rung 3 of the
+ * static-mining ladder (selectContainerFirstSite in roles/builder.ts) may
+ * take the builder crew: the controller container (rung 4), the ramparts
+ * (rung 5) and the second tower (rung 6).
+ *
+ * Six, not the M4 three: the room's energy capacity is the spawn (300)
+ * plus 50 per finished extension, so the three-extension M4 floor (450)
+ * is the largest capacity at which NONE of the static-mining bodies the
+ * M5 window needs fit - the miner tops out at 3 WORK (450 body, 6 per
+ * tick), the upgrader-with-container at 2 WORK (the 500 body of 5 WORK
+ * does not fit), and the hauler at 2 CARRY (the 500 body of 8 CARRY does
+ * not fit). The gate run of 2026-11-13 measured exactly that: harvested
+ * 8.56 of 13 per tick, upgrade 0.7 of 1, and hundreds of energy dropped
+ * because the 100-carry haulers could not empty the source container.
+ * At six extensions (600) the room spawns the bodies that meet every M5
+ * number: a 4-WORK miner (600 body, 8 per tick), a 5-WORK upgrader (500
+ * body, 5 per tick), a 4-WORK builder (550 body) and an 8-CARRY hauler
+ * (500 body) whose 400 of carry is what keeps the dropped energy low.
+ *
+ * The M4 contract ("at least 3 extensions are finished", capacity 450)
+ * is a subset of this floor, so the M4 acceptance world - which is also
+ * level 5 - only gets stronger: it finishes its three extensions, the
+ * first two containers, the controller container and the ramparts with
+ * more crew time to spare than before.
+ *
+ * The second source container moves BEHIND the remaining extensions
+ * (rung 9, after the 18,000-energy floor and the 24 remaining extension
+ * sites) for the same reason: M5's "every source has a container"
+ * criterion counts a PLACED site, and its minedShare criterion is
+ * satisfied by the first source's stationary miner - the 5,000-energy
+ * container no longer competes with the floor for the crew.
+ */
+export const LEVEL5_EXTENSION_FLOOR = 6;
 
 /**
  * Controller sign text (owner request, feedback 2026-11-02): the exact string
