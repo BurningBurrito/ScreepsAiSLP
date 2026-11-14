@@ -1,26 +1,26 @@
-# Scorecard: spawnprobe · 2026-11-14 00:21 · 700 ticks · commit dc63e00
+# Scorecard: spawnprobe · 2026-11-14 01:54 · 700 ticks · commit ede6b33
 
-| Metric (last 280 ticks unless noted) | This run | Previous run (2026-11-09 20:09, f344668) | Change |
+| Metric (last 280 ticks unless noted) | This run | Previous run (2026-11-14 00:21, dc63e00) | Change |
 | --- | --- | --- | --- |
-| Energy harvested / tick | 4.6 | 5.23 | -0.63 |
-| Energy wasted at source regeneration (sum) | 4,584 | 1,796 | +2,788 |
-| Controller progress / tick | 0.39 | 0.36 | +0.03 |
-| Construction progress / tick | 4.16 | 0.65 | +3.51 |
-| Energy delivered to spawn and extensions / tick | 3.57 | 2.64 | +0.93 |
-| Spawn idle while energy is full | 0 % | 23 % | -23 pts |
-| Spawn busy | 0 % | 12 % | -12 pts |
-| Creep ticks idle (no action, no move for 5+ ticks) | 14 % | 21 % | -6 pts |
-| CPU / tick (average, max) | 1.89, 21.06 | 1.66, 20.88 | +0.23 |
-| RCL / progress at end (whole run) | 1 / 158 | 1 / 150 | +8 |
+| Energy harvested / tick | 4.6 | 4.6 | 0 |
+| Energy wasted at source regeneration (sum) | 4,584 | 4,584 | 0 |
+| Controller progress / tick | 0.39 | 0.39 | 0 |
+| Construction progress / tick | 4.16 | 4.16 | 0 |
+| Energy delivered to spawn and extensions / tick | 3.57 | 3.57 | 0 |
+| Spawn idle while energy is full | 0 % | 0 % | 0 pts |
+| Spawn busy | 0 % | 0 % | 0 pts |
+| Creep ticks idle (no action, no move for 5+ ticks) | 14 % | 14 % | 0 pts |
+| CPU / tick (average, max) | 1.85, 21.29 | 1.89, 21.06 | -0.04 |
+| RCL / progress at end (whole run) | 1 / 158 | 1 / 158 | 0 |
 | Ticks to RCL 2 / RCL 3 (whole run) | - / - | - / - |  |
-| Energy harvested (whole run) | 2,780 | 2,844 | -64 |
-| Build energy spent on roads (share of all build energy) | 98 % | 97 % | +1 pts |
+| Energy harvested (whole run) | 2,780 | 2,780 | 0 |
+| Build energy spent on roads (share of all build energy) | 98 % | 98 % | 0 pts |
 | Road tiles: total / on wall / disconnected from the spawn network (end) | 59 / 0 / 0 | 59 / 0 / 0 | 0 |
 | Roads reach (end): sources, controller | 2 of 2, yes | 2 of 2, yes |  |
 | Extensions and towers farther than 8 tiles from the spawn (end) | 0 | 0 | 0 |
 | Construction sites on wall terrain (end) | 0 | 0 | 0 |
 | Extension sites next to a source or the controller (end) | 0 | 0 | 0 |
-| Creeps at end (peak) | 6 (6) | 7 (7) | -1 |
+| Creeps at end (peak) | 6 (6) | 6 (6) | 0 |
 
 Creeps at end by role: builder 2, harvester 2, upgrader 2.
 Structures at end: road 3, spawn 1. Construction sites: 57 (container 1, road 56). Build energy in the window by target: completed 25, road 1141.
@@ -29,10 +29,10 @@ Bot console: 737 lines, 0 with errors (reports/spawnprobe-console.log). Probe re
 
 Timeline, every 100 ticks: tick | creeps by role | harvested/tick | upgraded/tick | energy/capacity | spawn | cpu
 
-      100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.5
+      100 | harvester 2                              |   3.2 |     0 |    67/300 | idle | 1.4
       200 | builder 1, harvester 2                   |   3.7 |     0 |   196/300 | idle | 1.3
-      300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.4
+      300 | builder 1, harvester 2, upgrader 1       |   3.6 |     0 |   225/300 | idle | 1.3
       400 | builder 1, harvester 2, upgrader 2       |   3.7 |   0.5 |   263/300 | idle | 1.5
       500 | builder 2, harvester 2, upgrader 2       |   4.7 |   0.5 |   142/300 | idle | 1.8
-      600 | builder 2, harvester 2, upgrader 2       |   4.2 |   0.1 |   142/300 | idle | 1.9
+      600 | builder 2, harvester 2, upgrader 2       |   4.2 |   0.1 |   142/300 | idle | 1.8
       700 | builder 2, harvester 2, upgrader 2       |   4.6 |   0.5 |   142/300 | idle | 1.9
