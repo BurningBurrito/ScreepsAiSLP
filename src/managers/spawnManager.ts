@@ -576,6 +576,20 @@ export function incomeBelowMinimum(room: Room): boolean
  * zero or below) does it fall back to the fewest-assigned source - someone
  * still has to be assigned somewhere.
  *
+ * Candidates: only the sources WITHOUT a built container on a neighbour
+ * tile. A container'd source is mined by its stationary miner
+ * (assignMinerSource binds one), which already takes the whole refill; a
+ * harvester on it would only stand there waiting for scraps. 2026-11-14,
+ * M5b: the standable-tile score favoured the container'd source (it has
+ * more free tiles than the pocket), so in the M5 world all five harvesters
+ * were assigned to it while the open source lost its full 10 energy per
+ * tick to regeneration - 9.88 harvested per tick against the 13 the M5b
+ * window requires, 9,220 energy wasted. The open source keeps the full
+ * mobile crew instead (see the per-source split in minCreepsPerRole).
+ * The scoring below runs over the container'd sources only when EVERY
+ * source is container'd - a dead miner's gap where someone still has to
+ * stand on the source.
+ *
  * The assignment is stored in the creep's Memory and survives global
  * resets; when a harvester dies, its slot frees up and the next spawn
  * rebalances.
@@ -607,10 +621,22 @@ function assignSource(room: Room): string | undefined
         }
     }
 
+    // FIND_STRUCTURES with the type guard, the same lookup
+    // minCreepsPerRole and assignMinerSource use to tell the sources
+    // apart (FIND_MY_STRUCTURES excludes containers).
+    const containers = room.find(FIND_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
+    });
+    const open = sources.filter(
+        (source) => !containers.some((container) => container.pos.getRangeTo(source) <= 1),
+    );
+    // See the function comment: the container'd source is the miner's.
+    const candidates = open.length > 0 ? open : sources;
+
     const occupied = collectOccupiedTiles(room, "");
-    let best = sources[0];
+    let best = candidates[0];
     let bestScore = -1;
-    for (const source of sources)
+    for (const source of candidates)
     {
         const score = countStandableTiles(source, room, occupied) - counts[source.id];
         if (score > bestScore)
@@ -623,7 +649,7 @@ function assignSource(room: Room): string | undefined
     {
         // Every source is crowded: fall back to the least-assigned one, it
         // frees up whenever one of its harvesters dies.
-        for (const source of sources)
+        for (const source of candidates)
         {
             if (counts[source.id] < counts[best.id])
             {
@@ -635,14 +661,19 @@ function assignSource(room: Room): string | undefined
 }
 
 /**
- * Finds a source that no living harvester is assigned to.
+ * Finds an open source that no living harvester is assigned to.
  *
  * This is the surplus harvester's target (see the file header): unlike
- * assignSource's score, which would re-pick the covered source on a tie,
+ * assignSource's score, which would re-pick the busy source on a tie,
  * this only returns a source with ZERO assignments, so a surplus harvester
  * always covers a new source instead of doubling an already-mined one.
+ * A source with a built container on a neighbour tile is never returned:
+ * its energy belongs to the stationary miner (the same rule as
+ * assignSource, M5b 2026-11-14) - a surplus harvester on it would only
+ * fight the miner for scraps while the open source waits.
  * @param room The room to search
- * @returns The uncovered source, or undefined when every source has one
+ * @returns The uncovered open source, or undefined when every open source
+ * already has a harvester (or every source is container'd)
  */
 function sourceWithoutHarvester(room: Room): Source | undefined
 {
@@ -651,6 +682,10 @@ function sourceWithoutHarvester(room: Room): Source | undefined
     {
         return undefined;
     }
+
+    const containers = room.find(FIND_STRUCTURES, {
+        filter: (structure) => structure.structureType === STRUCTURE_CONTAINER,
+    });
 
     const counts: Record<string, number> = {};
     for (const source of sources)
@@ -671,12 +706,13 @@ function sourceWithoutHarvester(room: Room): Source | undefined
 
     for (const source of sources)
     {
-        if (counts[source.id] === 0)
+        const containerd = containers.some((container) => container.pos.getRangeTo(source) <= 1);
+        if (counts[source.id] === 0 && !containerd)
         {
             return source;
         }
     }
-    return undefined; // Every source already has a harvester
+    return undefined; // Every open source already has a harvester
 }
 
 /**

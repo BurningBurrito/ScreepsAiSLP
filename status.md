@@ -1705,6 +1705,36 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **Run 100 (2026-11-13): M5b - second source container promoted to
+  rung 2 (ahead of the M4 floor). Owner split: M5b = static mining,
+  "at least 13 harvested per tick over the last 1,000 ticks"; the
+  M5a run (ede6b33) measured 9.88 because the second source container
+  started only at ~tick 4,300 (672 of 5,000 by tick 5,000) and the
+  4,000-5,000 window mined one source.**
+  1. [x] builder.ts: merged both source container sites into rung 2
+     (condition `sourceContainersBuilt === 0` ->
+     `sourceContainerSites.length > 0`), removed the old rung 4,
+     renumbered rungs 5-10 to 4-9; full ladder is now 9 rungs: tower,
+     source containers (both), M4 floor, controller container,
+     ramparts, second tower, remaining extensions, roads, leftover
+     containers. Updated header + function docs + the
+     CONTAINER_EARLY_MIN_LEVEL / CONTAINER_BOOST_MIN_EXTENSIONS_L4
+     comments in config.ts.
+  2. [x] test/unit/builder.test.ts: flipped the two order tests
+     (second source container now beats the open floor at 1 and 2
+     finished extensions), renumbered all rung references in the
+     other L5 tests, updated the v9.4 open-floor comments.
+  3. [x] Fast checks: lint 0 errors, build clean, 194 unit passing.
+     Committed as 2ad418d.
+  4. [ ] acceptance-m4 (6,000 ticks): the safety gate - the full
+     three-extension floor now starts behind both containers
+     (~tick 3,400 instead of ~2,850); all three extensions (9,000
+     energy) must still finish before tick 6,000. RUNNING.
+  5. [ ] M5-world harvest check: no acceptance-m5b.test.ts in the
+     tree yet (owner publishes it after M5a), so acceptance-m5a
+     (same level-5 world, 5,000 ticks) is the proxy: its
+     harvestedPerTick scorecard line must reach 13, and the
+     second source container must be finished inside the window.
 - **Run 99 (2026-11-13 17:12 start): M5a - verify the current milestone
   (both named v9.4 fixes are already committed; no new src/ change
   planned).**
