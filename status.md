@@ -1,7 +1,27 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state (2026-11-13, run 99, 17:12 start): M5a COMPLETE. The owner
+Current state (2026-11-14, run 101, 02:08 start): GATE FIXED - run 100's
+untested M5b experiment is reverted to the last verified-green tree. The
+01:53 gate (tree c46f5ce, run 100's auto-committed leftovers) failed the
+unit suite (builder.test.ts "holds the second source container behind the
+M4 extension floor at level 5": expected 'ext2', got 'con-src-2') and, as
+information, acceptance-m5a (upgradePerTick 0, energy 116/300, 10 builders
++ 5 upgraders). Cause: the M5b rung promotion (2ad418d, both source
+containers ahead of the M4 floor) failed its M4 safety gate (extensionsBuilt
+1 of 3, capacity 350 of 450 at tick 6,000), and the run died at 01:31
+mid-follow-up (selfSupplySourceFor, the container-aware harvester
+assignment, a probe left in test/integration/) with none of it tested and
+the unit tests left at the pre-M5b expectations. Per the owner's protocol
+(revert what breaks M4, do not stack fixes): src/roles/builder.ts,
+src/config.ts and src/managers/spawnManager.ts are back at ede6b33 (the
+last-pushed tree - the gate's own baseline suite of 00:36-02:16 ran it
+green: M4 13.28 harvest / 3 extensions / 450 capacity, M5a 1.33 upgrade
+per tick), probe-m4b.test.ts moved to probe-tmp/. 194 unit passing, lint 0
+errors, build clean; the full suite (agent-test start all) is running to
+confirm. M5b (harvest 9.88 of 13 in the M5 world) now needs a named fix -
+STUCK written, details under Known Issues / Notes.
+Previous state (2026-11-13, run 99, 17:12 start): M5a COMPLETE. The owner
 split M5 into M5a/M5b/M5c (FEEDBACK v9.5). Both named M5a fixes from
 v9.4 were already committed in this tree (the upgrader working latch in
 73d682c; the builder getEnergy container-first rework in
@@ -414,6 +434,47 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-14 (run 101: gate fix - untested M5b experiment reverted to ede6b33)
+- The 01:53 gate (tree c46f5ce) failed: "tests that must pass" exit 1 on the
+  unit suite - 48 passing, 1 failing (builder "holds the second source
+  container behind the M4 extension floor at level 5": expected 'ext2', got
+  'con-src-2', test/unit/builder.test.ts:1126); lint 0 errors; build clean.
+  "Current milestone test" acceptance-m5a: 0 passing, 1 failing -
+  upgradePerTick 0 (needs >= 1); snapshot harvested 6.22, build 1.98, energy
+  116/300, 10 builders + 5 upgraders + 2 miners + 4 haulers, 21 creeps.
+  Push not attempted.
+- Root cause: run 100's M5b experiment. 2ad418d promoted the second source
+  container ahead of the M4 floor (194 unit passing) and its M4 safety gate
+  FAILED: extensionsBuilt 1 of 3, energyCapacity 350 of 450 at tick 6,000
+  (the far container built at ~1 energy per tick from hand-hauled loads - a
+  60-tile round trip for the 1-step-per-3-ticks 4W/2C/2M builder). The run
+  then died at 01:31 mid-follow-up: selfSupplySourceFor (the builder
+  harvests the source beside its far container site) in src/roles/builder.ts,
+  BUILDER_SELF_SUPPLY_MIN_DISTANCE = 10 in src/config.ts, container-aware
+  assignSource/sourceWithoutHarvester in src/managers/spawnManager.ts, and
+  probe-m4b.test.ts in test/integration/ (a 5,300-tick probe) - none of it
+  ever tested. The auto-commit c46f5ce left the unit tests at the pre-M5b
+  expectations against a ladder that still had both source containers ahead
+  of the floor, so the unit gate failed; the M5a failure (upgradePerTick 0,
+  capacity stuck at 300) is the same ladder: tower + both 5,000-energy
+  containers consumed the whole 5,000-tick window and zero extensions were
+  built.
+- Fix: git checkout ede6b33 -- src/roles/builder.ts src/config.ts
+  src/managers/spawnManager.ts (src/ and test/ are now byte-identical to
+  ede6b33; builder.test.ts already was, so no test file changed).
+  probe-m4b.test.ts moved to probe-tmp/ (out of the gate's must-pass set;
+  the diagnosis is done, the file stays in git history as c46f5ce).
+  ede6b33 is the last-pushed tree, and the gate's own baseline suite of this
+  morning ran it green (history.csv, 00:36-02:16, all EXIT 0): M1 4.63 /
+  3.71, M2 5.07 / 5.58, M3 7.52 / 1.48, M4 13.28 harvest / 1.81 upgrade /
+  2.42 build / 3 extensions / 450 capacity, M5a 1.33 upgrade / 9.88 harvest,
+  smoke, cold-boot recovery, controller sign.
+- Per the owner's protocol: the rung promotion is reverted (it broke M4) and
+  the selfSupply follow-up is not stacked or measured further this run.
+  STUCK written for M5b (details under Known Issues / Notes).
+- 194 unit passing, lint 0 errors, build clean. Full suite (agent-test
+  start all): <result line pending>.
+
 ### 2026-11-13 (run 99: M5a complete - acceptance passed, Part D)
 - M5a verified on the current tree (no src/ change this run; both named
   v9.4 fixes already committed: the upgrader working latch in 73d682c,
@@ -1705,12 +1766,36 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
-- **Run 100 (2026-11-13): M5b - second source container promoted to
-  rung 2 (ahead of the M4 floor). Owner split: M5b = static mining,
-  "at least 13 harvested per tick over the last 1,000 ticks"; the
-  M5a run (ede6b33) measured 9.88 because the second source container
-  started only at ~tick 4,300 (672 of 5,000 by tick 5,000) and the
-  4,000-5,000 window mined one source.**
+- **Run 101 (2026-11-14 02:08 start): gate fix - revert the untested M5b
+  experiment to the verified-green tree ede6b33.**
+  Baseline (LAST_GATE.md 01:53, tree c46f5ce): unit 48 passing 1 failing
+  (builder.test.ts:1126, "expected 'con-src-2' to equal 'ext2'"); lint 0
+  errors; build clean; acceptance-m5a 0 passing 1 failing (upgradePerTick 0,
+  harvested 6.22, build 1.98, energy 116/300, creeps 21).
+  1. [x] Reverted src/roles/builder.ts, src/config.ts,
+     src/managers/spawnManager.ts to ede6b33 (git checkout); builder.test.ts
+     was already at the ede6b33 version in the c46f5ce tree - no test edit.
+     probe-m4b.test.ts moved from test/integration/ to probe-tmp/ (a
+     5,300-tick probe left in the gate's must-pass set).
+  2. [x] Fast checks: lint 0 errors, build clean, 194 unit passing.
+  3. [ ] Full suite (agent-test start all): must reproduce the gate's green
+     baseline on ede6b33 (11 passing, 0 failing: M1-M4, M5a, smoke,
+     cold-boot, controller sign, integration, spawnprobe). RUNNING.
+  4. [x] STUCK written for M5b: the next step (a way to build and mine the
+     second source inside the 5,000-tick window without starving the M4
+     floor) is the owner's to name; the experiment's measurements are under
+     Known Issues / Notes.
+  5. [ ] Next run: implement the owner's named M5b fix when it arrives with
+     acceptance-m5b.test.ts (spec milestones/M5b.md; hint: the first source
+     container must be finished before ~tick 2,800 - measure first, M4 must
+     keep passing).
+- **Run 100 (2026-11-13): M5b - SUPERSEDED by run 101 (gate fix). The rung
+  promotion (2ad418d) failed its M4 safety gate (extensionsBuilt 1 of 3,
+  capacity 350 of 450 at tick 6,000) and the run died at 01:31 before the
+  follow-up (selfSupplySourceFor + container-aware harvester assignment +
+  probe-m4b) was ever tested; the leftovers (c46f5ce) failed the 01:53
+  gate. Reverted to ede6b33 per the owner's protocol; STUCK written for
+  M5b. History:**
   1. [x] builder.ts: merged both source container sites into rung 2
      (condition `sourceContainersBuilt === 0` ->
      `sourceContainerSites.length > 0`), removed the old rung 4,
@@ -1726,15 +1811,15 @@ yet.
      other L5 tests, updated the v9.4 open-floor comments.
   3. [x] Fast checks: lint 0 errors, build clean, 194 unit passing.
      Committed as 2ad418d.
-  4. [ ] acceptance-m4 (6,000 ticks): the safety gate - the full
-     three-extension floor now starts behind both containers
-     (~tick 3,400 instead of ~2,850); all three extensions (9,000
-     energy) must still finish before tick 6,000. RUNNING.
-  5. [ ] M5-world harvest check: no acceptance-m5b.test.ts in the
-     tree yet (owner publishes it after M5a), so acceptance-m5a
-     (same level-5 world, 5,000 ticks) is the proxy: its
-     harvestedPerTick scorecard line must reach 13, and the
-     second source container must be finished inside the window.
+  4. [x] FAILED: acceptance-m4 (6,000 ticks, this run): extensionsBuilt 1
+     of 3, energyCapacity 350 of 450 at tick 6,000 (recorded in the
+     c46f5ce builder.ts header; the far container built at ~1 energy per
+     tick from hand-hauled loads).
+  5. [x] SUPERSEDED: the follow-up (selfSupplySourceFor in
+     src/roles/builder.ts, BUILDER_SELF_SUPPLY_MIN_DISTANCE = 10 in
+     src/config.ts, container-aware assignSource/sourceWithoutHarvester in
+     src/managers/spawnManager.ts, probe-m4b.test.ts) was written but the
+     run was cut at 01:31 before any test; reverted in run 101.
 - **Run 99 (2026-11-13 17:12 start): M5a - verify the current milestone
   (both named v9.4 fixes are already committed; no new src/ change
   planned).**
@@ -2590,6 +2675,36 @@ yet.
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
 
 ## Known Issues / Notes
+STUCK: M5b needs the second source container built and its miner standing
+on it inside the 5,000-tick M5 window (harvest 13 per tick over the last
+1,000), but building it ahead of the M4 three-extension floor starves the
+extensions (M4 acceptance failed, extensionsBuilt 1 of 3, capacity 350 of
+450 at tick 6,000) - please name the fix, or how M4 and M5b should split
+the build order.
+- **M5b experiment, reverted (2026-11-14, run 101): the second source
+  container ahead of the M4 floor breaks M4.** The M5 harvest gap on the
+  verified tree (ede6b33): 9.88 of 13 over the last 1,000 ticks of the
+  5,000-tick M5 world - the second source container starts only at ~tick
+  4,300 (behind the floor) and holds 672 of 5,000 energy at tick 5,000, so
+  the 4,000-5,000 window mines one source (reports/acceptance-m5a.md, the
+  ede6b33 run of 02:16). Run 100's attempt: promote the second container
+  ahead of the floor (2ad418d) - the M4 acceptance FAILED hard:
+  extensionsBuilt 1 of 3, energyCapacity 350 of 450 at tick 6,000 (per run
+  100's own builder.ts note; the far container built at ~1 energy per tick
+  from hand-hauled loads - 60-tile round trips for the 1-step-per-3-ticks
+  4W/2C/2M builder). The follow-up (selfSupplySourceFor: the builder
+  harvests the source beside its far container site, gated by
+  BUILDER_SELF_SUPPLY_MIN_DISTANCE = 10, plus assignSource /
+  sourceWithoutHarvester keeping harvesters off sources with a built
+  container) was written but never tested - the run died at 01:31 and the
+  leftovers (auto-commit c46f5ce) failed the 01:53 gate (unit 1 failing;
+  M5a upgradePerTick 0, capacity 300 - the crew camped the two containers
+  and built zero extensions in 5,000 ticks). Reverted to ede6b33 per the
+  owner's protocol (revert what breaks M4; do not stack fixes). If the
+  owner names a mechanism (earlier start with a limited crew, self-supply
+  with a measured M4 re-run, or an explicit M4/M5b build-order split), that
+  is the next step; the M5b spec hint points at the first container's finish
+  time (~tick 2,800) as the thing to measure first.
 - **Parked (2026-11-13, run 96): the previous run's unfinished M5
   experiment, reverted for the gate.** 6e5653c added a level-5
   MIN_CREEPS_BY_LEVEL row (builder 6) and LEVEL5_EXTENSION_FLOOR = 6 with

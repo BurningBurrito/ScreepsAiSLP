@@ -262,28 +262,6 @@ export const BUILDER_WITHDRAW_FRACTION = 0.5;
 export const BUILDER_DROP_PICKUP_RANGE = 10;
 
 /**
- * Minimum Chebyshev distance (in tiles) from the spawn at which a builder
- * self-supplies from the source next to its focus container site (M5b,
- * 2026-11-14).
- *
- * The far source container sits 25+ tiles from the spawn pool. Without
- * self-supply, every 50-energy load is a 60-tile round trip for the
- * 1-step-per-3-ticks 4W/2C/2M builder, and the 2026-11-13 M5b run built
- * the site at ~1 energy per tick. Self-supply - harvest the source the
- * container sits next to, build the site you stand on - makes the pair
- * self-sufficient: the source refills at 10 energy per tick, so a
- * 5,000-energy container builds in a few hundred ticks.
- *
- * The gate keeps self-supply OFF for the NEAR source container (rung 2
- * of the M5 ladder in roles/builder.ts): it sits 2-3 tiles from the
- * spawn, where the getEnergy pool is already fast enough, and
- * self-supplying it would pin a builder to the source's standable tiles
- * - exactly the tiles the harvesters need while that source is still
- * open (harvest 5.03 of 0.55 in the 2026-11-12 M5b run).
- */
-export const BUILDER_SELF_SUPPLY_MIN_DISTANCE = 10;
-
-/**
  * Minimum energy a source container must hold before a builder or upgrader
  * withdraws from it.
  *

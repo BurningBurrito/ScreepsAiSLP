@@ -67,33 +67,21 @@
  *
  *   Level 5 and up (M5): the whole queue above is replaced by the static-
  *   mining ladder (selectContainerFirstSite): first tower, the FIRST source
- *   container, the REMAINING source containers, the M4 three-extension
- *   floor, the controller container, ramparts, the second tower,
+ *   container, the M4 three-extension floor, the remaining source
+ *   containers, the controller container, ramparts, the second tower,
  *   the remaining extensions, roads, and any leftover container site.
- *
- *   Why BOTH source containers run ahead of the floor (M5b, 2026-11-14):
- *   the first source container is the one rung ahead of every floor
- *   (owner feedback v9.4, 2026-11-11: behind the floor it finished at
- *   ~tick 3,880 of the 5,000-tick M5 window and minedShare sat at 0.585
- *   of 0.6). The second source container sat BEHIND the floor for a
- *   while - the 2026-11-12 mini-floor that let it run ahead of the third
- *   extension failed this run's M4 acceptance (extensionsBuilt 2 of 3 at
- *   tick 6,000) - and the 2026-11-13 attempt that promoted it ahead of
- *   the floor failed M4 even harder (extensionsBuilt 1 of 3, capacity
- *   350 of 450 at tick 6,000), because the far container was built from
- *   hand-hauled loads (~1 per tick) while the floor's three sites build
- *   at 6-10. That arithmetic is void now: selfSupplySourceFor in
- *   runBuilder anchors the builder AT the site, harvesting the source the
- *   container sits next to (it refills at 10 per tick), so the far
- *   container self-builds in a few hundred ticks and the floor still
- *   lands inside the M4 6,000-tick window. M5b's harvest bar (13 per
- *   tick in ticks 4,000-5,000) needs the second source's stationary
- *   miner, which exists the moment this container is built; the mobile
- *   harvesters layer on top - assignSource in managers/spawnManager.ts
- *   keeps them on the source without a built container while one is
- *   still open (2026-11-14), and once both containers exist they
- *   balance by free standable tiles, adding to the two miners' 12.
- *   The floor gates everything after the
+ *   The first source container is
+ *   the one rung ahead of every floor (owner feedback v9.4, 2026-11-11:
+ *   behind the floor it finished at ~tick 3,880 of the 5,000-tick M5
+ *   window and minedShare sat at 0.585 of 0.6). The second source
+ *   container runs BEHIND the full M4 floor: the 2026-11-12 mini-floor
+ *   that let it run ahead of the third extension handed the crew to a
+ *   5,000-energy container before a 3,000-energy extension and failed
+ *   this run's M4 acceptance (extensionsBuilt 2 of 3 at tick 6,000),
+ *   while the order with the full floor finished all three extensions
+ *   inside the window (M4 run of 2026-11-12, 11:02). M5 does not need
+ *   the second container built - its "every source has a container"
+ *   criterion counts a placed site. The floor gates everything after the
  *   containers - the 2026-11-10 run let the un-gated ladder spend the
  *   15,000-energy container pair before the third
  *   extension and failed M4 at tick 6,000 (extensionsBuilt 1, capacity
@@ -160,7 +148,6 @@
  */
 
 import {
-    BUILDER_SELF_SUPPLY_MIN_DISTANCE,
     CONTAINER_BOOST_MAX_LEVEL,
     CONTAINER_BOOST_MIN_EXTENSIONS,
     CONTAINER_BOOST_MIN_EXTENSIONS_L4,
@@ -464,45 +451,41 @@ function selectContainerFirstSite(creep: Creep, room: Room, excludeIds: Readonly
         return creep.pos.findClosestByPath<ConstructionSite>(sourceContainerSites);
     }
 
-    // Rung 3: the REMAINING source container sites (rung 2 took the
-    // first one) - BEFORE the M4 extension floor.
-    // 2026-11-14, M5b: the second source container is what the M5b
-    // harvest criterion needs - its stationary miner is what puts the
-    // second source at 6 per tick in the 4,000-5,000-tick window
-    // (harvest 9.88 of 0.55 with only the first container, 2026-11-12
-    // run). The 2026-11-13 attempt put this rung here and failed M4
-    // (extensionsBuilt 1 of 3 at tick 6,000) - but that run had NO
-    // self-supply: the builder crawled 25+ tiles to deliver every
-    // 50-energy load from the spawn pool, so this container crawled at
-    // ~1 build per tick and ate the whole window. Now
-    // selfSupplySourceFor in runBuilder keeps the builder anchored at
-    // the site, harvesting the source the container sits next to, so it
-    // finishes in a few hundred ticks (the source refills at 10 per
-    // tick); the floor below then starts later and still lands inside
-    // the M4 6,000-tick window with margin.
-    if (sourceContainerSites.length > 0)
-    {
-        return creep.pos.findClosestByPath<ConstructionSite>(sourceContainerSites);
-    }
-
-    // Rung 4: the M4 extension FLOOR - three finished extensions, 450
-    // energy capacity. It sits BELOW the self-supplied source containers
-    // (rung 3): those build themselves from their own source and are
-    // cheap, while the floor is where the crew's full delivery speed
-    // matters (9,000 energy on 3 sites at 6-10 per tick). The floor is
-    // still load-bearing in the opposite direction: it must finish by
-    // tick 6,000 (the M4 contract), so nothing expensive may sit above
-    // it - the 2026-11-13 failure (this floor starving behind a
-    // hand-delivered far container) and the 2026-11-09 failure (the
-    // unconditioned L4+ boost pinning the crew on the first container,
-    // extensionsBuilt 1, capacity 350) are the two ways this rung has
-    // been starved. While the floor is open the function returns the
-    // most advanced extension - shared room state, no memory,
-    // reset-proof; with no extension site left the builder upgrades
-    // instead of idling.
+    // Rung 3: the M4 extension FLOOR - three finished extensions, 450
+    // energy capacity - and it is LOAD-BEARING: while it is open the
+    // crew converges on extension sites (most advanced first) and NO
+    // container takes them, not even the second source container.
+    // 2026-11-13, the M4 acceptance failure of this run: the
+    // two-extension mini-floor of 2026-11-12 handed the crew to the
+    // second source container (5,000 energy) after only TWO extensions,
+    // and at tick 6,000 the third extension (3,000 energy) had not even
+    // started - extensionsBuilt 2, capacity 400 of 450. The v9.4 order -
+    // the full floor before the second source container - is the one
+    // that lands the M4 contract inside the window: in the 2026-11-12
+    // 11:02 M4 run (commit f3a6863, this order) all three extensions
+    // were finished well before tick 5,000. The minedShare argument
+    // that motivated the mini-floor was measured on a probe whose stall
+    // had a different cause (creep caps leaving the builders idle), and
+    // M5 itself never needs the second container BUILT: its "every
+    // source has a container" criterion counts a placed site, and its
+    // minedShare criterion is satisfied by the FIRST source's
+    // stationary miner (rung 2). While the floor is open the function
+    // returns the most advanced extension - shared room state, no
+    // memory, reset-proof; with no extension site left the builder
+    // upgrades instead of idling.
     if (extensionsBuilt < CONTAINER_BOOST_MIN_EXTENSIONS_L4)
     {
         return focusExtension(extensionSites, room, creep);
+    }
+
+    // Rung 4: the remaining source container sites (rung 2 took the
+    // first one). The second source's stationary miner pays off in the
+    // steady state (harvest at the source instead of the spawn pool),
+    // so it takes the crew only after the M4 floor above - the order
+    // the 11:02 M4 run of 2026-11-12 proved fits inside the window.
+    if (sourceContainerSites.length > 0)
+    {
+        return creep.pos.findClosestByPath<ConstructionSite>(sourceContainerSites);
     }
 
     // Rung 5: the controller container (idea d) - after the extension
@@ -560,65 +543,6 @@ function selectContainerFirstSite(creep: Creep, room: Room, excludeIds: Readonly
     }
 
     return null;
-}
-
-/**
- * Finds the source a builder should harvest itself from, or null.
- *
- * M5b (2026-11-14): while the crew's focus is a container site on a
- * neighbour tile of a source that has no built container yet, and the
- * site is BUILDER_SELF_SUPPLY_MIN_DISTANCE or more from the spawn, that
- * source IS the builder's energy source: the builder harvests it and
- * builds the site it stands on, a self-sufficient pair. The far source
- * container sits 25+ tiles from the spawn pool; without this, every
- * 50-energy load is a 60-tile round trip for the 1-step-per-3-ticks
- * 4W/2C/2M builder, and the 2026-11-13 M5b run built it at ~1 energy
- * per tick. The source refills at 10 energy per tick, so a 5,000-energy
- * container self-builds in a few hundred ticks.
- *
- * The distance gate keeps self-supply OFF for the NEAR source container
- * (rung 2 of selectContainerFirstSite): it sits 2-3 tiles from the
- * spawn, where the getEnergy pool is already fast enough, and
- * self-supplying it would pin a builder to the source's standable tiles
- * - exactly the tiles the harvesters need while that source is still
- * open (harvest 5.03 of 0.55 in the 2026-11-12 M5b run).
- *
- * No standable-tile check is needed: the site's own tile is adjacent to
- * the source and is where the builder stands.
- * @param site The crew's current focus site (selectBuildSite's result)
- * @param room The room
- * @returns The adjacent source when the site is an unbuilt, far source
- *         container, otherwise null
- */
-function selfSupplySourceFor(site: ConstructionSite | null, room: Room): Source | null
-{
-    if (site === null || site.structureType !== STRUCTURE_CONTAINER)
-    {
-        return null;
-    }
-
-    const spawn = room.find(FIND_MY_SPAWNS)[0];
-    if (spawn !== undefined && site.pos.getRangeTo(spawn.pos) < BUILDER_SELF_SUPPLY_MIN_DISTANCE)
-    {
-        return null;
-    }
-
-    const sources = room.find(FIND_SOURCES);
-    const adjacent = sources.find((source) => site.pos.getRangeTo(source.pos) <= 1);
-    if (adjacent === undefined)
-    {
-        return null;
-    }
-
-    // Same container lookup as assignSource in managers/spawnManager.ts:
-    // FIND_STRUCTURES with the type guard (FIND_MY_STRUCTURES excludes
-    // containers in @types/screeps).
-    const alreadyBuilt = room.find(FIND_STRUCTURES, {
-        filter: (structure) =>
-            structure.structureType === STRUCTURE_CONTAINER
-            && structure.pos.getRangeTo(adjacent.pos) <= 1,
-    });
-    return alreadyBuilt.length === 0 ? adjacent : null;
 }
 
 /**
@@ -717,7 +641,7 @@ export function containerFirstForRoom(room: Room): boolean
  * window measures controller progress in its last 1,000 ticks, so the
  * upgrader's WORK must not follow the crew onto extensions 2 and 3.
  * Container sites never pause it, including the source containers of
- * rungs 2 and 3 (owner feedback 2026-11-10, cause 2, kept for v9.4): while
+ * rungs 2 and 4 (owner feedback 2026-11-10, cause 2, kept for v9.4): while
  * a source container or a controller container was still a site, the
  * upgrader ran the builder role for the whole run (upgradePerTick 0 on the
  * 2026-11-09 M5 run, no energy in the controller container). The builder's
@@ -776,15 +700,11 @@ export function hasPriorityBuildSites(room: Room): boolean
  * Order of checks:
  *   1. Carrying energy: build the highest-priority site (fall back to
  *      upgrading the controller when no site exists).
- *   2. Not carrying, and the focus site is a far, unbuilt source
- *      container: harvest the source next to it (self-supply, M5b) and
- *      stay there - the container self-builds instead of crawling along
- *      on loads hauled from the spawn pool (see selfSupplySourceFor).
- *   3. Not carrying: pick up dropped energy when there is some next to us.
- *   4. Not carrying and the room is at or above the withdrawal floor
+ *   2. Not carrying: pick up dropped energy when there is some next to us.
+ *   3. Not carrying and the room is at or above the withdrawal floor
  *      (BUILDER_WITHDRAW_FRACTION of its capacity): withdraw from the spawn,
  *      then from an extension (owner rule #3, relaxed).
- *   5. Otherwise: harvest from a source and stay there until the store is
+ *   4. Otherwise: harvest from a source and stay there until the store is
  *      full, so a builder only self-harvests when the store is below the
  *      floor and never drains the spawn.
  * @param creep The builder creep to run
@@ -799,17 +719,12 @@ export function runBuilder(creep: Creep): void
     // site). The self-harvest source latch is (re-)made there (see below).
     let justEmptied = false;
 
-    // The crew's current focus (shared room state - every builder
-    // computes the same site). Computed once per tick and reused by
-    // phase 1 (build) and phase 2 (the self-supply check), so a builder
-    // never disagrees with the ladder about what it is working on.
-    const site = selectBuildSite(creep, room);
-
     // --- Phase 1: spend the energy we carry (build first, then upgrade) ---
     if (energy > 0)
     {
         creep.memory.working = true;
 
+        const site = selectBuildSite(creep, room);
         if (site !== null)
         {
             const buildResult = creep.build(site);
@@ -884,24 +799,6 @@ export function runBuilder(creep: Creep): void
     }
 
     // --- Phase 2: refill the store ---
-    //
-    // M5b (2026-11-14): when the focus site is a far, unbuilt source
-    // container, its source is the builder's energy source - see
-    // selfSupplySourceFor for the round-trip arithmetic this replaces.
-    // The check runs BEFORE getEnergy: while the site is open the
-    // builder never leaves for the pool, so the container self-builds
-    // and the second source's stationary miner unlocks inside the M5b
-    // window.
-    const selfSupplySource = selfSupplySourceFor(site, room);
-    if (selfSupplySource !== null)
-    {
-        if (creep.harvest(selfSupplySource) === ERR_NOT_IN_RANGE)
-        {
-            moveToToward(creep, selfSupplySource, 1);
-        }
-        return;
-    }
-
     //
     // The energy source is now the shared getEnergy helper (owner feedback
     // 2026-11-10, cause 1; see utils/energy.ts for the full order and the
