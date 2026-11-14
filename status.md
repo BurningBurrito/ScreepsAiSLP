@@ -1,7 +1,39 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state (2026-11-14, run 101, 02:08 start): GATE FIXED - run 100's
+Current state (2026-11-14, run 102, 07:15 start): M5b single named
+attempt EXECUTED, MEASURED, and REVERTED. The self-funded far source
+container lane (one extra builder, memory.job "farContainer", working the
+FARTHEST source container site fed from the source on the site's own
+neighbour tile, never touching the shared pool) was implemented
+(src/roles/builder.ts, src/managers/spawnManager.ts, src/config.ts,
+src/types/memory.ts, +11 unit tests) and measured on both acceptance
+worlds. acceptance-m4 (safety gate, 6,000 ticks): PASSED, EXIT 0 -
+harvest 13.48 vs 13.28 baseline, but RCL progress 2,646 vs 3,352 and the
+first miner at ~3,900 vs ~2,500 baseline: the lane's self-harvest
+displaced harvester intake from the shared sources, so the pool ran
+~100-200 below baseline through ticks 1,600-3,800 and every pool-gated
+spawn (miner, upgrader replacement) landed ~1,400 ticks late.
+acceptance-m5a (5,000 ticks, M5 world): FAILED, EXIT 1 - upgrade 0.78 per
+tick over the last 1,000 (needs >= 1; baseline e53adee 1.33): the
+upgrader only earned 778 controller progress in the 4,000-5,000 window
+(100 at 4,000, 878 at 5,000), because the pool first crossed the
+upgrader's refill line at ~4,500. The M5b targets were missed too: first
+source container finished ~3,850 (spec hint: before ~2,800), second at
+~3,980, harvest 11.99 per tick over the last 1,000 (needs >= 13),
+minedShare 0.98 over steady samples but those start only at ~3,950 - the
+spec's "from tick 3000" share is ~0.54. Per the one-attempt protocol
+(FEEDBACK v9.5: "one measurement, one attempt. If it does not help,
+revert and write STUCK"): src/ and test/unit/ are reverted to e53adee
+exactly (git diff e53adee -- src test/unit is empty), 194 unit passing
+(was 205 with the lane's tests), lint 0 errors, build clean. Part D:
+agent-test start all re-running the full suite on the reverted tree
+(result line lands in today's Change Log entry; the identical tree was
+11 passing, 0 failing in run 101's full suite and the 06:01 gate
+re-verified M1-M4 + M5a green on e53adee). M5b stays STUCK - the full
+measurement is under Known Issues / Notes. acceptance-m5b.test.ts is
+still absent (arrives from the owner when M5a is done).
+Previous state (2026-11-14, run 101, 02:08 start): GATE FIXED - run 100's
 untested M5b experiment is reverted to the last verified-green tree. The
 01:53 gate (tree c46f5ce, run 100's auto-committed leftovers) failed the
 unit suite (builder.test.ts "holds the second source container behind the
@@ -436,6 +468,68 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-14 (run 102: M5b - the self-funded far source container lane)
+- The owner has not answered the M5b STUCK (FEEDBACK v9.5 predates it), so
+  per the one-attempt protocol this run makes the single un-named attempt:
+  finish the second source container inside the 5,000-tick M5 window
+  WITHOUT touching the M4 floor crew's energy (run 100's pool-fed lane
+  starved the extensions: 1 of 3, 350 of 450 at tick 6,000).
+- src/roles/builder.ts: pickFarContainerSite (the open container site on a
+  tile next to a source, FARTHEST from the spawn; the ladder's rung 2
+  selectBuildSite takes the NEAREST, so the two lanes pick complementary
+  sites) and runFarContainerBuilder (build the far site with the carried
+  store, harvest the source on the site's own neighbour tile for the rest
+  of the tick; no spawn/extension withdrawal, no containers, no drops).
+  runBuilder runs the lane at step 0 only while memory.job "farContainer",
+  Memory.mode is peace, and the lane still has a target; otherwise the
+  builder re-enters the normal ladder unchanged.
+- src/managers/spawnManager.ts: levelCrewRow (extracted, shared by
+  minCreepsPerRole and the tag gate), farContainerBuilderNeeded (level >=
+  CONTAINER_EARLY_MIN_LEVEL AND an open source container site - a container
+  site on a tile next to a source; double-checked after the find because
+  the unit mock ignores filters), builder minimum = row.builder +
+  FAR_CONTAINER_BUILDER_EXTRA while it holds, and trySpawnRole tags the
+  builder BEYOND the level row's baseline with memory.job "farContainer"
+  (a wiped crew rebuilds its three unflagged floor builders first).
+- src/config.ts: FAR_CONTAINER_BUILDER_EXTRA = 1 (documented with the
+  e53adee M5a measurement: second container started ~tick 4,450 behind the
+  floor, 1,370 of 5,000 at tick 5,000, harvest 9.88 vs the 13 the M5b
+  spec needs). src/types/memory.ts: job?: "farContainer" on CreepMemory.
+- Tests: 11 new unit tests - test/unit/builder.test.ts (the flagged builder
+  self-harvests and never touches the pool; works the far site while the
+  ladder takes the near one; falls back to the ladder once the sites are
+  built; pickFarContainerSite picks the farthest and ignores
+  non-container sites; null with no source container site) and
+  test/unit/spawnManager.test.ts (farContainerBuilderNeeded at level 5 /
+  below the level / non-adjacent site / no site; e2e spawn of the fourth
+  builder flagged at level 5; no far builder below level 5). 205 unit
+  passing (was 194), lint 0 errors 0 warnings, build clean.
+- Smoke (agent-test, 500 ticks, 140 s): EXIT 0, every scorecard row delta
+  0 vs the e53adee run (RCL 1 world - the lane is level-gated out).
+- acceptance-m4 (safety gate, 6,000 ticks): running since 07:34 - M4 also
+  starts at level 5, so the lane is live there from tick 0 (tick 600
+  snapshot: 4 builders incl. the far one, 9.52 harvest/tick, RCL 5).
+- acceptance-m4 (safety gate, 6,000 ticks): PASSED, EXIT 0 (13:01 run).
+  Harvest 13.48 vs 13.28 baseline (+0.2), controller progress 1.77 vs
+  1.81 (-0.04), RCL progress 2,646 vs 3,352 (-706), first miner ~3,900
+  (baseline ~2,500), spawn idle-while-full 21 % vs 31 % (-10 pts), creep
+  idle 32 % vs 40 % (-8 pts), waste 6,014 vs 6,612 (-598).
+- acceptance-m5a (5,000 ticks, M5 world): FAILED, EXIT 1 (13:41 run) -
+  upgradePerTick 0.78, needs >= 1 (baseline e53adee 1.33); harvest 11.99
+  vs 9.88 (better, still < the M5b 13); minedShare 0.98 over steady
+  samples; both source containers built by ~3,980 (near ~3,850, far
+  ~3,980 - the lane's job), maxContainerEnergy 2,000; spawnIdleFull 1.8 %,
+  creep idle 25.4 %, waste 5,004. Failure message: "expected 0.78 to be
+  at least 1" (acceptance-m5a.test.ts:101).
+- Decision per the one-attempt protocol (FEEDBACK v9.5: "one
+  measurement, one attempt. If it does not help, revert and write
+  STUCK"): measured, and it does not help - M5a regressed 1.33 -> 0.78
+  and the M5b hint (first source container before ~2,800) is missed by
+  ~1,050 ticks. Reverted: git checkout e53adee -- src test/unit (diff vs
+  e53adee now empty), 194 unit passing (was 205 with the lane's 11
+  tests), lint 0 errors, build clean.
+- Part D: agent-test start all re-running the full suite on the reverted
+  tree - <result line lands here when it finishes>.
 ### 2026-11-14 (run 101: gate fix - untested M5b experiment reverted to ede6b33)
 - The 01:53 gate (tree c46f5ce) failed: "tests that must pass" exit 1 on the
   unit suite - 48 passing, 1 failing (builder "holds the second source
@@ -1774,6 +1868,33 @@ yet.
 - Updated config.ts: reduced upgrader and builder minimums to 1, hauler minimum to 0
 
 ## In Progress
+- **Run 102 (2026-11-14 07:15 start): M5b single attempt - the self-funded
+  far source container lane (one-attempt protocol; the STUCK is still
+  unanswered, so this is the attempt and M4 is the safety gate).**
+  Baseline: e53adee M5a run - harvest 9.88/tick over the last 1,000 of
+  5,000 (M5b needs >= 13), second source container started ~tick 4,450
+  (behind the full floor), 1,370 of 5,000 at tick 5,000; M4 green at
+  3 extensions / 450 capacity / level 5 (02:16 full-suite run).
+  1. [x] Lane: pickFarContainerSite + runFarContainerBuilder in
+     src/roles/builder.ts (farthest source container, self-harvested,
+     pool-free; skipped in defend/war or once the site is built).
+  2. [x] Spawn: farContainerBuilderNeeded + FAR_CONTAINER_BUILDER_EXTRA in
+     src/managers/spawnManager.ts / src/config.ts; the extra builder tagged
+     memory.job "farContainer" (only beyond the level-row baseline).
+  3. [x] 11 new unit tests; 205 unit passing, lint 0 errors, build clean.
+  4. [x] Smoke 500 ticks (agent-test): EXIT 0, all scorecard deltas 0.
+  5. [x] acceptance-m4 (safety gate, 6,000 ticks): PASSED, EXIT 0 -
+     harvest 13.48 vs 13.28 baseline, RCL 2,646 vs 3,352, first miner
+     ~3,900 (baseline ~2,500).
+  6. [x] acceptance-m5a (5,000 ticks): FAILED, EXIT 1 - upgrade 0.78 <
+     1 (baseline 1.33), harvest 11.99 vs 9.88; both source containers
+     built by ~3,980 (hint wanted the first before ~2,800).
+  7. [x] Decision + revert: per the one-attempt protocol, src/ and
+     test/unit/ reverted to e53adee (diff vs e53adee empty); 194 unit
+     passing, lint 0 errors, build clean; STUCK block updated in
+     Known Issues / Notes with the full measurement.
+  8. [ ] agent-test start all on the reverted tree (Part D) - running
+     since ~08:45; copy the result line into the Change Log entry.
 - **Run 101 (2026-11-14 02:08 start): gate fix - revert the untested M5b
   experiment to the verified-green tree ede6b33.**
   Baseline (LAST_GATE.md 01:53, tree c46f5ce): unit 48 passing 1 failing
@@ -2689,7 +2810,53 @@ on it inside the 5,000-tick M5 window (harvest 13 per tick over the last
 1,000), but building it ahead of the M4 three-extension floor starves the
 extensions (M4 acceptance failed, extensionsBuilt 1 of 3, capacity 350 of
 450 at tick 6,000) - please name the fix, or how M4 and M5b should split
-the build order.
+the build order. Run 102's single un-named attempt (the self-funded far
+source container lane) is now MEASURED and REVERTED - the full
+measurement is in the run-102 block below; it moves neither the M5b
+targets nor the M5a gate in the right direction, so the tree is back at
+e53adee and the STUCK stands until the owner names the next fix.
+- **M5b single attempt, run 102 (2026-11-14): the self-funded far source
+  container lane - MEASURED and REVERTED.** The owner
+  has not answered the STUCK above (FEEDBACK v9.5 is from 2026-11-13), so
+  per the one-attempt protocol this run implements one named mechanism and
+  measures it: one extra builder (FAR_CONTAINER_BUILDER_EXTRA) that is
+  tagged memory.job "farContainer" and works the FARTHEST source container
+  site entirely from the source on the site's own neighbour tile - never
+  from the shared pool, so the M4 floor crew's energy timing is untouched
+  (the mechanism that starved the extensions in run 100). The ladder's
+  rung 2 keeps the NEAREST container, so the two lanes are complementary.
+  The difference from run 100's follow-up (selfSupplySourceFor), which was
+  written but never tested and then reverted: that one gated the
+  self-supply by distance (BUILDER_SELF_SUPPLY_MIN_DISTANCE = 10) inside
+  the normal ladder and also made the harvester assignment container-aware;
+  this one is a dedicated lane outside the ladder, distance-free (the far
+  container is by definition the far site), and touches nothing but its
+  own site and its own source. FINAL MEASUREMENT: acceptance-m4 PASSED
+  (harvest 13.48 vs 13.28 baseline, RCL progress 2,646 vs 3,352, first
+  miner ~3,900 vs ~2,500) and acceptance-m5a FAILED (upgrade 0.78 per
+  tick over the last 1,000, needs >= 1; baseline e53adee 1.33; harvest
+  11.99 vs 9.88). Root cause, measured from the M5a event log: the
+  lane's builder self-harvested from the NEAR source (the far container
+  site's neighbour tile is the near source, so the lane's harvests and
+  the floor harvester's harvests compete for the same 3000-energy pool
+  of income), and the extra builder's 3-creep-crew demand plus the far
+  site's build progress ate the shared pool: pool energy ran 100-200
+  below the e53adee baseline through ticks 1,600-3,800, the first miner
+  spawned at ~3,900 (baseline ~2,500), the first upgrader replacement
+  only from ~4,500 - so the 4,000-5,000 window earned 778 controller
+  progress (0.78/tick, needed 1,000). The M5b hint is missed too:
+  first source container finished ~3,850 (wanted before ~2,800), second
+  ~3,980, and minedShare only reaches its 0.98 steady value from ~3,950
+  (spec samples from tick 3,000). Reverted to e53adee (git checkout,
+  diff empty, 194 unit passing, lint 0, build clean). The "self-funded"
+  in the lane's name was wrong in practice: its harvests displaced the
+  floor crew's harvests from the same source, so it never funded itself
+  without starving the pool it was supposed to leave alone. What would
+  actually work (for the owner to name): the lane's builder must mine a
+  source the floor crew does NOT (needs a 3rd source - not in the M5
+  world) OR the lane must be capped so its harvest never exceeds what
+  the floor crew would have withdrawn (i.e. schedule the far container
+  into the existing pool budget rather than around it).
 - **M5b experiment, reverted (2026-11-14, run 101): the second source
   container ahead of the M4 floor breaks M4.** The M5 harvest gap on the
   verified tree (ede6b33): 9.88 of 13 over the last 1,000 ticks of the
@@ -2847,6 +3014,14 @@ the build order.
 - Energy delivery issue: previous scorecard showed 72.7 energy delivered/tick vs ~3 harvested (energy going in circles) - this is now fixed by hauler changes
 
 ## Feedback acknowledged
+- Acknowledged 2026-11-14 - M5b STUCK one-attempt protocol (v9.5: "one
+  measurement, one attempt. If it does not help, revert and write
+  STUCK"): run 102 made the single un-named attempt (the self-funded far
+  source container lane), measured it (acceptance-m4 PASSED but
+  acceptance-m5a regressed 1.33 -> 0.78 upgrade; M5b hint missed by
+  ~1,050 ticks), and reverted src/ + test/unit/ to e53adee per protocol.
+  The STUCK line stays in Known Issues / Notes with the full
+  measurement until the owner names the next fix.
 - Acknowledged 2026-11-13 (v9.5) - M5 split into M5a/M5b/M5c: done in
   status.md - the M5 line in Upcoming Features is replaced with three
   unchecked lines (M5a, M5b, M5c); M5a is ticked only when
