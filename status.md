@@ -1,20 +1,21 @@
 # ScreepsAiSLP Status
 
 ## Current State
-Current state (2026-11-13, run 99, 17:12 start): M5a verification run. The owner
-split M5 into M5a/M5b/M5c (FEEDBACK v9.5): M5a (>= 1 controller progress
-per tick over the last 1000 ticks, same M5 world) is the current
-milestone, and the gate now pushes when lint + unit tests + M1-M4 pass -
-the current milestone's test is information only. Both named M5a fixes
-from v9.4 are already committed in this tree (the upgrader working latch
-in 73d682c; the builder getEnergy container-first rework in
-src/utils/energy.ts), and the 17:01 gate run measured upgradePerTick
-1.33, level 5, 21 creeps on the M5 window - the M5a criteria met on
-paper; the failing harvest 9.88 < 13 is the M5b criterion (static
-mining), not M5a's. This run verifies acceptance-m5a on the current tree
-and keeps M1-M4 green for the gate. Fast checks green (lint 0 errors,
-build clean, 192 unit passing); acceptance-m5a started 17:1x. Result:
-pending.
+Current state (2026-11-13, run 99, 17:12 start): M5a COMPLETE. The owner
+split M5 into M5a/M5b/M5c (FEEDBACK v9.5). Both named M5a fixes from
+v9.4 were already committed in this tree (the upgrader working latch in
+73d682c; the builder getEnergy container-first rework in
+src/utils/energy.ts); this run verified them and closed the milestone.
+acceptance-m5a PASSED (agent-test, 1338 s): upgradePerTick 1.33 over
+the last 1,000 ticks (needs >= 1), level 5 held with 1,540 progress,
+21 creeps at the end (needs >= 3), CPU 3.49/tick average (29.14 max),
+spawn idle-while-full 0.6 %. harvestedPerTick 9.88 stays under the 13
+bar - that is M5b's criterion (static mining), not M5a's. Full suite
+(agent-test start all, ~2 h): 11 passing, 0 failing (M1-M4, M5a
+acceptance, smoke, cold-boot recovery, controller sign) - M1-M4 stayed
+green for the gate. Part D done: blog/2026-11-13-upgrader-latch.md
+published, README updated, M5a ticked. Next milestone: M5b (static
+mining) - its test arrives from the owner now that M5a is done.
 Previous state (2026-11-13, run 98, 12:31 start): M4/M5 regression fix - the
 90 % pool gate is reverted. Run 97's ae46644 (90 % no-hold-back
 builderPoolReady at RCL 4+ plus the decoupled upgrader gate) regressed the
@@ -413,6 +414,26 @@ acceptance test (owner's, 3,000 ticks) is not in this copy of the repo
 yet.
 
 ## Change Log
+### 2026-11-13 (run 99: M5a complete - acceptance passed, Part D)
+- M5a verified on the current tree (no src/ change this run; both named
+  v9.4 fixes already committed: the upgrader working latch in 73d682c,
+  the builder getEnergy container-first rework in src/utils/energy.ts).
+  acceptance-m5a PASSED (agent-test, 1338 s, EXIT 0): snapshot at 5,000
+  ticks - upgradePerTick 1.33 (needs >= 1), level 5 / 1,540 progress,
+  creeps 21 (needs >= 3), harvestedPerTick 9.88, buildPerTick 2.38,
+  spawnIdleFullShare 0.006, creepIdleShare 0.361, minedShare 1,
+  avgDroppedEnergy 51, maxContainerEnergy 274, capacity 450, CPU 3.49
+  average / 29.14 max. harvestedPerTick 9.88 < 13 is the M5b criterion
+  (static mining), not M5a's.
+- Full suite (agent-test start all, ~2 h): 11 passing, 0 failing - M1,
+  M2, M3, M4, acceptance-m5a, smoke, cold-boot recovery, controller
+  sign; M1-M4 green for the gate (FEEDBACK v9.5 gate protocol).
+- Part D: blog/2026-11-13-upgrader-latch.md published (the latch, the
+  2W2C2M body math, the fuel-ladder ordering - all numbers from the
+  acceptance report), README.md updated (Status M5a; Features: M5a
+  checked, M5b/M5c listed), M5a ticked in Upcoming Features, Concepts
+  Explained updated (latch, fatigue, downgrade timer, fuel ladder).
+
 ### 2026-11-13 (run 98: M4/M5 regression fix - 90 % pool gate reverted, full crew at 400 capacity)
 - Gate (11:22, tree 3c92272 == ae46644 code): suite run 10:24-10:55 EST -
   M1 4.63 harvest / 3.71 build, M2 5.07 / 5.58, M3 7.52 / 0.14 upgrade /
@@ -1708,10 +1729,12 @@ yet.
      buildPerTick 2.38, spawnIdleFullShare 0.006, creepIdleShare 0.361,
      minedShare 1, avgDroppedEnergy 51, maxContainerEnergy 274,
      RCL 5 / 1,540 progress, capacity 450.
-  4. [ ] Part D: agent-test start all (M1-M4 must stay green for the
-     gate), tick M5a, README, blog post, docs commit.
-  5. [ ] If it fails: one measurement, one named attempt (v9.5
-     protocol), otherwise STUCK with the M5a snapshot numbers.
+  4. [x] Part D: agent-test start all - 11 passing, 0 failing (M1-M4
+     green for the gate, plus acceptance-m5a, smoke, cold-boot
+     recovery, controller sign, ~2 h); M5a ticked in Upcoming
+     Features, README updated, blog published, docs committed.
+  5. [x] Not needed: the acceptance passed first try, so the STUCK
+     branch (one measurement, one named attempt) never ran.
 - **Run 98 (2026-11-13 12:31 start): M4/M5 regression fix (revert the 90 %
   pool gate; full crew at 400 capacity). SUPERSEDED by the owner's M5
   split into M5a/M5b/M5c (FEEDBACK v9.5); its remaining steps (M5
@@ -2530,8 +2553,8 @@ yet.
 - [x] M1: basic economy and creep management (completed)
 - [x] M3: build priorities, layout and a tower (completed 2026-10-30, acceptance 1 passing)
 - [x] M4: Hold the room (level 5) - towers, ramparts, defend mode (completed 2026-10-31, acceptance 1 passing)
-- [ ] M5a: the controller gets upgraded (>= 1 controller progress per tick over the last 1000 ticks in the M5 world; spec milestones/M5a.md, test acceptance-m5a.test.ts; CURRENT - both named v9.4 fixes already committed, verification run 2026-11-13 17:01)
-- [ ] M5b: static mining (a container at every source, a miner on it in >= 60 % of the samples from tick 3000, >= 13 harvested per tick; spec milestones/M5b.md; its test comes when M5a is done)
+- [x] M5a: the controller gets upgraded (completed 2026-11-13: acceptance-m5a 1 passing - upgradePerTick 1.33, level 5 held, 21 creeps, CPU 3.49/tick)
+- [ ] M5b: static mining (a container at every source, a miner on it in >= 60 % of the samples from tick 3000, >= 13 harvested per tick; spec milestones/M5b.md; CURRENT - its test arrives from the owner now that M5a is done)
 - [ ] M5c: the energy is spent (spawn idle with full energy <= 30 %, on average <= 300 energy on the ground; spec milestones/M5c.md; its test comes when M5b is done)
 - [ ] CPU profiling and path caching (former M5, before the M4 renumber)
 - [ ] Expansion to a second room (former M6, before the M4 renumber)
@@ -2847,3 +2870,7 @@ yet.
 - **Energy capacity**: the total energy a room can hold at once (spawn 100 + 50 per finished extension); bigger capacity means bigger creeps
 - **Priority class (design concept)**: grouping structure types so builders always finish every site in a higher class before touching a lower one; M3 runs tower > extensions > roads > containers
 - **Manhattan diamond ring (M4 post, 2026-10-31)**: the set of tiles at a fixed Manhattan distance (|dx| + |dy|) from a point, shaped like a diamond on the square grid - how computeTowerPositions walks candidate tiles at range 2, then 3, then 4; the diagonal tiles of a "range 2" ring are only range 1 (Chebyshev) from a controller on the spawn's tile, so the search skips them
+- **Latch (M5a post, 2026-11-13)**: a state flag (memory.working) that one condition alone (the store) flips, so everything in between never re-consults the world - the fix for the upgrader that walked back for a top-up after every single energy spent
+- **Fatigue (M5a post, 2026-11-13)**: the movement cost per body part - every part costs 2 fatigue per step, each MOVE removes 2 per tick; why a 400-energy body with two MOVEs walks every 2 ticks while one with a single MOVE crawls every 4
+- **Downgrade timer (M5a post, 2026-11-13)**: the controller's countdown to losing a level (20,000 ticks at level 1, 10,000 at level 5); every point of upgrade progress adds to it, which is why even a weak upgrader keeps the level
+- **Fuel ladder (M5a post, 2026-11-13)**: getEnergy's fixed order of energy sources - a nearby drop, the controller container, the spawn/extensions pool, the fullest source container, then a source; the upgrader's pool rung sits ABOVE the source container, the builder's BELOW it

@@ -4,7 +4,7 @@ A Screeps AI bot written in TypeScript, built and maintained by an autonomous AI
 
 ## Status
 
-**M4 Complete**: Hold the room at level 5. The bot builds both towers the level allows (one site at a time, with the future tower tiles reserved so the extension layout cannot take them), puts ramparts on the spawn and every finished tower, and defends by itself: when a hostile appears, Memory.mode switches to 'defend' within a tick and the towers kill it (a 1,000-hit intruder died in 1 tick in the acceptance run) without spending safe mode. M4 acceptance test passes: 2 towers built with ramparts, 30 extensions built or placed, energy capacity 550, tower held at 540 energy.
+**M5a Complete**: The controller gets upgraded. The colony runs container logistics at level 5: haulers refill the source containers, the upgrader refuels from the spawn/extensions pool or the fullest source container and burns the whole store at the controller in latched cycles (no mid-cycle top-up walks). M5a acceptance test passes: controller progress 1.33 per tick (bar is 1.0+), level holds at 5 with 1,540 progress banked, 21 creeps at the end (bar is 3), CPU 3.49 per tick on average, spawn idle-while-full 1% of the window. Next milestone is M5b: static mining - 2 miners + 2 haulers, harvest 13+ per tick, level held.
 
 ## Features
 
@@ -26,7 +26,12 @@ A Screeps AI bot written in TypeScript, built and maintained by an autonomous AI
   - Defend mode by itself: Memory.mode switches to 'defend' as soon as a hostile is sighted, back to 'peace' after it is gone
   - Towers attack hostiles first, heal second, and repair only in peace while holding an attack reserve
   - Safe mode only as a last resort (dangerous hostile and every tower empty); a defender creep covers that gap
-- ⬜ M5: Static mining with containers and haulers
+- ✅ M5a: The controller gets upgraded (level 5)
+  - Haulers refill the source containers (then storage, then the spawn pool), miners stand on container tiles and only harvest
+  - Upgrader runs full-store cycles: refuels from the pool or source containers, burns the store at the controller, no mid-cycle top-ups
+  - Shared fuel ladder for builders and upgraders (utils/energy.ts): dropped energy, controller container, spawn pool, fullest source container, source last
+- ⬜ M5b: Static mining - 2 miners + 2 haulers, harvest 13+ per tick, level held
+- ⬜ M5c: Defense - kill the hostile intruder within 600 ticks, level and towers preserved
 - ⬜ CPU profiling and path caching
 - ⬜ Expansion to a second room
 
