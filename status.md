@@ -18,9 +18,11 @@ src/config.ts and src/managers/spawnManager.ts are back at ede6b33 (the
 last-pushed tree - the gate's own baseline suite of 00:36-02:16 ran it
 green: M4 13.28 harvest / 3 extensions / 450 capacity, M5a 1.33 upgrade
 per tick), probe-m4b.test.ts moved to probe-tmp/. 194 unit passing, lint 0
-errors, build clean; the full suite (agent-test start all) is running to
-confirm. M5b (harvest 9.88 of 13 in the M5 world) now needs a named fix -
-STUCK written, details under Known Issues / Notes.
+errors, build clean; the full suite (agent-test start all, 6,240 s, EXIT 0)
+is green: 11 passing, 0 failing - the ede6b33 baseline reproduced exactly
+(M4 3 extensions / 450 capacity, M5a 9.88 harvest / 1.33 upgrade, all
+deltas 0 vs the 02:16 run). M5b (harvest 9.88 of 13 in the M5 world) now
+needs a named fix - STUCK written, details under Known Issues / Notes.
 Previous state (2026-11-13, run 99, 17:12 start): M5a COMPLETE. The owner
 split M5 into M5a/M5b/M5c (FEEDBACK v9.5). Both named M5a fixes from
 v9.4 were already committed in this tree (the upgrader working latch in
@@ -473,7 +475,13 @@ yet.
   the selfSupply follow-up is not stacked or measured further this run.
   STUCK written for M5b (details under Known Issues / Notes).
 - 194 unit passing, lint 0 errors, build clean. Full suite (agent-test
-  start all): <result line pending>.
+  start all, 6,240 s, EXIT 0): 11 passing, 0 failing (M1-M4, M5a
+  acceptance, smoke, cold-boot recovery, controller sign, integration,
+  spawnprobe) - the ede6b33 baseline reproduced exactly: M4 snapshot
+  extensionsBuilt 3, energyCapacity 450, intruder gone after 2 ticks
+  (firstHostile 5401, safeMode 0, spawnHasRampart true), M5a snapshot
+  harvestedPerTick 9.88 / upgradePerTick 1.33 (identical to the 02:16
+  ede6b33 baseline run, every scorecard delta 0). GATE GREEN AGAIN.
 
 ### 2026-11-13 (run 99: M5a complete - acceptance passed, Part D)
 - M5a verified on the current tree (no src/ change this run; both named
@@ -1778,9 +1786,10 @@ yet.
      probe-m4b.test.ts moved from test/integration/ to probe-tmp/ (a
      5,300-tick probe left in the gate's must-pass set).
   2. [x] Fast checks: lint 0 errors, build clean, 194 unit passing.
-  3. [ ] Full suite (agent-test start all): must reproduce the gate's green
-     baseline on ede6b33 (11 passing, 0 failing: M1-M4, M5a, smoke,
-     cold-boot, controller sign, integration, spawnprobe). RUNNING.
+  3. [x] Full suite (agent-test start all): reproduced the green baseline
+     on ede6b33 - 11 passing, 0 failing (EXIT 0); M4 3 extensions /
+     450 capacity / intruder gone after 2 ticks, M5a 9.88 harvest /
+     1.33 upgrade, all deltas 0 vs the 02:16 baseline.
   4. [x] STUCK written for M5b: the next step (a way to build and mine the
      second source inside the 5,000-tick window without starving the M4
      floor) is the owner's to name; the experiment's measurements are under
