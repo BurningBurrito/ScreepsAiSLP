@@ -21,8 +21,9 @@ upgrader only earned 778 controller progress in the 4,000-5,000 window
 upgrader's refill line at ~4,500. The M5b targets were missed too: first
 source container finished ~3,850 (spec hint: before ~2,800), second at
 ~3,980, harvest 11.99 per tick over the last 1,000 (needs >= 13),
-minedShare 0.98 over steady samples but those start only at ~3,950 - the
-spec's "from tick 3000" share is ~0.54. Per the one-attempt protocol
+minedShare 0.98 over steady samples but those start only at ~3,950, so
+the spec's "from tick 3000" window is dominated by samples in which no
+miner is on a source container at all. Per the one-attempt protocol
 (FEEDBACK v9.5: "one measurement, one attempt. If it does not help,
 revert and write STUCK"): src/ and test/unit/ are reverted to e53adee
 exactly (git diff e53adee -- src test/unit is empty), 194 unit passing
