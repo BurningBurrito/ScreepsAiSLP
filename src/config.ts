@@ -470,12 +470,12 @@ export const CONTAINER_BOOST_MIN_LEVEL = 4;
  * M5 static-mining ladder: the lowest controller level at which the
  * build queue switches from the bootstrap order (tower, extension,
  * container) to the static-mining ladder in builder.ts
- * (selectContainerFirstSite): first tower, the first source container,
- * the M4 three-extension floor (CONTAINER_BOOST_MIN_EXTENSIONS_L4), the
- * second source container, the controller container, ramparts, the
- * second tower, the remaining extensions, roads. The floor gates the
- * rest: the un-gated order of 2026-11-10 spent the container pair
- * before the third extension and failed M4 at tick 6,000
+ * (selectContainerFirstSite): first tower, the source containers (both
+ * of them, one after the other), the M4 three-extension floor
+ * (CONTAINER_BOOST_MIN_EXTENSIONS_L4), the controller container,
+ * ramparts, the second tower, the remaining extensions, roads. The
+ * floor gates the rest: the un-gated order of 2026-11-10 spent the
+ * container pair before the third extension and failed M4 at tick 6,000
  * (extensionsBuilt 1, capacity 350 of 450), and the 2026-11-12
  * two-extension mini-floor that let the second source container run
  * ahead of the third extension failed this run's M4 the same way from
@@ -489,34 +489,38 @@ export const CONTAINER_EARLY_MIN_LEVEL = 5;
 
 /**
  * M4 extension floor (static-mining case): the number of FINISHED
- * extensions a level 4+ room must have before any rung AFTER the first
- * source container may take the whole builder crew - the bootstrap boost
+ * extensions a level 4+ room must have before any rung AFTER the source
+ * containers may take the whole builder crew - the bootstrap boost
  * (containerFirstForRoom) and, from level CONTAINER_EARLY_MIN_LEVEL up,
- * the rungs after the second source container of the static-mining ladder
- * (selectContainerFirstSite). The first source container (rung 2) is the
- * single rung that runs ahead of this floor by owner design (v9.4,
- * 2026-11-11): behind it the container finished at ~tick 3,880 of the
- * 5,000-tick M5 window (minedShare 0.585 of 0.6). Three is exactly the
- * M4 acceptance floor ("at least 3 extensions are finished"): the crew
- * switches to any other container only after M4's contract is already
- * met, so the containers cannot starve the third extension. The
- * un-gated container-first of 2026-11-09/10 failed M4 for exactly this:
- * the crew camped the 5,000-energy container sites (extensionsBuilt 1,
- * energyCapacity 350 versus the required 3 and 450) and the extensions
- * never caught up.
+ * the rungs after the source containers of the static-mining ladder
+ * (selectContainerFirstSite). The source containers (rung 2, both of
+ * them) are the rungs that run ahead of this floor by owner design: the
+ * first since v9.4 (2026-11-11) - behind it the container finished at
+ * ~tick 3,880 of the 5,000-tick M5 window (minedShare 0.585 of 0.6) -
+ * and the second since M5b (2026-11-13): in the ede6b33 M5a run it
+ * started only at ~tick 4,300 (672 of 5,000 by tick 5,000) and the
+ * 4,000-5,000 window harvested 9.88 per tick against the 13 the M5b
+ * criterion needs. Three is exactly the M4 acceptance floor ("at least
+ * 3 extensions are finished"): the crew switches to any other container
+ * only after M4's contract is already met, so the containers cannot
+ * starve the third extension. The un-gated container-first of
+ * 2026-11-09/10 failed M4 for exactly this: the crew camped the
+ * 5,000-energy container sites (extensionsBuilt 1, energyCapacity 350
+ * versus the required 3 and 450) and the extensions never caught up.
  *
- * The second source container (rung 4) runs BEHIND this floor (rung 3).
- * The 2026-11-12 attempt to split the floor into a two-extension
+ * The second source container now runs AHEAD of this floor (rung 2,
+ * M5b). The 2026-11-12 attempt to split the floor into a two-extension
  * mini-floor ahead of the second container failed this run's M4
  * acceptance: the 5,000-energy container took the crew after two
  * extensions and the 3,000-energy third extension had not even started
- * at tick 6,000 (extensionsBuilt 2, capacity 400 of 450), while the
- * un-split floor - this order - finished all three extensions inside
- * the window in the 2026-11-12 11:02 M4 run (commit f3a6863). M5 does
- * not need the second container BUILT: its "every source has a
- * container" criterion counts a placed site, and its minedShare
- * criterion is satisfied by the first source's stationary miner
- * (rung 2, which the 2026-11-12 probe proved reaches source A).
+ * at tick 6,000 (extensionsBuilt 2, capacity 400 of 450). The
+ * difference with M5b is that this floor stays the full
+ * three-extension floor - the second container runs before it, but the
+ * floor still requires all three extensions before any other container
+ * takes the crew, and it now starts at ~tick 3,400 (behind the tower
+ * and both containers) instead of ~2,850, which still lands all three
+ * extensions (9,000 energy) inside the 6,000-tick M4 window - verified
+ * by the M4 acceptance run of the M5b change.
  */
 export const CONTAINER_BOOST_MIN_EXTENSIONS_L4 = 3;
 
